@@ -1,15 +1,17 @@
 "use client";
 
-import { BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, Library, Menu, MousePointer2, Play, Plus, Search, Settings, Sparkles, Upload, UserRound, X } from "lucide-react";
+import { BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Upload, UserCog, UserRound, Users, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type View = "home" | "library" | "exercises" | "session" | "stats";
+type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
 type Mode = "teaching" | "test";
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; license: string; author: string; privateUpload?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
-type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string };
-type HelpEvent = { id: string; exerciseId: string; label: string; createdAt: string };
+type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string; childId?: string; therapistId?: string };
+type HelpEvent = { id: string; exerciseId: string; label: string; createdAt: string; childId?: string; therapistId?: string };
+type Therapist = { id: string; firstName: string; lastName: string; email: string; role: string; pinHash?: string; pin?: string; childIds: string[] };
+type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
 
 const stockItems: LibraryItem[] = [
   { id: "mela", word: "Mela", emoji: "🍎", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
@@ -28,6 +30,11 @@ const initialExercises: Exercise[] = [
 ];
 const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: ["ex-mela", "ex-gatto", "ex-pane"] }];
 const helpTypes = ["Indicazione verbale", "Gesto", "Riduci le opzioni", "Evidenzia", "Dimostrazione"];
+const initialTherapists: Therapist[] = [{ id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] }];
+const initialChildren: ChildProfile[] = [
+  { id: "child-luca", firstName: "Luca", lastName: "Bianchi", birthYear: "2019", notes: "Profilo dimostrativo", avatarColor: "#7468df" },
+  { id: "child-sara", firstName: "Sara", lastName: "Verdi", birthYear: "2020", notes: "Profilo dimostrativo", avatarColor: "#2f8767" },
+];
 
 function useStoredState<T>(key: string, fallback: T) {
   const [value, setValue] = useState<T>(fallback);
@@ -48,9 +55,20 @@ function Artwork({ item, compact = false }: { item: LibraryItem; compact?: boole
   return <span className={compact ? "artwork-emoji compact" : "artwork-emoji"} aria-hidden="true">{item.emoji}</span>;
 }
 
+async function hashPin(pin: string) {
+  const bytes = new TextEncoder().encode(pin);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [therapists, setTherapists] = useStoredState<Therapist[]>("lg-therapists", initialTherapists);
+  const [children, setChildren] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
+  const [activeChildId, setActiveChildId] = useStoredState<string>("lg-active-child", initialChildren[0].id);
+  const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems);
   const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises);
   const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences);
@@ -70,13 +88,23 @@ export default function HomePage() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+    const authTimer = window.setTimeout(() => {
+      setLoggedInTherapistId(sessionStorage.getItem("lg-therapist-session"));
+      setSessionChecked(true);
+    }, 0);
+    return () => window.clearTimeout(authTimer);
   }, []);
 
+  const therapist = therapists.find((item) => item.id === loggedInTherapistId);
+  const associatedChildren = children.filter((child) => therapist?.childIds.includes(child.id));
+  const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
   const activeSequence = sequences[0] ?? initialSequences[0];
   const sessionExercises = activeSequence.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
   const promptItem = library.find((item) => item.id === currentExercise?.promptId);
-  const firstAttempts = attempts.filter((attempt) => attempt.firstAttempt);
+  const childAttempts = attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id);
+  const childHelps = helps.filter((help) => !help.childId || help.childId === activeChild?.id);
+  const firstAttempts = childAttempts.filter((attempt) => attempt.firstAttempt);
   const firstCorrect = firstAttempts.filter((attempt) => attempt.correct).length;
   const accuracy = firstAttempts.length ? Math.round((firstCorrect / firstAttempts.length) * 100) : 0;
 
@@ -86,13 +114,13 @@ export default function HomePage() {
   const chooseAnswer = (answerId: string) => {
     if (!currentExercise || answerState === "correct") return;
     const correct = answerId === currentExercise.promptId;
-    setAttempts((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, answerId, correct, firstAttempt: currentAttempts === 0, mode: sessionMode, createdAt: new Date().toISOString() }]);
+    setAttempts((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, answerId, correct, firstAttempt: currentAttempts === 0, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
     setCurrentAttempts((count) => count + 1);
     setAnswerState(correct ? "correct" : "wrong");
   };
   const addHelp = (label: string) => {
     if (!currentExercise) return;
-    setHelps((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, label, createdAt: new Date().toISOString() }]);
+    setHelps((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, label, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
     notify(`Aiuto registrato: ${label}`);
   };
   const nextExercise = () => {
@@ -100,16 +128,29 @@ export default function HomePage() {
     setSessionIndex((index) => index + 1); setCurrentAttempts(0); setAnswerState("idle");
   };
 
+  const login = (therapistId: string) => {
+    sessionStorage.setItem("lg-therapist-session", therapistId);
+    setLoggedInTherapistId(therapistId);
+    const nextTherapist = therapists.find((item) => item.id === therapistId);
+    if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
+  };
+  const logout = () => { sessionStorage.removeItem("lg-therapist-session"); setLoggedInTherapistId(null); setView("home"); };
+
+  if (!sessionChecked) return <div className="auth-loading"><Sparkles /></div>;
+  if (!therapist) return <TherapistLogin therapists={therapists} onLogin={login} />;
+  if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
+
   return (
     <div className="app-shell">
-      <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} />
       <main className="main-content">
-        <Topbar onMenu={() => setMenuOpen(true)} />
-        {view === "home" && <Dashboard libraryCount={library.length} exerciseCount={exercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
+        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} />
+        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={library} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} />}
         {view === "exercises" && <ExercisesView exercises={exercises} sequences={sequences} library={library} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
         {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
-        {view === "stats" && <StatsView attempts={attempts} helps={helps} exercises={exercises} library={library} />}
+        {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={exercises} library={library} />}
+        {view === "profiles" && <ProfilesView therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} />}
       </main>
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={(item) => { setLibrary((current) => [item, ...current]); setShowUpload(false); notify("Immagine privata aggiunta alla libreria"); }} />}
       {showBuilder && <ExerciseBuilder library={library} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
@@ -118,20 +159,40 @@ export default function HomePage() {
   );
 }
 
+function TherapistLogin({ therapists, onLogin }: { therapists: Therapist[]; onLogin: (therapistId: string) => void }) {
+  const [email, setEmail] = useState(therapists[0]?.email ?? "");
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const pinHash = await hashPin(pin);
+    const match = therapists.find((item) => item.email.toLowerCase() === email.trim().toLowerCase() && (item.pinHash === pinHash || item.pin === pin));
+    if (!match) { setError("Email o PIN non corretti."); return; }
+    onLogin(match.id);
+  };
+  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit"><KeyRound />Accedi</button></form><div className="demo-credentials"><strong>Accesso dimostrativo</strong><span>{therapists[0]?.email}</span><span>PIN 1234</span></div><small className="auth-disclaimer">I profili e il PIN restano solo in questo browser. Non usare dati reali in questa versione di prova.</small></section></main>;
+}
+
+function ChildChooser({ therapist, childProfiles, onChoose, onLogout }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void }) {
+  const available = childProfiles.filter((child) => therapist.childIds.includes(child.id));
+  return <main className="auth-page child-choice-page"><section className="login-card wide-choice"><span className="eyebrow">PROFILO ATTIVO</span><h1>Con chi lavori oggi?</h1><p>Sono mostrati soltanto i bambini associati a {therapist.firstName}.</p><div className="child-choice-grid">{available.map((child) => <button key={child.id} onClick={() => onChoose(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName.slice(0, 1)}</span><strong>{child.firstName} {child.lastName}</strong><small>Anno {child.birthYear}</small><ChevronRight /></button>)}</div>{!available.length && <div className="empty-mini"><Users /><p>Nessun bambino associato.</p><small>Il profilo dovrà essere collegato dall’amministratore.</small></div>}<button className="text-button" onClick={onLogout}><LogOut />Esci</button></section></main>;
+}
+
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
-  { id: "home", label: "Oggi", icon: Home }, { id: "library", label: "Libreria", icon: Library }, { id: "exercises", label: "Esercizi", icon: BookOpenCheck }, { id: "session", label: "Sessione", icon: Play }, { id: "stats", label: "Progressi", icon: BarChart3 },
+  { id: "home", label: "Oggi", icon: Home }, { id: "library", label: "Libreria", icon: Library }, { id: "exercises", label: "Esercizi", icon: BookOpenCheck }, { id: "session", label: "Sessione", icon: Play }, { id: "stats", label: "Progressi", icon: BarChart3 }, { id: "profiles", label: "Profili", icon: UserCog },
 ];
 
-function Sidebar({ view, onNavigate, open, onClose }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void }) {
-  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark"><Sparkles size={21} /></span><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className="sidebar-note"><span className="status-dot" /><div><strong>Dati locali</strong><small>Prototipo privato</small></div></div><button className="profile-card"><span className="avatar">GB</span><span><strong>Adulto</strong><small>Terapista</small></span><Settings size={17} /></button></aside></>;
+function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void }) {
+  const initials = `${therapist.firstName[0] ?? ""}${therapist.lastName[0] ?? ""}`;
+  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark"><Sparkles size={21} /></span><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className="sidebar-note"><span className="status-dot" /><div><strong>Dati locali</strong><small>Prototipo dimostrativo</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
 }
 
-function Topbar({ onMenu }: { onMenu: () => void }) {
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><div className="child-pill"><span className="child-avatar">L</span><span><small>Profilo attivo</small><strong>Luca</strong></span><ChevronRight size={16} /></div><div className="topbar-right"><span className="private-pill"><Cloud size={15} />Salvataggio locale</span><button className="icon-button" aria-label="Profilo adulto"><UserRound /></button></div></header>;
+function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void }) {
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className="private-pill"><Cloud size={15} />Salvataggio locale</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }
 
-function Dashboard({ libraryCount, exerciseCount, accuracy, attemptCount, onStart, onNavigate }: { libraryCount: number; exerciseCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
-  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">MERCOLEDÌ, 15 OTTOBRE</span><h1>Buongiorno, Giulia</h1><p>Tutto è pronto per la prossima attività con Luca.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Prime parole</h2><p>Una sequenza breve di 3 associazioni già pronta. Puoi scegliere gli aiuti durante l’attività.</p><div className="hero-meta"><span>3 esercizi</span><i /><span>~ 5 minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Inizia ora <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail="registrati senza correzioni" tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
+function Dashboard({ therapist, child, libraryCount, exerciseCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
+  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">AREA TERAPISTA</span><h1>Buongiorno, {therapist.firstName}</h1><p>Tutto è pronto per la prossima attività con {child.firstName}.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Prime parole</h2><p>Una sequenza breve di 3 associazioni già pronta. Puoi scegliere gli aiuti durante l’attività.</p><div className="hero-meta"><span>3 esercizi</span><i /><span>~ 5 minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Inizia ora <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
 }
 
 function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><span className={`metric-icon ${tone}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>; }
@@ -151,10 +212,18 @@ function SessionView({ active, mode, setMode, currentIndex, total, exercise, pro
   return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className="session-body"><p className="instruction">Scegli l’immagine corretta</p><h1>{prompt.word.toUpperCase()}</h1><div className="answer-grid">{exercise.optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} className={answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} onClick={() => onChoose(id)}><Artwork item={item} /><span>{item.word}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside></div>;
 }
 
-function StatsView({ attempts, helps, exercises, library }: { attempts: Attempt[]; helps: HelpEvent[]; exercises: Exercise[]; library: LibraryItem[] }) {
+function StatsView({ child, attempts, helps, exercises, library }: { child: ChildProfile; attempts: Attempt[]; helps: HelpEvent[]; exercises: Exercise[]; library: LibraryItem[] }) {
   const first = attempts.filter((attempt) => attempt.firstAttempt); const firstCorrect = first.filter((attempt) => attempt.correct).length; const accuracy = first.length ? Math.round((firstCorrect / first.length) * 100) : 0; const teaching = attempts.filter((attempt) => attempt.mode === "teaching").length; const test = attempts.filter((attempt) => attempt.mode === "test").length;
   const rows = exercises.map((exercise) => { const item = library.find((entry) => entry.id === exercise.promptId); const itemFirst = first.filter((attempt) => attempt.exerciseId === exercise.id); const correct = itemFirst.filter((attempt) => attempt.correct).length; return { label: item?.word ?? exercise.title, total: itemFirst.length, percent: itemFirst.length ? Math.round(correct / itemFirst.length * 100) : 0 }; });
-  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">RISULTATI</span><h1>Progressi di Luca</h1><p>Dati descrittivi dell’attività, separati tra primo tentativo e correzioni.</p></div><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button></section><section className="stats-strip"><div><small>Accuratezza al primo tentativo</small><strong>{accuracy}%</strong><span>su {first.length} prove</span></div><div><small>Aiuti registrati</small><strong>{helps.length}</strong><span>decisi dall’adulto</span></div><div><small>Modalità verifica</small><strong>{test}</strong><span>tentativi totali</span></div><div><small>Modalità insegnamento</small><strong>{teaching}</strong><span>tentativi totali</span></div></section><section className="stats-layout"><div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">PRIMO TENTATIVO</span><h3>Risultati per parola</h3></div><span className="legend"><i />Corretto</span></div><div className="bars">{rows.map((row) => <div className="bar-row" key={row.label}><span>{row.label}</span><div><i style={{ width: `${row.percent}%` }} /></div><strong>{row.total ? `${row.percent}%` : "—"}</strong></div>)}</div></div><div className="panel help-panel"><span className="eyebrow">AIUTI</span><h3>Interventi registrati</h3>{helps.length ? <div className="help-counts">{helpTypes.map((label) => { const count = helps.filter((help) => help.label === label).length; return count ? <div key={label}><span>{label}</span><strong>{count}</strong></div> : null; })}</div> : <div className="empty-mini"><CircleHelp /><p>Nessun aiuto registrato.</p><small>Comparirà qui quando l’adulto ne seleziona uno.</small></div>}</div></section><div className="data-note"><CircleHelp /><p><strong>Come leggere questi dati</strong><br />I risultati descrivono soltanto le attività registrate e non costituiscono una diagnosi o una raccomandazione terapeutica.</p></div></div>;
+  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">RISULTATI</span><h1>Progressi di {child.firstName}</h1><p>Dati descrittivi dell’attività, separati tra primo tentativo e correzioni.</p></div><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button></section><section className="stats-strip"><div><small>Accuratezza al primo tentativo</small><strong>{accuracy}%</strong><span>su {first.length} prove</span></div><div><small>Aiuti registrati</small><strong>{helps.length}</strong><span>decisi dall’adulto</span></div><div><small>Modalità verifica</small><strong>{test}</strong><span>tentativi totali</span></div><div><small>Modalità insegnamento</small><strong>{teaching}</strong><span>tentativi totali</span></div></section><section className="stats-layout"><div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">PRIMO TENTATIVO</span><h3>Risultati per parola</h3></div><span className="legend"><i />Corretto</span></div><div className="bars">{rows.map((row) => <div className="bar-row" key={row.label}><span>{row.label}</span><div><i style={{ width: `${row.percent}%` }} /></div><strong>{row.total ? `${row.percent}%` : "—"}</strong></div>)}</div></div><div className="panel help-panel"><span className="eyebrow">AIUTI</span><h3>Interventi registrati</h3>{helps.length ? <div className="help-counts">{helpTypes.map((label) => { const count = helps.filter((help) => help.label === label).length; return count ? <div key={label}><span>{label}</span><strong>{count}</strong></div> : null; })}</div> : <div className="empty-mini"><CircleHelp /><p>Nessun aiuto registrato.</p><small>Comparirà qui quando l’adulto ne seleziona uno.</small></div>}</div></section><div className="data-note"><CircleHelp /><p><strong>Come leggere questi dati</strong><br />I risultati descrivono soltanto le attività registrate e non costituiscono una diagnosi o una raccomandazione terapeutica.</p></div></div>;
+}
+
+function ProfilesView({ therapist, childProfiles, activeChildId, onSelectChild, onSaveTherapist, onSaveChild }: { therapist: Therapist; childProfiles: ChildProfile[]; activeChildId: string; onSelectChild: (id: string) => void; onSaveTherapist: (therapist: Therapist) => void; onSaveChild: (child: ChildProfile) => void }) {
+  const [therapistDraft, setTherapistDraft] = useState(therapist);
+  const [newPin, setNewPin] = useState("");
+  const [childDrafts, setChildDrafts] = useState(childProfiles);
+  const updateChild = (id: string, field: keyof ChildProfile, value: string) => setChildDrafts((current) => current.map((child) => child.id === id ? { ...child, [field]: value } : child));
+  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso dimostrativo locale</strong><p>Il PIN e i profili sono salvati solo in questo browser. Non costituiscono ancora un sistema di autenticazione sicuro.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></article>)}</div></section></div>;
 }
 
 function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item: LibraryItem) => void }) {

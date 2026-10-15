@@ -34,7 +34,7 @@ Il catalogo attuale è esclusivamente dimostrativo. Prima di integrare immagini 
 - API versionate e convalida degli input al confine server;
 - ambienti dev, staging e prod completamente separati.
 
-Durante la prototipazione il frontend viene pubblicato privatamente su ChatGPT Sites e usa storage locale. Nessun dato reale di minori è ammesso in questa fase.
+Durante la prototipazione il frontend viene pubblicato su ChatGPT Sites e usa storage locale. Dal 15 ottobre 2026 l'hosting demo è pubblico tramite link; l'accesso terapista interno è soltanto una simulazione browser-local e non un confine di sicurezza. Nessun dato reale di minori è ammesso in questa fase.
 
 ## Dati essenziali
 
@@ -99,7 +99,7 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 
 ## ADR ancora necessari
 
-1. identità e permessi terapista/genitore;
+1. identità e permessi terapista/genitore per la versione Cloudflare (il prototipo locale è descritto in ADR-0001);
 2. provider stock e licenze;
 3. pipeline di resize immagini;
 4. CI/CD definitiva e strategia deploy Cloudflare;
