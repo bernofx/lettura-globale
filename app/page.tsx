@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, X } from "lucide-react";
+import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
 type Mode = "teaching" | "test";
+type Presentation = "images" | "words";
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; license: string; author: string; privateUpload?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
@@ -14,14 +15,14 @@ type Therapist = { id: string; firstName: string; lastName: string; email: strin
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
 
 const stockItems: LibraryItem[] = [
-  { id: "mela", word: "Mela", emoji: "🍎", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "gatto", word: "Gatto", emoji: "🐈", category: "Animali", source: "Catalogo demo", license: "CC BY-SA demo", author: "OpenMoji demo" },
-  { id: "pane", word: "Pane", emoji: "🍞", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "casa", word: "Casa", emoji: "🏠", category: "Luoghi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "palla", word: "Palla", emoji: "⚽", category: "Giochi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "sole", word: "Sole", emoji: "☀️", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "auto", word: "Auto", emoji: "🚗", category: "Trasporti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "fiore", word: "Fiore", emoji: "🌼", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibo", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "gatto", word: "Gatto", image: "/images/demo/gatto.png", category: "Animali", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "pane", word: "Pane", image: "/images/demo/pane.png", category: "Cibo", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "casa", word: "Casa", image: "/images/demo/casa.png", category: "Luoghi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "palla", word: "Palla", image: "/images/demo/palla.png", category: "Giochi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "sole", word: "Sole", image: "/images/demo/sole.png", category: "Natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "auto", word: "Auto", image: "/images/demo/auto.png", category: "Trasporti", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "fiore", word: "Fiore", image: "/images/demo/fiore.png", category: "Natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "cane", word: "Cane", emoji: "🐕", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "pesce", word: "Pesce", emoji: "🐟", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "mucca", word: "Mucca", emoji: "🐄", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
@@ -84,6 +85,13 @@ function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
   return [...saved, ...seeded.filter((item) => !existingIds.has(item.id))];
 }
 
+function hydrateLibrary(items: LibraryItem[]) {
+  return mergeById(items, stockItems).map((item) => {
+    const demoItem = stockItems.find((candidate) => candidate.id === item.id);
+    return demoItem?.image && !item.privateUpload ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, license: demoItem.license, author: demoItem.author } : item;
+  });
+}
+
 function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T) {
   const [value, setValue] = useState<T>(fallback);
   const loaded = useRef(false);
@@ -110,6 +118,16 @@ async function hashPin(pin: string) {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function speakWord(word: string) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(word);
+  utterance.lang = "it-IT";
+  utterance.rate = 0.78;
+  utterance.pitch = 1;
+  window.speechSynthesis.speak(utterance);
+}
+
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -122,7 +140,7 @@ export default function HomePage() {
   const [activeChildId, setActiveChildId] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, (saved) => mergeById(saved, stockItems));
+  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary);
   const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
   const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
   const [attempts, setAttempts] = useStoredState<Attempt[]>("lg-attempts", []);
@@ -133,6 +151,7 @@ export default function HomePage() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
   const [sessionMode, setSessionMode] = useState<Mode>("test");
+  const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
   const [sessionIndex, setSessionIndex] = useState(0);
   const [sessionActive, setSessionActive] = useState(false);
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
@@ -156,11 +175,16 @@ export default function HomePage() {
   const sessionExercises = activeSequence.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
   const promptItem = library.find((item) => item.id === currentExercise?.promptId);
+  const promptWord = promptItem?.word;
   const childAttempts = attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id);
   const childHelps = helps.filter((help) => !help.childId || help.childId === activeChild?.id);
   const firstAttempts = childAttempts.filter((attempt) => attempt.firstAttempt);
   const firstCorrect = firstAttempts.filter((attempt) => attempt.correct).length;
   const accuracy = firstAttempts.length ? Math.round((firstCorrect / firstAttempts.length) * 100) : 0;
+
+  useEffect(() => {
+    if (sessionActive && sessionPresentation === "words" && promptWord) speakWord(promptWord);
+  }, [sessionActive, sessionPresentation, sessionIndex, promptWord]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const navigate = (next: View) => { setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -221,7 +245,7 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={library} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} />}
         {view === "exercises" && <ExercisesView exercises={exercises} sequences={sequences} library={library} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
-        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
+        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={exercises} library={library} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -275,16 +299,16 @@ function Quick({ icon, title, detail, onClick }: { icon: React.ReactNode; title:
 
 function LibraryView({ items, search, setSearch, onUpload }: { items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: () => void }) {
   const filtered = items.filter((item) => `${item.word} ${item.category}`.toLowerCase().includes(search.toLowerCase()));
-  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria parole</h1><p>Scegli le immagini da usare negli esercizi.</p></div><button className="primary-button" onClick={onUpload}><Upload size={18} />Carica immagine</button></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca parola o categoria…" /></label><div className="filter-chip">Tutte <span>{items.length}</span></div><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><div className="library-grid">{filtered.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}</div><div className="library-copy"><span className="category">{item.category}</span><h3>{item.word}</h3><p>{item.source} · {item.license}</p><small>Autore: {item.author}</small></div><button className="card-menu" aria-label={`Opzioni per ${item.word}`}>•••</button></article>)}</div>{!filtered.length && <div className="empty-state"><Search /><h3>Nessun risultato</h3><p>Prova un’altra parola o aggiungi una nuova immagine.</p></div>}</div>;
+  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria parole</h1><p>Scegli le immagini da usare negli esercizi.</p></div><button className="primary-button" onClick={onUpload}><Upload size={18} />Carica immagine</button></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca parola o categoria…" /></label><div className="filter-chip">Tutte <span>{items.length}</span></div><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><div className="library-grid">{filtered.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}</div><div className="library-copy"><span className="category">{item.category}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3><p>{item.source} · {item.license}</p><small>Autore: {item.author}</small></div><button className="card-menu" aria-label={`Opzioni per ${item.word}`}>•••</button></article>)}</div>{!filtered.length && <div className="empty-state"><Search /><h3>Nessun risultato</h3><p>Prova un’altra parola o aggiungi una nuova immagine.</p></div>}</div>;
 }
 
 function ExercisesView({ exercises, sequences, library, onBuild, onStart }: { exercises: Exercise[]; sequences: Sequence[]; library: LibraryItem[]; onBuild: () => void; onStart: () => void }) {
   return <div className="page"><section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Esercizi e sequenze</h1><p>Prepara attività brevi, chiare e riutilizzabili.</p></div><button className="primary-button" onClick={onBuild}><Plus size={19} />Nuovo esercizio</button></section><section className="sequence-banner"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div><span className="soft-label">SEQUENZA PRONTA</span><h2>{sequences[0]?.title ?? "Prime parole"}</h2><p>{sequences[0]?.exerciseIds.length ?? 0} esercizi · aggiornata oggi</p></div><button onClick={onStart}><Play size={17} fill="currentColor" />Avvia</button></section><div className="section-heading"><div><h2>Esercizi singoli</h2><p>Ogni modifica futura manterrà intatto lo storico delle sessioni.</p></div><span>{exercises.length} totali</span></div><div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className="tiny-art">{prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>Parola → immagine · {exercise.optionIds.length} opzioni</p></div><span className="ready-badge"><Check size={14} />Pronto</span><button className="ghost-button" onClick={onStart}>Prova</button></article>; })}</div></div>;
 }
 
-function SessionView({ active, mode, setMode, currentIndex, total, exercise, prompt, library, answerState, onChoose, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
-  if (!active || !exercise || !prompt) return <div className="page session-setup"><span className="session-big-icon"><Play /></span><span className="eyebrow">NUOVA SESSIONE</span><h1>Pronto per iniziare?</h1><p>Scegli la modalità. Potrai registrare gli aiuti in qualsiasi momento.</p><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Verifica</strong><small>Misura il primo tentativo</small></button></div><button className="primary-button large" onClick={onStart}><Play fill="currentColor" />Avvia “Prime parole”</button></div>;
-  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className="session-body"><p className="instruction">Scegli l’immagine corretta</p><h1>{prompt.word.toUpperCase()}</h1><div className="answer-grid">{exercise.optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} className={answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} onClick={() => onChoose(id)}><Artwork item={item} /><span>{item.word}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside></div>;
+function SessionView({ active, mode, setMode, presentation, setPresentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
+  if (!active || !exercise || !prompt) return <div className="page session-setup"><span className="session-big-icon"><Play /></span><span className="eyebrow">NUOVA SESSIONE</span><h1>Pronto per iniziare?</h1><p>Scegli modalità e presentazione. Potrai registrare gli aiuti in qualsiasi momento.</p><div className="session-choice-group"><span className="choice-label">Modalità</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Verifica</strong><small>Misura il primo tentativo</small></button></div></div><div className="session-choice-group"><span className="choice-label">Presentazione</span><div className="mode-picker presentation-picker"><button className={presentation === "images" ? "selected" : ""} onClick={() => setPresentation("images")}><ImagePlus /><strong>Foto + parole</strong><small>Foto realistiche con etichette</small></button><button className={presentation === "words" ? "selected" : ""} onClick={() => setPresentation("words")}><Volume2 /><strong>Solo parole con voce</strong><small>Ascolta e scegli la scritta</small></button></div></div><button className="primary-button large" onClick={onStart}><Play fill="currentColor" />Avvia “Prime parole”</button></div>;
+  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <button className="listen-button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Ascolta la parola</strong><small>Premi per riascoltare</small></span></button>}<div className="answer-grid">{exercise.optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <Artwork item={item} />}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside></div>;
 }
 
 function StatsView({ child, attempts, helps, exercises, library }: { child: ChildProfile; attempts: Attempt[]; helps: HelpEvent[]; exercises: Exercise[]; library: LibraryItem[] }) {
@@ -316,7 +340,7 @@ function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item:
 function ExerciseBuilder({ library, onClose, onSave }: { library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
   const [promptId, setPromptId] = useState(library[0]?.id ?? ""); const [options, setOptions] = useState<string[]>(library.slice(0, 3).map((item) => item.id)); const prompt = library.find((item) => item.id === promptId); const toggle = (id: string) => setOptions((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 4 ? [...current, id] : current); const finalOptions = useMemo(() => Array.from(new Set([promptId, ...options])).slice(0, 4), [promptId, options]);
   const save = () => onSave({ id: crypto.randomUUID(), title: `Trova ${prompt?.word.toLowerCase() ?? "la parola"}`, promptId, optionIds: finalOptions, updatedAt: "Adesso" });
-  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal wide"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVO ESERCIZIO</span><h2>Parola → immagine</h2><p>Scegli la parola corretta e almeno due alternative.</p><label>Parola da riconoscere<select value={promptId} onChange={(event) => { setPromptId(event.target.value); setOptions((current) => Array.from(new Set([event.target.value, ...current]))); }}>{library.map((item) => <option key={item.id} value={item.id}>{item.word}</option>)}</select></label><div className="builder-label">Immagini da mostrare <span>{finalOptions.length}/4</span></div><div className="builder-grid">{library.map((item) => <button key={item.id} className={finalOptions.includes(item.id) ? "selected" : ""} onClick={() => toggle(item.id)}><Artwork item={item} compact /><span>{item.word}</span>{finalOptions.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!promptId || finalOptions.length < 2} onClick={save}>Salva esercizio</button></div></div></div>;
+  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal wide"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVO ESERCIZIO</span><h2>Parola → immagine</h2><p>Scegli la parola corretta e almeno due alternative.</p><label>Parola da riconoscere<select value={promptId} onChange={(event) => { setPromptId(event.target.value); setOptions((current) => Array.from(new Set([event.target.value, ...current]))); }}>{library.map((item) => <option key={item.id} value={item.id}>{item.word}</option>)}</select></label><div className="builder-label">Immagini da mostrare <span>{finalOptions.length}/4</span></div><div className="builder-grid">{library.map((item) => <button key={item.id} className={finalOptions.includes(item.id) ? "selected" : ""} onClick={() => toggle(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")}</span>{finalOptions.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!promptId || finalOptions.length < 2} onClick={save}>Salva esercizio</button></div></div></div>;
 }
 
 function downloadCsv(attempts: Attempt[]) {
