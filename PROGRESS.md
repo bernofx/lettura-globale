@@ -13,6 +13,7 @@
 - [x] Accesso terapista dimostrativo con email e PIN locale.
 - [x] Selezione fra bambini associati e modifica dei profili terapista/bambino.
 - [x] Tentativi, aiuti e statistiche filtrati per bambino attivo.
+- [x] Versione Sites 3 pubblicata con successo su hosting pubblico; sorgente sincronizzato nel branch GitLab `feat/therapist-profiles`.
 - [x] Progetto React/TypeScript strict basato su starter Sites.
 - [x] UI responsive adulto per desktop e touch.
 - [x] Manifest e service worker PWA con cache dell'app shell.
