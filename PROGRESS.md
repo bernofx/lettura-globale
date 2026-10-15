@@ -24,6 +24,10 @@
 - [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
 - [x] Etichette delle parole in stampatello maiuscolo nelle schede illustrate.
 - [x] Variante di sessione solo parole con sintesi vocale italiana e comando per riascoltare.
+- [x] Ordine delle risposte casuale e stabile durante ciascuna prova.
+- [x] Etichette sempre collocate sotto le immagini nelle risposte illustrate.
+- [x] Sintesi vocale italiana affinata con scelta della migliore voce disponibile e ritmo più chiaro.
+- [x] Esercizio di categorizzazione `IL / LA` con trascinamento, alternativa touch/tastiera, ritorno dell’immagine in caso di errore e scomparsa dopo l’abbinamento corretto.
 - [x] Modalità insegnamento e verifica.
 - [x] Primo tentativo separato dalle correzioni.
 - [x] Tracciamento manuale degli aiuti.
@@ -57,4 +61,6 @@
 - Browser QA: avvio sessione, errore al primo tentativo, aiuto, correzione e layout mobile verificati.
 - Browser QA: login/logout terapista, cambio bambino, modifica e persistenza dei profili verificati.
 - Browser QA: libreria con fotografie e scritte maiuscole, selezione della presentazione, sessione `Foto + parole` e variante `Solo parole` con comando di riascolto verificate senza errori console.
+- Browser QA: risposta corretta mostrata in posizioni diverse, parole sotto le foto, ordine stabile durante il tentativo e sintesi vocale senza errori console.
+- Browser QA: esercizio `IL / LA` verificato con sei immagini, due box visibili, abbinamento errato che conserva la figura e abbinamento corretto che la rimuove.
 - Eliminazione profili: vincoli sull'ultimo terapista e sull'ultimo bambino associato coperti dalla UI; conferma distruttiva documentata in ADR-0002.
