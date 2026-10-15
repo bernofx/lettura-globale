@@ -8,6 +8,8 @@
 
 - [x] Repository e piano operativo predisposti.
 - [x] Repository GitLab privato creato in `bernofx-group/lettura-globale`.
+- [x] Sorgente MVP e pipeline completa pubblicati su GitLab `main`.
+- [x] Versione PWA privata pubblicata su ChatGPT Sites.
 - [x] Progetto React/TypeScript strict basato su starter Sites.
 - [x] UI responsive adulto per desktop e touch.
 - [x] Manifest e service worker PWA con cache dell'app shell.
@@ -27,7 +29,7 @@
 - catalogo immagini stock solo dimostrativo, nessuna API esterna;
 - dati e nomi presenti sono fittizi;
 - test automatici applicativi ancora da introdurre.
-- pipeline GitLab bloccata dalla verifica identità richiesta dall'account, non da un job applicativo.
+- la prima pipeline automatica di GitLab era stata bloccata dalla verifica identità richiesta dall'account; la configurazione iniziale è stata sostituita con verifica applicativa e Secret Detection.
 
 ## Prossimi passi
 
