@@ -20,7 +20,10 @@
 - [x] Manifest e service worker PWA con cache dell'app shell.
 - [x] Libreria demo con ricerca, metadati e upload privato locale.
 - [x] Libreria estesa a 28 parole/immagini e sequenza demo portata a 23 esercizi.
+- [x] Otto voci principali aggiornate con fotografie realistiche generate per il progetto e metadati di provenienza.
 - [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
+- [x] Etichette delle parole in stampatello maiuscolo nelle schede illustrate.
+- [x] Variante di sessione solo parole con sintesi vocale italiana e comando per riascoltare.
 - [x] Modalità insegnamento e verifica.
 - [x] Primo tentativo separato dalle correzioni.
 - [x] Tracciamento manuale degli aiuti.
@@ -53,4 +56,5 @@
 - `pnpm build`: superato.
 - Browser QA: avvio sessione, errore al primo tentativo, aiuto, correzione e layout mobile verificati.
 - Browser QA: login/logout terapista, cambio bambino, modifica e persistenza dei profili verificati.
+- Browser QA: libreria con fotografie e scritte maiuscole, selezione della presentazione, sessione `Foto + parole` e variante `Solo parole` con comando di riascolto verificate senza errori console.
 - Eliminazione profili: vincoli sull'ultimo terapista e sull'ultimo bambino associato coperti dalla UI; conferma distruttiva documentata in ADR-0002.
