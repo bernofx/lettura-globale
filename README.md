@@ -4,11 +4,13 @@ PWA assistiva per esercizi di lettura globale guidati da un terapista o genitore
 
 ## Stato
 
-La release attuale è un prototipo funzionale privato pubblicato su ChatGPT Sites. I dati della demo sono salvati soltanto nel browser. D1, R2, autenticazione e provider stock verranno introdotti prima di qualsiasi uso con dati reali.
+La release attuale è un prototipo funzionale pubblico pubblicato su ChatGPT Sites. I dati della demo sono salvati soltanto nel browser. D1, R2, autenticazione server-side e provider stock verranno introdotti prima di qualsiasi uso con dati reali.
 
 Funzioni disponibili:
 
 - dashboard adulto responsive;
+- accesso dimostrativo del terapista con PIN locale;
+- scelta fra i bambini associati e modifica dei profili;
 - libreria di parole con provenienza e licenza;
 - upload privato con dichiarazione del diritto d'uso;
 - esercizi singoli e sequenza salvabile;
@@ -38,6 +40,13 @@ Leggere sempre `MASTER_PLAN.md`, `AGENTS.md` e `PROGRESS.md` prima di modificare
 
 ## Hosting
 
-- Prove e revisioni: ChatGPT Sites, accesso privato.
+- Prove e revisioni: ChatGPT Sites, accesso pubblico tramite link.
 - Produzione stabile: Cloudflare Workers + D1 + R2, soltanto dopo hardening e approvazione.
 - Repository autorevole: GitLab privato.
+
+## Credenziali demo
+
+- Email: `giulia@letturaglobale.demo`
+- PIN: `1234`
+
+Sono dati fittizi. L'accesso protegge soltanto l'interfaccia nel browser e non sostituisce l'autenticazione server-side prevista per la versione Cloudflare.
