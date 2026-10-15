@@ -10,6 +10,7 @@
 - [x] Repository GitLab privato creato in `bernofx-group/lettura-globale`.
 - [x] Progetto React/TypeScript strict basato su starter Sites.
 - [x] UI responsive adulto per desktop e touch.
+- [x] Manifest e service worker PWA con cache dell'app shell.
 - [x] Libreria demo con ricerca, metadati e upload privato locale.
 - [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
 - [x] Modalità insegnamento e verifica.

@@ -66,6 +66,12 @@ export default function HomePage() {
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
   const [currentAttempts, setCurrentAttempts] = useState(0);
 
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
+
   const activeSequence = sequences[0] ?? initialSequences[0];
   const sessionExercises = activeSequence.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
