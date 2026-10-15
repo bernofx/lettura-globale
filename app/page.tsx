@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Upload, UserCog, UserRound, Users, X } from "lucide-react";
+import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
@@ -22,26 +22,75 @@ const stockItems: LibraryItem[] = [
   { id: "sole", word: "Sole", emoji: "☀️", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "auto", word: "Auto", emoji: "🚗", category: "Trasporti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "fiore", word: "Fiore", emoji: "🌼", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "cane", word: "Cane", emoji: "🐕", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "pesce", word: "Pesce", emoji: "🐟", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "mucca", word: "Mucca", emoji: "🐄", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "uccello", word: "Uccello", emoji: "🐦", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "banana", word: "Banana", emoji: "🍌", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "pera", word: "Pera", emoji: "🍐", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "latte", word: "Latte", emoji: "🥛", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "acqua", word: "Acqua", emoji: "💧", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "sedia", word: "Sedia", emoji: "🪑", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "letto", word: "Letto", emoji: "🛏️", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "porta", word: "Porta", emoji: "🚪", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "libro", word: "Libro", emoji: "📖", category: "Scuola", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "matita", word: "Matita", emoji: "✏️", category: "Scuola", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "scarpa", word: "Scarpa", emoji: "👟", category: "Oggetti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "mano", word: "Mano", emoji: "✋", category: "Corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "occhio", word: "Occhio", emoji: "👁️", category: "Corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "luna", word: "Luna", emoji: "🌙", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "albero", word: "Albero", emoji: "🌳", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "treno", word: "Treno", emoji: "🚆", category: "Trasporti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "barca", word: "Barca", emoji: "⛵", category: "Trasporti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
 ];
 const initialExercises: Exercise[] = [
   { id: "ex-mela", title: "Trova la mela", promptId: "mela", optionIds: ["mela", "gatto", "pane"], updatedAt: "Oggi" },
   { id: "ex-gatto", title: "Trova il gatto", promptId: "gatto", optionIds: ["gatto", "casa", "palla"], updatedAt: "Oggi" },
   { id: "ex-pane", title: "Trova il pane", promptId: "pane", optionIds: ["pane", "mela", "sole"], updatedAt: "Ieri" },
+  { id: "ex-cane", title: "Trova il cane", promptId: "cane", optionIds: ["cane", "gatto", "pesce"], updatedAt: "Oggi" },
+  { id: "ex-pesce", title: "Trova il pesce", promptId: "pesce", optionIds: ["pesce", "uccello", "cane"], updatedAt: "Oggi" },
+  { id: "ex-mucca", title: "Trova la mucca", promptId: "mucca", optionIds: ["mucca", "gatto", "uccello"], updatedAt: "Oggi" },
+  { id: "ex-uccello", title: "Trova l’uccello", promptId: "uccello", optionIds: ["uccello", "pesce", "mucca"], updatedAt: "Oggi" },
+  { id: "ex-banana", title: "Trova la banana", promptId: "banana", optionIds: ["banana", "pera", "mela"], updatedAt: "Oggi" },
+  { id: "ex-pera", title: "Trova la pera", promptId: "pera", optionIds: ["pera", "banana", "pane"], updatedAt: "Oggi" },
+  { id: "ex-latte", title: "Trova il latte", promptId: "latte", optionIds: ["latte", "acqua", "pane"], updatedAt: "Oggi" },
+  { id: "ex-acqua", title: "Trova l’acqua", promptId: "acqua", optionIds: ["acqua", "latte", "pera"], updatedAt: "Oggi" },
+  { id: "ex-sedia", title: "Trova la sedia", promptId: "sedia", optionIds: ["sedia", "letto", "porta"], updatedAt: "Oggi" },
+  { id: "ex-letto", title: "Trova il letto", promptId: "letto", optionIds: ["letto", "sedia", "casa"], updatedAt: "Oggi" },
+  { id: "ex-porta", title: "Trova la porta", promptId: "porta", optionIds: ["porta", "casa", "letto"], updatedAt: "Oggi" },
+  { id: "ex-libro", title: "Trova il libro", promptId: "libro", optionIds: ["libro", "matita", "palla"], updatedAt: "Oggi" },
+  { id: "ex-matita", title: "Trova la matita", promptId: "matita", optionIds: ["matita", "libro", "scarpa"], updatedAt: "Oggi" },
+  { id: "ex-scarpa", title: "Trova la scarpa", promptId: "scarpa", optionIds: ["scarpa", "mano", "sedia"], updatedAt: "Oggi" },
+  { id: "ex-mano", title: "Trova la mano", promptId: "mano", optionIds: ["mano", "occhio", "scarpa"], updatedAt: "Oggi" },
+  { id: "ex-occhio", title: "Trova l’occhio", promptId: "occhio", optionIds: ["occhio", "mano", "sole"], updatedAt: "Oggi" },
+  { id: "ex-luna", title: "Trova la luna", promptId: "luna", optionIds: ["luna", "sole", "fiore"], updatedAt: "Oggi" },
+  { id: "ex-albero", title: "Trova l’albero", promptId: "albero", optionIds: ["albero", "fiore", "casa"], updatedAt: "Oggi" },
+  { id: "ex-treno", title: "Trova il treno", promptId: "treno", optionIds: ["treno", "auto", "barca"], updatedAt: "Oggi" },
+  { id: "ex-barca", title: "Trova la barca", promptId: "barca", optionIds: ["barca", "treno", "auto"], updatedAt: "Oggi" },
 ];
-const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: ["ex-mela", "ex-gatto", "ex-pane"] }];
+const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: initialExercises.map((exercise) => exercise.id) }];
 const helpTypes = ["Indicazione verbale", "Gesto", "Riduci le opzioni", "Evidenzia", "Dimostrazione"];
-const initialTherapists: Therapist[] = [{ id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] }];
+const initialTherapists: Therapist[] = [
+  { id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] },
+  { id: "therapist-marco", firstName: "Marco", lastName: "Neri", email: "marco@letturaglobale.demo", role: "Terapista", pinHash: "f8638b979b2f4f793ddb6dbd197e0ee25a7a6ea32b0ae22f5e3c5d119d839e75", childIds: ["child-luca"] },
+];
 const initialChildren: ChildProfile[] = [
   { id: "child-luca", firstName: "Luca", lastName: "Bianchi", birthYear: "2019", notes: "Profilo dimostrativo", avatarColor: "#7468df" },
   { id: "child-sara", firstName: "Sara", lastName: "Verdi", birthYear: "2020", notes: "Profilo dimostrativo", avatarColor: "#2f8767" },
 ];
 
-function useStoredState<T>(key: string, fallback: T) {
+function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
+  const existingIds = new Set(saved.map((item) => item.id));
+  return [...saved, ...seeded.filter((item) => !existingIds.has(item.id))];
+}
+
+function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T) {
   const [value, setValue] = useState<T>(fallback);
   const loaded = useRef(false);
+  const migrateRef = useRef(migrate);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try { const saved = localStorage.getItem(key); if (saved) setValue(JSON.parse(saved) as T); } catch { /* storage can be unavailable */ }
+      try { const saved = localStorage.getItem(key); if (saved) { const parsed = JSON.parse(saved) as T; setValue(migrateRef.current ? migrateRef.current(parsed) : parsed); } } catch { /* storage can be unavailable */ }
       loaded.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
@@ -64,20 +113,25 @@ async function hashPin(pin: string) {
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [therapists, setTherapists] = useStoredState<Therapist[]>("lg-therapists", initialTherapists);
+  const [therapists, setTherapists] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
+    if (localStorage.getItem("lg-profiles-v2-seeded")) return saved;
+    localStorage.setItem("lg-profiles-v2-seeded", "1");
+    return mergeById(saved, initialTherapists);
+  });
   const [children, setChildren] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
   const [activeChildId, setActiveChildId] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems);
-  const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises);
-  const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences);
+  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, (saved) => mergeById(saved, stockItems));
+  const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
+  const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
   const [attempts, setAttempts] = useStoredState<Attempt[]>("lg-attempts", []);
   const [helps, setHelps] = useStoredState<HelpEvent[]>("lg-helps", []);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [sessionIndex, setSessionIndex] = useState(0);
   const [sessionActive, setSessionActive] = useState(false);
@@ -135,6 +189,25 @@ export default function HomePage() {
     if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
   };
   const logout = () => { sessionStorage.removeItem("lg-therapist-session"); setLoggedInTherapistId(null); setView("home"); };
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "therapist") {
+      if (therapists.length <= 1) { setPendingDelete(null); notify("Deve restare almeno un terapista"); return; }
+      setTherapists((current) => current.filter((item) => item.id !== pendingDelete.id));
+      setPendingDelete(null);
+      logout();
+      return;
+    }
+    if (associatedChildren.length <= 1) { setPendingDelete(null); notify("Deve restare almeno un bambino associato"); return; }
+    const nextChild = associatedChildren.find((child) => child.id !== pendingDelete.id);
+    setChildren((current) => current.filter((child) => child.id !== pendingDelete.id));
+    setTherapists((current) => current.map((item) => ({ ...item, childIds: item.childIds.filter((id) => id !== pendingDelete.id) })));
+    setAttempts((current) => current.filter((attempt) => attempt.childId !== pendingDelete.id));
+    setHelps((current) => current.filter((help) => help.childId !== pendingDelete.id));
+    if (activeChildId === pendingDelete.id && nextChild) setActiveChildId(nextChild.id);
+    setPendingDelete(null);
+    notify("Profilo bambino e dati locali collegati eliminati");
+  };
 
   if (!sessionChecked) return <div className="auth-loading"><Sparkles /></div>;
   if (!therapist) return <TherapistLogin therapists={therapists} onLogin={login} />;
@@ -145,15 +218,16 @@ export default function HomePage() {
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} />
       <main className="main-content">
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} />
-        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
+        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={library} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} />}
         {view === "exercises" && <ExercisesView exercises={exercises} sequences={sequences} library={library} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
         {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={exercises} library={library} />}
-        {view === "profiles" && <ProfilesView therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} />}
+        {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={(item) => { setLibrary((current) => [item, ...current]); setShowUpload(false); notify("Immagine privata aggiunta alla libreria"); }} />}
       {showBuilder && <ExerciseBuilder library={library} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
+      {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
     </div>
   );
@@ -170,7 +244,7 @@ function TherapistLogin({ therapists, onLogin }: { therapists: Therapist[]; onLo
     if (!match) { setError("Email o PIN non corretti."); return; }
     onLogin(match.id);
   };
-  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit"><KeyRound />Accedi</button></form><div className="demo-credentials"><strong>Accesso dimostrativo</strong><span>{therapists[0]?.email}</span><span>PIN 1234</span></div><small className="auth-disclaimer">I profili e il PIN restano solo in questo browser. Non usare dati reali in questa versione di prova.</small></section></main>;
+  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit"><KeyRound />Accedi</button></form><div className="demo-credentials"><strong>Accessi dimostrativi iniziali</strong><span>giulia@letturaglobale.demo</span><span>PIN 1234</span><span>marco@letturaglobale.demo</span><span>PIN 5678</span></div><small className="auth-disclaimer">I profili e il PIN restano solo in questo browser. Non usare dati reali in questa versione di prova.</small></section></main>;
 }
 
 function ChildChooser({ therapist, childProfiles, onChoose, onLogout }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void }) {
@@ -191,8 +265,9 @@ function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpen
   return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className="private-pill"><Cloud size={15} />Salvataggio locale</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }
 
-function Dashboard({ therapist, child, libraryCount, exerciseCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
-  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">AREA TERAPISTA</span><h1>Buongiorno, {therapist.firstName}</h1><p>Tutto è pronto per la prossima attività con {child.firstName}.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Prime parole</h2><p>Una sequenza breve di 3 associazioni già pronta. Puoi scegliere gli aiuti durante l’attività.</p><div className="hero-meta"><span>3 esercizi</span><i /><span>~ 5 minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Inizia ora <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
+function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; sequenceCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
+  const minutes = Math.max(5, Math.round(sequenceCount * 1.5));
+  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">AREA TERAPISTA</span><h1>Buongiorno, {therapist.firstName}</h1><p>Tutto è pronto per la prossima attività con {child.firstName}.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Prime parole</h2><p>Una sequenza completa di associazioni già pronta. Puoi scegliere gli aiuti durante l’attività.</p><div className="hero-meta"><span>{sequenceCount} esercizi</span><i /><span>~ {minutes} minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Inizia ora <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
 }
 
 function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><span className={`metric-icon ${tone}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>; }
@@ -218,12 +293,17 @@ function StatsView({ child, attempts, helps, exercises, library }: { child: Chil
   return <div className="page"><section className="page-title-row"><div><span className="eyebrow">RISULTATI</span><h1>Progressi di {child.firstName}</h1><p>Dati descrittivi dell’attività, separati tra primo tentativo e correzioni.</p></div><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button></section><section className="stats-strip"><div><small>Accuratezza al primo tentativo</small><strong>{accuracy}%</strong><span>su {first.length} prove</span></div><div><small>Aiuti registrati</small><strong>{helps.length}</strong><span>decisi dall’adulto</span></div><div><small>Modalità verifica</small><strong>{test}</strong><span>tentativi totali</span></div><div><small>Modalità insegnamento</small><strong>{teaching}</strong><span>tentativi totali</span></div></section><section className="stats-layout"><div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">PRIMO TENTATIVO</span><h3>Risultati per parola</h3></div><span className="legend"><i />Corretto</span></div><div className="bars">{rows.map((row) => <div className="bar-row" key={row.label}><span>{row.label}</span><div><i style={{ width: `${row.percent}%` }} /></div><strong>{row.total ? `${row.percent}%` : "—"}</strong></div>)}</div></div><div className="panel help-panel"><span className="eyebrow">AIUTI</span><h3>Interventi registrati</h3>{helps.length ? <div className="help-counts">{helpTypes.map((label) => { const count = helps.filter((help) => help.label === label).length; return count ? <div key={label}><span>{label}</span><strong>{count}</strong></div> : null; })}</div> : <div className="empty-mini"><CircleHelp /><p>Nessun aiuto registrato.</p><small>Comparirà qui quando l’adulto ne seleziona uno.</small></div>}</div></section><div className="data-note"><CircleHelp /><p><strong>Come leggere questi dati</strong><br />I risultati descrivono soltanto le attività registrate e non costituiscono una diagnosi o una raccomandazione terapeutica.</p></div></div>;
 }
 
-function ProfilesView({ therapist, childProfiles, activeChildId, onSelectChild, onSaveTherapist, onSaveChild }: { therapist: Therapist; childProfiles: ChildProfile[]; activeChildId: string; onSelectChild: (id: string) => void; onSaveTherapist: (therapist: Therapist) => void; onSaveChild: (child: ChildProfile) => void }) {
+function ProfilesView({ therapist, childProfiles, activeChildId, canDeleteTherapist, onSelectChild, onSaveTherapist, onSaveChild, onRequestDelete }: { therapist: Therapist; childProfiles: ChildProfile[]; activeChildId: string; canDeleteTherapist: boolean; onSelectChild: (id: string) => void; onSaveTherapist: (therapist: Therapist) => void; onSaveChild: (child: ChildProfile) => void; onRequestDelete: (item: { kind: "therapist" | "child"; id: string; name: string }) => void }) {
   const [therapistDraft, setTherapistDraft] = useState(therapist);
   const [newPin, setNewPin] = useState("");
   const [childDrafts, setChildDrafts] = useState(childProfiles);
   const updateChild = (id: string, field: keyof ChildProfile, value: string) => setChildDrafts((current) => current.map((child) => child.id === id ? { ...child, [field]: value } : child));
-  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso dimostrativo locale</strong><p>Il PIN e i profili sono salvati solo in questo browser. Non costituiscono ancora un sistema di autenticazione sicuro.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></article>)}</div></section></div>;
+  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso dimostrativo locale</strong><p>Il PIN e i profili sono salvati solo in questo browser. Non costituiscono ancora un sistema di autenticazione sicuro.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form><div className="danger-row"><div><strong>Elimina profilo terapista</strong><small>Verrai disconnesso. Deve restare almeno un terapista.</small></div><button className="danger-button" disabled={!canDeleteTherapist} onClick={() => onRequestDelete({ kind: "therapist", id: therapist.id, name: `${therapist.firstName} ${therapist.lastName}` })}><Trash2 />Elimina</button></div></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><div className="child-actions"><button className="danger-button subtle" disabled={childProfiles.length <= 1} onClick={() => onRequestDelete({ kind: "child", id: child.id, name: `${child.firstName} ${child.lastName}` })}><Trash2 />Elimina</button><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></div></article>)}</div></section></div>;
+}
+
+function DeleteDialog({ item, onCancel, onConfirm }: { item: { kind: "therapist" | "child"; name: string }; onCancel: () => void; onConfirm: () => void }) {
+  const isChild = item.kind === "child";
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">CONFERMA ELIMINAZIONE</span><h2 id="delete-title">Eliminare {item.name}?</h2><p>{isChild ? "Saranno eliminati da questo browser anche i tentativi e gli aiuti collegati al bambino." : "Il profilo terapista verrà eliminato da questo browser e la sessione verrà chiusa."}</p><p className="irreversible-note">Questa operazione non può essere annullata.</p><div className="modal-actions"><button className="ghost-button" onClick={onCancel}>Annulla</button><button className="danger-button solid" onClick={onConfirm}><Trash2 />Elimina definitivamente</button></div></div></div>;
 }
 
 function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item: LibraryItem) => void }) {
