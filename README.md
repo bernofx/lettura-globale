@@ -10,10 +10,10 @@ Funzioni disponibili:
 
 - dashboard adulto responsive;
 - accesso dimostrativo del terapista con PIN locale;
-- scelta fra i bambini associati e modifica dei profili;
-- libreria di parole con provenienza e licenza;
+- scelta fra i bambini associati, modifica ed eliminazione protetta dei profili;
+- libreria di 28 parole/immagini con provenienza e licenza;
 - upload privato con dichiarazione del diritto d'uso;
-- esercizi singoli e sequenza salvabile;
+- 23 esercizi singoli e sequenza salvabile;
 - modalità insegnamento e verifica;
 - primo tentativo distinto dalle correzioni;
 - aiuti scelti e registrati dall'adulto;
@@ -48,5 +48,7 @@ Leggere sempre `MASTER_PLAN.md`, `AGENTS.md` e `PROGRESS.md` prima di modificare
 
 - Email: `giulia@letturaglobale.demo`
 - PIN: `1234`
+- Email alternativa: `marco@letturaglobale.demo`
+- PIN alternativo: `5678`
 
 Sono dati fittizi. L'accesso protegge soltanto l'interfaccia nel browser e non sostituisce l'autenticazione server-side prevista per la versione Cloudflare.

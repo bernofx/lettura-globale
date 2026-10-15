@@ -12,12 +12,14 @@
 - [x] Versione PWA pubblicata su ChatGPT Sites e hosting reso pubblico tramite link.
 - [x] Accesso terapista dimostrativo con email e PIN locale.
 - [x] Selezione fra bambini associati e modifica dei profili terapista/bambino.
+- [x] Eliminazione protetta di terapisti e bambini, con conferma esplicita e pulizia dei dati locali collegati.
 - [x] Tentativi, aiuti e statistiche filtrati per bambino attivo.
 - [x] Versione Sites 3 pubblicata con successo su hosting pubblico; sorgente sincronizzato nel branch GitLab `feat/therapist-profiles`.
 - [x] Progetto React/TypeScript strict basato su starter Sites.
 - [x] UI responsive adulto per desktop e touch.
 - [x] Manifest e service worker PWA con cache dell'app shell.
 - [x] Libreria demo con ricerca, metadati e upload privato locale.
+- [x] Libreria estesa a 28 parole/immagini e sequenza demo portata a 23 esercizi.
 - [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
 - [x] Modalità insegnamento e verifica.
 - [x] Primo tentativo separato dalle correzioni.
@@ -51,3 +53,4 @@
 - `pnpm build`: superato.
 - Browser QA: avvio sessione, errore al primo tentativo, aiuto, correzione e layout mobile verificati.
 - Browser QA: login/logout terapista, cambio bambino, modifica e persistenza dei profili verificati.
+- Eliminazione profili: vincoli sull'ultimo terapista e sull'ultimo bambino associato coperti dalla UI; conferma distruttiva documentata in ADR-0002.
