@@ -6,6 +6,8 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
 type Mode = "teaching" | "test";
 type Presentation = "images" | "words";
+type SessionActivity = "recognition" | "articles";
+type Article = "IL" | "LA";
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; license: string; author: string; privateUpload?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
@@ -71,6 +73,12 @@ const initialExercises: Exercise[] = [
 ];
 const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: initialExercises.map((exercise) => exercise.id) }];
 const helpTypes = ["Indicazione verbale", "Gesto", "Riduci le opzioni", "Evidenzia", "Dimostrazione"];
+const articlesById: Record<string, Article> = {
+  mela: "LA", gatto: "IL", pane: "IL", casa: "LA", palla: "LA", sole: "IL", fiore: "IL",
+  cane: "IL", pesce: "IL", mucca: "LA", banana: "LA", pera: "LA", latte: "IL", sedia: "LA",
+  letto: "IL", porta: "LA", libro: "IL", matita: "LA", scarpa: "LA", mano: "LA", luna: "LA",
+  treno: "IL", barca: "LA",
+};
 const initialTherapists: Therapist[] = [
   { id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] },
   { id: "therapist-marco", firstName: "Marco", lastName: "Neri", email: "marco@letturaglobale.demo", role: "Terapista", pinHash: "f8638b979b2f4f793ddb6dbd197e0ee25a7a6ea32b0ae22f5e3c5d119d839e75", childIds: ["child-luca"] },
@@ -118,13 +126,26 @@ async function hashPin(pin: string) {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function shuffled<T>(items: T[]) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapWith = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapWith]] = [result[swapWith], result[index]];
+  }
+  return result;
+}
+
 function speakWord(word: string) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(word);
+  const utterance = new SpeechSynthesisUtterance(`${word}.`);
   utterance.lang = "it-IT";
-  utterance.rate = 0.78;
-  utterance.pitch = 1;
+  const italianVoices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("it"));
+  const preferredVoice = italianVoices.find((voice) => /elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices.find((voice) => voice.localService) ?? italianVoices[0];
+  if (preferredVoice) utterance.voice = preferredVoice;
+  utterance.rate = 0.7;
+  utterance.pitch = 0.96;
+  utterance.volume = 1;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -152,6 +173,7 @@ export default function HomePage() {
   const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
+  const [sessionActivity, setSessionActivity] = useState<SessionActivity>("recognition");
   const [sessionIndex, setSessionIndex] = useState(0);
   const [sessionActive, setSessionActive] = useState(false);
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
@@ -183,8 +205,8 @@ export default function HomePage() {
   const accuracy = firstAttempts.length ? Math.round((firstCorrect / firstAttempts.length) * 100) : 0;
 
   useEffect(() => {
-    if (sessionActive && sessionPresentation === "words" && promptWord) speakWord(promptWord);
-  }, [sessionActive, sessionPresentation, sessionIndex, promptWord]);
+    if (sessionActive && sessionActivity === "recognition" && sessionPresentation === "words" && promptWord) speakWord(promptWord);
+  }, [sessionActive, sessionActivity, sessionPresentation, sessionIndex, promptWord]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const navigate = (next: View) => { setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -197,13 +219,17 @@ export default function HomePage() {
     setAnswerState(correct ? "correct" : "wrong");
   };
   const addHelp = (label: string) => {
-    if (!currentExercise) return;
-    setHelps((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, label, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
+    const exerciseId = sessionActivity === "articles" ? "articles-il-la" : currentExercise?.id;
+    if (!exerciseId) return;
+    setHelps((current) => [...current, { id: crypto.randomUUID(), exerciseId, label, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
     notify(`Aiuto registrato: ${label}`);
   };
   const nextExercise = () => {
     if (sessionIndex >= sessionExercises.length - 1) { setSessionActive(false); setAnswerState("idle"); notify("Sessione completata e salvata"); setView("stats"); return; }
     setSessionIndex((index) => index + 1); setCurrentAttempts(0); setAnswerState("idle");
+  };
+  const recordArticleAttempt = (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => {
+    setAttempts((current) => [...current, { id: crypto.randomUUID(), exerciseId: `article-${itemId}`, answerId: article, correct, firstAttempt, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
   };
 
   const login = (therapistId: string) => {
@@ -245,7 +271,7 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={library} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} />}
         {view === "exercises" && <ExercisesView exercises={exercises} sequences={sequences} library={library} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
-        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
+        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} activity={sessionActivity} setActivity={setSessionActivity} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onArticleAttempt={recordArticleAttempt} onArticleComplete={() => { setSessionActive(false); notify("Esercizio IL / LA completato e salvato"); setView("stats"); }} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={exercises} library={library} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -306,9 +332,53 @@ function ExercisesView({ exercises, sequences, library, onBuild, onStart }: { ex
   return <div className="page"><section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Esercizi e sequenze</h1><p>Prepara attività brevi, chiare e riutilizzabili.</p></div><button className="primary-button" onClick={onBuild}><Plus size={19} />Nuovo esercizio</button></section><section className="sequence-banner"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div><span className="soft-label">SEQUENZA PRONTA</span><h2>{sequences[0]?.title ?? "Prime parole"}</h2><p>{sequences[0]?.exerciseIds.length ?? 0} esercizi · aggiornata oggi</p></div><button onClick={onStart}><Play size={17} fill="currentColor" />Avvia</button></section><div className="section-heading"><div><h2>Esercizi singoli</h2><p>Ogni modifica futura manterrà intatto lo storico delle sessioni.</p></div><span>{exercises.length} totali</span></div><div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className="tiny-art">{prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>Parola → immagine · {exercise.optionIds.length} opzioni</p></div><span className="ready-badge"><Check size={14} />Pronto</span><button className="ghost-button" onClick={onStart}>Prova</button></article>; })}</div></div>;
 }
 
-function SessionView({ active, mode, setMode, presentation, setPresentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
-  if (!active || !exercise || !prompt) return <div className="page session-setup"><span className="session-big-icon"><Play /></span><span className="eyebrow">NUOVA SESSIONE</span><h1>Pronto per iniziare?</h1><p>Scegli modalità e presentazione. Potrai registrare gli aiuti in qualsiasi momento.</p><div className="session-choice-group"><span className="choice-label">Modalità</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Verifica</strong><small>Misura il primo tentativo</small></button></div></div><div className="session-choice-group"><span className="choice-label">Presentazione</span><div className="mode-picker presentation-picker"><button className={presentation === "images" ? "selected" : ""} onClick={() => setPresentation("images")}><ImagePlus /><strong>Foto + parole</strong><small>Foto realistiche con etichette</small></button><button className={presentation === "words" ? "selected" : ""} onClick={() => setPresentation("words")}><Volume2 /><strong>Solo parole con voce</strong><small>Ascolta e scegli la scritta</small></button></div></div><button className="primary-button large" onClick={onStart}><Play fill="currentColor" />Avvia “Prime parole”</button></div>;
-  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <button className="listen-button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Ascolta la parola</strong><small>Premi per riascoltare</small></span></button>}<div className="answer-grid">{exercise.optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <Artwork item={item} />}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside></div>;
+function SessionView({ active, mode, setMode, activity, setActivity, presentation, setPresentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onArticleAttempt, onArticleComplete, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; activity: SessionActivity; setActivity: (activity: SessionActivity) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onArticleAttempt: (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => void; onArticleComplete: () => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
+  if (!active) return <div className="page session-setup"><span className="session-big-icon"><Play /></span><span className="eyebrow">NUOVA SESSIONE</span><h1>Pronto per iniziare?</h1><p>Scegli attività, modalità e presentazione. Potrai registrare gli aiuti in qualsiasi momento.</p><div className="session-choice-group"><span className="choice-label">Attività</span><div className="mode-picker"><button className={activity === "recognition" ? "selected" : ""} onClick={() => setActivity("recognition")}><BookOpenCheck /><strong>Trova la parola</strong><small>Scegli fra tre alternative</small></button><button className={activity === "articles" ? "selected" : ""} onClick={() => setActivity("articles")}><Library /><strong>Categorie IL / LA</strong><small>Trascina ogni immagine nel box giusto</small></button></div></div><div className="session-choice-group"><span className="choice-label">Modalità</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Verifica</strong><small>Misura il primo tentativo</small></button></div></div>{activity === "recognition" && <div className="session-choice-group"><span className="choice-label">Presentazione</span><div className="mode-picker presentation-picker"><button className={presentation === "images" ? "selected" : ""} onClick={() => setPresentation("images")}><ImagePlus /><strong>Foto + parole</strong><small>Foto realistiche con etichette</small></button><button className={presentation === "words" ? "selected" : ""} onClick={() => setPresentation("words")}><Volume2 /><strong>Solo parole con voce</strong><small>Ascolta e scegli la scritta</small></button></div></div>}<button className="primary-button large" onClick={onStart}><Play fill="currentColor" />Avvia {activity === "articles" ? "IL / LA" : "Prime parole"}</button></div>;
+  if (activity === "articles") return <ArticleSortSession library={library} mode={mode} onAttempt={onArticleAttempt} onComplete={onArticleComplete} onHelp={onHelp} />;
+  if (!exercise || !prompt) return null;
+  return <RecognitionSession mode={mode} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} onChoose={onChoose} onHelp={onHelp} onNext={onNext} />;
+}
+
+function RecognitionSession({ mode, presentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onHelp, onNext }: { mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onHelp: (label: string) => void; onNext: () => void }) {
+  const optionIds = useMemo(() => shuffled(exercise.optionIds), [exercise.optionIds]);
+  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <button className="listen-button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Ascolta la parola</strong><small>Premi per riascoltare</small></span></button>}<div className="answer-grid">{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><HelpDock onHelp={onHelp} /></div>;
+}
+
+function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { library: LibraryItem[]; mode: Mode; onAttempt: (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => void; onComplete: () => void; onHelp: (label: string) => void }) {
+  const [initialIds] = useState(() => shuffled(library.filter((item) => articlesById[item.id]).map((item) => item.id)).slice(0, 6));
+  const [remainingIds, setRemainingIds] = useState(initialIds);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [triedIds, setTriedIds] = useState<string[]>([]);
+  const [wrongId, setWrongId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("Trascina un’immagine, oppure selezionala e poi scegli IL o LA.");
+  const initialTotal = initialIds.length;
+  const place = (article: Article, explicitId?: string) => {
+    const itemId = explicitId ?? draggedId ?? selectedId;
+    if (!itemId) return;
+    const correct = articlesById[itemId] === article;
+    onAttempt(itemId, article, correct, !triedIds.includes(itemId));
+    if (correct) {
+      setRemainingIds((current) => current.filter((id) => id !== itemId));
+      setSelectedId(null);
+      setDraggedId(null);
+      setWrongId(null);
+      setFeedback("Giusto! L’immagine è stata abbinata.");
+    } else {
+      setTriedIds((current) => current.includes(itemId) ? current : [...current, itemId]);
+      setWrongId(itemId);
+      setSelectedId(null);
+      setDraggedId(null);
+      setFeedback("Non è il box giusto: l’immagine torna al suo posto.");
+      window.setTimeout(() => setWrongId((current) => current === itemId ? null : current), 650);
+    }
+  };
+  const completed = remainingIds.length === 0;
+  return <div className="session-screen article-session"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><span className="mode-tag presentation-tag">Categorie</span><strong>IL o LA?</strong></div><div className="session-progress"><span>{initialTotal - remainingIds.length} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className="article-body"><p className="instruction">Abbina ogni immagine all’articolo corretto</p><h1>IL O LA?</h1>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le immagini sono state abbinate.</p><button className="primary-button large" onClick={onComplete}>Concludi</button></div> : <><div className="article-tray">{remainingIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; return <button type="button" key={id} draggable aria-pressed={selectedId === id} aria-label={`Immagine ${item.word}. Trascina verso IL o LA`} className={`article-card ${selectedId === id ? "selected" : ""} ${wrongId === id ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === id ? null : id)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", id); event.dataTransfer.effectAllowed = "move"; setDraggedId(id); }} onDragEnd={() => setDraggedId(null)}><div className="article-art"><Artwork item={item} /></div><strong>{item.word.toLocaleUpperCase("it-IT")}</strong></button>; })}</div><div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" className="article-dropbox" key={article} onClick={() => place(article)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(article, event.dataTransfer.getData("text/plain")); }}><span>{article}</span><small>Trascina qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></>}</div><HelpDock onHelp={onHelp} /></div>;
+}
+
+function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
+  return <aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside>;
 }
 
 function StatsView({ child, attempts, helps, exercises, library }: { child: ChildProfile; attempts: Attempt[]; helps: HelpEvent[]; exercises: Exercise[]; library: LibraryItem[] }) {
