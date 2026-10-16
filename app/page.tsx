@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, X } from "lucide-react";
+import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
@@ -8,7 +8,7 @@ type Mode = "teaching" | "test";
 type Presentation = "images" | "words";
 type SessionActivity = "recognition" | "articles";
 type Article = "IL" | "LA";
-type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; privateUpload?: boolean };
+type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
 type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string; childId?: string; therapistId?: string };
@@ -103,6 +103,8 @@ const articlesById: Record<string, Article> = {
   bicicletta: "LA", gallo: "IL", gelato: "IL", maiale: "IL", coniglio: "IL", maglietta: "LA",
   piadina: "LA", giacca: "LA", camion: "IL", granchio: "IL", "coca-cola": "LA", carota: "LA",
 };
+const articleFor = (item: LibraryItem) => item.article !== undefined ? item.article ?? undefined : articlesById[item.id];
+const libraryCategories = ["Cibo", "Animali", "Corpo", "Casa", "Abbigliamento", "Trasporti", "Oggetti", "Scuola", "Luoghi", "Giochi", "Natura", "Altro"];
 const initialTherapists: Therapist[] = [
   { id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] },
   { id: "therapist-marco", firstName: "Marco", lastName: "Neri", email: "marco@letturaglobale.demo", role: "Terapista", pinHash: "f8638b979b2f4f793ddb6dbd197e0ee25a7a6ea32b0ae22f5e3c5d119d839e75", childIds: ["child-luca"] },
@@ -194,6 +196,8 @@ export default function HomePage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
+  const [pendingLibraryDelete, setPendingLibraryDelete] = useState<LibraryItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
@@ -217,10 +221,13 @@ export default function HomePage() {
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const associatedChildren = children.filter((child) => therapist?.childIds.includes(child.id));
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
+  const visibleLibrary = library.filter((item) => !item.deleted);
+  const visibleIds = new Set(visibleLibrary.map((item) => item.id));
+  const visibleExercises = exercises.map((exercise) => ({ ...exercise, optionIds: exercise.optionIds.filter((id) => visibleIds.has(id)) })).filter((exercise) => visibleIds.has(exercise.promptId) && exercise.optionIds.length >= 2);
   const activeSequence = sequences[0] ?? initialSequences[0];
-  const sessionExercises = activeSequence.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
+  const sessionExercises = activeSequence.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
-  const promptItem = library.find((item) => item.id === currentExercise?.promptId);
+  const promptItem = visibleLibrary.find((item) => item.id === currentExercise?.promptId);
   const promptWord = promptItem?.word;
   const childAttempts = attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id);
   const childHelps = helps.filter((help) => !help.childId || help.childId === activeChild?.id);
@@ -292,15 +299,17 @@ export default function HomePage() {
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} />
       <main className="main-content">
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} />
-        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={library.length} exerciseCount={exercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
-        {view === "library" && <LibraryView items={library} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} />}
-        {view === "exercises" && <ExercisesView exercises={exercises} sequences={sequences} library={library} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
-        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} activity={sessionActivity} setActivity={setSessionActivity} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={library} answerState={answerState} onChoose={chooseAnswer} onArticleAttempt={recordArticleAttempt} onArticleComplete={() => { setSessionActive(false); notify("Esercizio IL / LA completato e salvato"); setView("stats"); }} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
-        {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={exercises} library={library} />}
+        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
+        {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
+        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={sequences} library={visibleLibrary} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
+        {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} activity={sessionActivity} setActivity={setSessionActivity} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={visibleLibrary} answerState={answerState} onChoose={chooseAnswer} onArticleAttempt={recordArticleAttempt} onArticleComplete={() => { setSessionActive(false); notify("Esercizio IL / LA completato e salvato"); setView("stats"); }} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
+        {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={visibleExercises} library={visibleLibrary} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={(item) => { setLibrary((current) => [item, ...current]); setShowUpload(false); notify("Immagine privata aggiunta alla libreria"); }} />}
-      {showBuilder && <ExerciseBuilder library={library} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={(updated) => { setLibrary((current) => current.map((item) => item.id === updated.id ? updated : item)); setEditingItem(null); notify("Elemento della libreria aggiornato"); }} />}
+      {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Immagine rimossa dalla libreria e dagli esercizi"); }} />}
+      {showBuilder && <ExerciseBuilder library={visibleLibrary} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
     </div>
@@ -347,9 +356,9 @@ function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceCoun
 function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><span className={`metric-icon ${tone}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>; }
 function Quick({ icon, title, detail, onClick }: { icon: React.ReactNode; title: string; detail: string; onClick: () => void }) { return <button className="quick-item" onClick={onClick}><span>{icon}</span><div><strong>{title}</strong><small>{detail}</small></div><ChevronRight size={18} /></button>; }
 
-function LibraryView({ items, search, setSearch, onUpload }: { items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: () => void }) {
+function LibraryView({ items, search, setSearch, onUpload, onEdit, onDelete }: { items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: () => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void }) {
   const filtered = items.filter((item) => `${item.word} ${item.category}`.toLowerCase().includes(search.toLowerCase()));
-  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria parole</h1><p>Scegli le immagini da usare negli esercizi.</p></div><button className="primary-button" onClick={onUpload}><Upload size={18} />Carica immagine</button></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca parola o categoria…" /></label><div className="filter-chip">Tutte <span>{items.length}</span></div><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><div className="library-grid">{filtered.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}</div><div className="library-copy"><span className="category">{item.category}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3><p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div><button className="card-menu" aria-label={`Opzioni per ${item.word}`}>•••</button></article>)}</div>{!filtered.length && <div className="empty-state"><Search /><h3>Nessun risultato</h3><p>Prova un’altra parola o aggiungi una nuova immagine.</p></div>}</div>;
+  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria parole</h1><p>Scegli le immagini da usare negli esercizi. Modifica una scheda per assegnarla a IL, LA oppure escluderla da quel gioco.</p></div><button className="primary-button" onClick={onUpload}><Upload size={18} />Carica immagine</button></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca parola o categoria…" /></label><div className="filter-chip">Tutte <span>{items.length}</span></div><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><div className="library-grid">{filtered.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{item.category}{articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3><p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>{!filtered.length && <div className="empty-state"><Search /><h3>Nessun risultato</h3><p>Prova un’altra parola o aggiungi una nuova immagine.</p></div>}</div>;
 }
 
 function ExercisesView({ exercises, sequences, library, onBuild, onStart }: { exercises: Exercise[]; sequences: Sequence[]; library: LibraryItem[]; onBuild: () => void; onStart: () => void }) {
@@ -369,7 +378,7 @@ function RecognitionSession({ mode, presentation, currentIndex, total, exercise,
 }
 
 function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { library: LibraryItem[]; mode: Mode; onAttempt: (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => void; onComplete: () => void; onHelp: (label: string) => void }) {
-  const [initialIds] = useState(() => shuffled(library.filter((item) => articlesById[item.id]).map((item) => item.id)).slice(0, 6));
+  const [initialIds] = useState(() => shuffled(library.filter((item) => articleFor(item)).map((item) => item.id)).slice(0, 6));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -380,7 +389,8 @@ function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { 
   const place = (article: Article, explicitId?: string) => {
     const itemId = explicitId ?? draggedId ?? selectedId;
     if (!itemId) return;
-    const correct = articlesById[itemId] === article;
+    const item = library.find((entry) => entry.id === itemId);
+    const correct = Boolean(item && articleFor(item) === article);
     onAttempt(itemId, article, correct, !triedIds.includes(itemId));
     if (correct) {
       setRemainingIds((current) => current.filter((id) => id !== itemId));
@@ -427,10 +437,29 @@ function DeleteDialog({ item, onCancel, onConfirm }: { item: { kind: "therapist"
 }
 
 function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item: LibraryItem) => void }) {
-  const [word, setWord] = useState(""); const [category, setCategory] = useState("Altro"); const [image, setImage] = useState<string | null>(null); const [rights, setRights] = useState(false); const inputRef = useRef<HTMLInputElement>(null);
+  const [word, setWord] = useState(""); const [category, setCategory] = useState("Altro"); const [article, setArticle] = useState<Article | "">(""); const [image, setImage] = useState<string | null>(null); const [rights, setRights] = useState(false); const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; const reader = new FileReader(); reader.onload = () => setImage(String(reader.result)); reader.readAsDataURL(file); };
-  const save = () => { if (!word.trim() || !image || !rights) return; onSave({ id: crypto.randomUUID(), word: word.trim(), image, category, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente", privateUpload: true }); };
-  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>Il file resta nel browser in questa versione di prova.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>Scegli un’immagine</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button><label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}><option>Cibo</option><option>Animali</option><option>Luoghi</option><option>Giochi</option><option>Natura</option><option>Altro</option></select></label><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights} onClick={save}>Aggiungi immagine</button></div></div></div>;
+  const save = () => { if (!word.trim() || !image || !rights) return; onSave({ id: crypto.randomUUID(), word: word.trim(), image, category, article: article || null, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente", privateUpload: true }); };
+  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>Il file resta nel browser in questa versione di prova.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>Scegli un’immagine</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button><label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">Scegli IL o LA per inserire automaticamente questa immagine nel gioco degli articoli.</p><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights} onClick={save}>Aggiungi immagine</button></div></div></div>;
+}
+
+function EditLibraryDialog({ item, onClose, onSave }: { item: LibraryItem; onClose: () => void; onSave: (item: LibraryItem) => void }) {
+  const [word, setWord] = useState(item.word);
+  const [category, setCategory] = useState(item.category);
+  const [article, setArticle] = useState<Article | "">(articleFor(item) ?? "");
+  const [image, setImage] = useState(item.image);
+  const [imageChanged, setImageChanged] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const handleFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; const reader = new FileReader(); reader.onload = () => { setImage(String(reader.result)); setImageChanged(true); }; reader.readAsDataURL(file); };
+  const save = () => {
+    if (!word.trim()) return;
+    onSave({ ...item, word: word.trim(), category, article: article || null, ...(imageChanged ? { image, emoji: undefined, source: "Upload privato", sourceUrl: undefined, license: "Diritto d’uso dichiarato", licenseUrl: undefined, author: "Utente", privateUpload: true } : {}) });
+  };
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="edit-library-title"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">MODIFICA IMMAGINE</span><h2 id="edit-library-title">Modifica la scheda</h2><p>Cambia la parola, la foto o l’assegnazione al gioco IL / LA.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt={`Anteprima ${word}`} /> : <><span className="edit-emoji">{item.emoji}</span><strong>Sostituisci immagine</strong></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button><label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">L’immagine comparirà nel gioco soltanto se scegli IL o LA.</p><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim()} onClick={save}><Save />Salva modifiche</button></div></div></div>;
+}
+
+function LibraryDeleteDialog({ item, onCancel, onConfirm }: { item: LibraryItem; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="library-delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">CONFERMA ELIMINAZIONE</span><h2 id="library-delete-title">Eliminare {item.word}?</h2><p>L’immagine non sarà più mostrata nella libreria né negli esercizi che la utilizzano.</p><div className="modal-actions"><button className="ghost-button" onClick={onCancel}>Annulla</button><button className="danger-button solid" onClick={onConfirm}><Trash2 />Elimina immagine</button></div></div></div>;
 }
 
 function ExerciseBuilder({ library, onClose, onSave }: { library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
