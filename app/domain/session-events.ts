@@ -5,6 +5,7 @@ export type AttemptEvent = {
   sessionId?: string;
   sessionItemId?: string;
   exerciseId: string;
+  wordId?: string;
   answerId: string;
   correct: boolean;
   firstAttempt: boolean;

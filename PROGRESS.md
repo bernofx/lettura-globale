@@ -23,9 +23,11 @@
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
+- [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
-- [x] Statistiche descrittive ed export CSV.
+- [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
+- [x] L’amministratore può creare, associare ed eliminare i profili terapista non amministrativi.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 
 ## Scelte di persistenza e costo
@@ -61,5 +63,5 @@
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
-- Sites versione 19 pubblicata sul runtime Cloudflare con binding D1/R2 invariati.
-- Browser QA live: landing pubblica, login amministratore, matrice terapisti-bambini, gestione esercizi/sequenze e anteprima `Prova` dell'esercizio selezionato verificati.
+- Pubblicazione Sites successiva alla verifica corrente, con binding D1/R2 invariati.
+- Browser QA prevista su sequenza mista, configuratore IL/LA, ordine stabile delle risposte, statistiche e cancellazione terapista.
