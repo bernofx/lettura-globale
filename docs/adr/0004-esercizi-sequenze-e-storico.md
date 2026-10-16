@@ -19,6 +19,10 @@ Terapisti e genitori devono poter creare, modificare, duplicare, ordinare e rimu
 - Ogni item della sessione ha un `sessionItemId`; il primo evento accettato è il primo tentativo e gli eventi successivi sono correzioni.
 - Una risposta identica ripetuta sullo stesso item viene ignorata per rendere innocuo il doppio tap.
 - Gli aiuti sono eventi append-only associati, quando possibile, alla sessione e all'item corrente.
+- Ogni esercizio dichiara il proprio tipo: riconoscimento oppure classificazione `IL / LA`; una sequenza può mescolare liberamente entrambi.
+- Un esercizio `IL / LA` salva l'insieme delle immagini ammesse e il numero di turni; a ogni esecuzione l'ordine viene casualizzato e viene mostrata una sola immagine alla volta.
+- I tentativi salvano anche l'identificatore della parola, così le statistiche possono essere aggregate per parola, coppia parola-esercizio o solo esercizio.
+- Durante la preparazione è disponibile un azzeramento esplicito dei tentativi e degli aiuti del solo bambino attivo, protetto da conferma.
 
 ## Motivazione
 

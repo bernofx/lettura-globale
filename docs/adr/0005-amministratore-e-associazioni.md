@@ -16,6 +16,7 @@ Più terapisti possono seguire lo stesso bambino. Serve inoltre un profilo che p
 - Un nuovo terapista richiede nome, cognome, email univoca, PIN iniziale e almeno un bambino associato.
 - Il PIN viene salvato soltanto come hash; la tabella D1 `therapist_credentials` viene riallineata a ogni salvataggio dello stato.
 - Le credenziali rimosse dallo snapshot vengono eliminate dalla tabella, evitando accessi residui.
+- L'amministratore può eliminare i profili terapista non amministrativi dopo una conferma; il profilo amministratore iniziale non è eliminabile da questa matrice.
 - R2 non è coinvolto nelle associazioni e continua a contenere soltanto i file privati.
 
 ## Conseguenze
