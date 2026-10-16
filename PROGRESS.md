@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 15 ottobre 2026  
+**Aggiornato:** 16 ottobre 2026
 **Fase:** prototipo funzionale pubblico  
 **Milestone:** M0 completata in parte; avvio M1/M3/M4 in modalità demo
 
@@ -52,6 +52,7 @@
 4. Preparare D1/R2 e schema migrazioni in staging.
 5. Sostituire storage locale con API autenticata.
 6. Completare verifica accessibilità e test cross-device.
+7. Valutare come feature opzionale la generazione di immagini AI da descrizione, dopo approvazione dell'ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche ultima versione
 
