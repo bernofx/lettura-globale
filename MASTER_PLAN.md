@@ -19,11 +19,30 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 - libreria privata di parole e immagini;
 - upload JPEG/PNG/WebP validato, normalizzato e ridimensionato;
 - ricerca futura soltanto tramite API ufficiali di provider stock approvati;
+- generazione AI opzionale, attivabile dall'adulto, tramite API ufficiale di un provider approvato;
 - niente scraping né download da URL arbitrari;
 - import con un click/tap e conservazione di provider, asset ID, autore, fonte, licenza e data;
 - R2 privato e accesso autenticato o firmato nella versione cloud.
 
 Il catalogo attuale è esclusivamente dimostrativo. Prima di integrare immagini stock reali occorre un ADR sul provider e sulle licenze.
+
+### Opzione futura — Generazione immagini AI
+
+La generazione AI è una funzione facoltativa della libreria, non un requisito dell'MVP. L'adulto inserisce una descrizione breve, per esempio `paperella di gomma verde`; il backend la combina con un modello di prompt fisso per produrre un'immagine semplice, fotorealistica, con un solo soggetto, sfondo neutro e senza testo o marchi. L'immagine viene mostrata in anteprima e salvata nella libreria soltanto dopo conferma esplicita.
+
+Vincoli previsti:
+
+- chiamata al provider esclusivamente server-side e chiave API conservata nei secrets dell'ambiente;
+- una sola proposta per richiesta, rigenerazione manuale e nessuna generazione automatica;
+- formato WebP compresso e salvataggio nel bucket R2 privato già associato all'utente;
+- parola, categoria e assegnazione `IL / LA` confermate prima dell'import;
+- limite mensile, rate limit, contatore dei consumi e blocco al raggiungimento del budget;
+- riuso di risultati già approvati per descrizioni equivalenti, quando appropriato;
+- nessun nome, volto, fotografia o altro dato personale del bambino nei prompt;
+- registrazione di provider, modello, prompt normalizzato, costo/uso restituito dall'API e data di creazione;
+- disponibilità subordinata a un ADR dedicato su provider, trattamento dati, moderazione, costi e retention.
+
+Configurazione iniziale proposta per la valutazione: OpenAI Images API con modello rapido/economico, qualità bassa, immagine quadrata e tetto di spesa configurabile. La scelta del provider resta aperta fino all'approvazione dell'ADR; l'abbonamento ChatGPT personale non viene considerato una credenziale API dell'applicazione.
 
 ## Architettura target
 
@@ -77,9 +96,9 @@ Repository, pipeline, ambienti, ADR iniziali, threat model e documentazione. Acc
 
 Autenticazione, ruoli, parole, upload privato, varianti R2 e audit. Accettazione: utente non autorizzato escluso, upload validato e interfaccia mouse/touch verificata.
 
-### M2 — Immagini stock
+### M2 — Immagini stock e generazione AI opzionale
 
-Provider ufficiale, import sicuro e metadati licenza. Accettazione: un click/tap completa import e resize; chiavi soltanto server-side.
+Provider ufficiali, import sicuro, metadati di provenienza e generazione AI facoltativa con anteprima. Accettazione: un click/tap completa import e resize; la generazione richiede conferma esplicita; chiavi soltanto server-side; limiti e costi verificabili.
 
 ### M3 — Esercizi e sequenze
 
@@ -106,3 +125,4 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 5. tipi di esercizio e catalogo aiuti;
 6. retention, RPO/RTO e backup;
 7. osservabilità e browser supportati.
+8. provider e governance della generazione AI: trattamento dei prompt, moderazione, budget, retention e diritti d'uso.
