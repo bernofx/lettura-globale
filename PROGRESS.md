@@ -1,67 +1,64 @@
 # PROGRESS — Lettura Globale
 
 **Aggiornato:** 16 ottobre 2026
-**Fase:** prototipo funzionale pubblico  
-**Milestone:** M0 completata in parte; avvio M1/M3/M4 in modalità demo
+
+**Fase:** prototipo cloud funzionale pubblico
+
+**Target:** Cloudflare Workers + D1 + R2, distribuito tramite ChatGPT Sites
 
 ## Completato
 
-- [x] Repository e piano operativo predisposti.
-- [x] Repository GitLab privato creato in `bernofx-group/lettura-globale`.
-- [x] Sorgente MVP e pipeline completa pubblicati su GitLab `main`.
-- [x] Versione PWA pubblicata su ChatGPT Sites e hosting reso pubblico tramite link.
-- [x] Accesso terapista dimostrativo con email e PIN locale.
-- [x] Selezione fra bambini associati e modifica dei profili terapista/bambino.
-- [x] Eliminazione protetta di terapisti e bambini, con conferma esplicita e pulizia dei dati locali collegati.
-- [x] Tentativi, aiuti e statistiche filtrati per bambino attivo.
-- [x] Versione Sites 3 pubblicata con successo su hosting pubblico; sorgente sincronizzato nel branch GitLab `feat/therapist-profiles`.
-- [x] Progetto React/TypeScript strict basato su starter Sites.
-- [x] UI responsive adulto per desktop e touch.
-- [x] Manifest e service worker PWA con cache dell'app shell.
-- [x] Libreria demo con ricerca, metadati e upload privato locale.
-- [x] Libreria estesa a 28 parole/immagini e sequenza demo portata a 23 esercizi.
-- [x] Otto voci principali aggiornate con fotografie realistiche generate per il progetto e metadati di provenienza.
-- [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
-- [x] Etichette delle parole in stampatello maiuscolo nelle schede illustrate.
-- [x] Variante di sessione solo parole con sintesi vocale italiana e comando per riascoltare.
-- [x] Ordine delle risposte casuale e stabile durante ciascuna prova.
-- [x] Etichette sempre collocate sotto le immagini nelle risposte illustrate.
-- [x] Sintesi vocale italiana affinata con scelta della migliore voce disponibile e ritmo più chiaro.
-- [x] Esercizio di categorizzazione `IL / LA` con trascinamento, alternativa touch/tastiera, ritorno dell’immagine in caso di errore e scomparsa dopo l’abbinamento corretto.
-- [x] Modalità insegnamento e verifica.
-- [x] Primo tentativo separato dalle correzioni.
-- [x] Tracciamento manuale degli aiuti.
+- [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
+- [x] Landing pubblica separata dal pannello adulto autenticato.
+- [x] Sessione applicativa server-side e accesso ai profili terapista con email e PIN.
+- [x] Profilo amministratore iniziale, creazione di terapisti e associazione molti-a-molti fra terapisti e bambini.
+- [x] Stato sincronizzato per account in Cloudflare D1; copia locale usata per reattività e migrazione.
+- [x] Immagini private ottimizzate nel browser, caricate in Cloudflare R2 e servite da endpoint autenticato.
+- [x] Selezione e modifica dei profili terapista/bambino; tentativi, aiuti e statistiche associati al bambino attivo.
+- [x] Libreria con ricerca, metadati, upload, sostituzione, eliminazione e assegnazione `IL / LA` persistenti.
+- [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
+- [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
+- [x] Creazione, selezione, rinomina, riordino e cancellazione logica delle sequenze; sequenza attiva salvata in D1.
+- [x] Anteprima `Prova` collegata all'esercizio selezionato.
+- [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
+- [x] Ordine casuale e stabile delle risposte durante la singola prova.
+- [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
+- [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
+- [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive ed export CSV.
-- [x] Persistenza locale per il prototipo.
-- [x] Typecheck e build completati.
+- [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
+
+## Scelte di persistenza e costo
+
+- D1 contiene per ora uno snapshot JSON versionato per account. Una singola scrittura con debounce di 500 ms riduce query e mantiene atomici i dati collegati.
+- R2 contiene soltanto i file binari privati, separati dallo stato D1. I riferimenti alle immagini sono salvati nello snapshot.
+- Esercizi e sequenze cancellati restano nello snapshot con flag `deleted`, così i risultati storici continuano a essere interpretabili senza duplicare dati.
+- Le immagini rimosse vengono eliminate da R2; i record applicativi restano marcati come cancellati finché servono ai riferimenti esistenti.
+- La struttura rimane compatibile con una futura migrazione verso tabelle D1 relazionali, da introdurre quando serve ricerca server-side o modifica concorrente.
 
 ## Limitazioni note
 
-- autenticazione server-side, D1 e R2 non ancora collegati; il login attuale non è un confine di sicurezza;
-- upload memorizzato nel browser, senza resize server-side;
-- catalogo immagini stock solo dimostrativo, nessuna API esterna;
-- dati e nomi presenti sono fittizi;
-- test automatici applicativi ancora da introdurre.
-- la prima pipeline automatica di GitLab era stata bloccata dalla verifica identità richiesta dall'account; la configurazione iniziale è stata sostituita con verifica applicativa e Secret Detection.
+- Il modello D1 usa ultima scrittura valida: manca ancora la risoluzione dei conflitti fra modifiche simultanee da più dispositivi.
+- L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
+- Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
+- Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
+- Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
+- Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi
 
-1. Proteggere `main` e adottare branch/Merge Request.
-2. Approvare e implementare l'identità server-side descritta come passo successivo in ADR-0001; chiudere provider stock e pipeline immagini.
-3. Introdurre test unitari per primo tentativo, correzioni e aiuti.
-4. Preparare D1/R2 e schema migrazioni in staging.
-5. Sostituire storage locale con API autenticata.
-6. Completare verifica accessibilità e test cross-device.
-7. Valutare come feature opzionale la generazione di immagini AI da descrizione, dopo approvazione dell'ADR su provider, privacy, moderazione e budget.
+1. Aggiungere controllo di revisione D1 e gestione esplicita dei conflitti.
+2. Definire permessi terapista/genitore, inviti e recupero accesso.
+3. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
+4. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
+5. Definire retention, backup e prova di ripristino D1/R2.
+6. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+7. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
-## Verifiche ultima versione
+## Verifiche della versione corrente
 
-- `pnpm lint`: superato con soli avvisi sulle immagini locali della demo.
-- `pnpm typecheck`: superato.
-- `pnpm build`: superato.
-- Browser QA: avvio sessione, errore al primo tentativo, aiuto, correzione e layout mobile verificati.
-- Browser QA: login/logout terapista, cambio bambino, modifica e persistenza dei profili verificati.
-- Browser QA: libreria con fotografie e scritte maiuscole, selezione della presentazione, sessione `Foto + parole` e variante `Solo parole` con comando di riascolto verificate senza errori console.
-- Browser QA: risposta corretta mostrata in posizioni diverse, parole sotto le foto, ordine stabile durante il tentativo e sintesi vocale senza errori console.
-- Browser QA: esercizio `IL / LA` verificato con sei immagini, due box visibili, abbinamento errato che conserva la figura e abbinamento corretto che la rimuove.
-- Eliminazione profili: vincoli sull'ultimo terapista e sull'ultimo bambino associato coperti dalla UI; conferma distruttiva documentata in ADR-0002.
+- `pnpm test`: copre primo tentativo, correzione, doppio tap e aiuti.
+- `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
+- `pnpm typecheck`: superato senza errori.
+- `pnpm build`: superato senza errori.
+- Browser QA da ripetere dopo la pubblicazione per gestione esercizi/sequenze e layout responsive.

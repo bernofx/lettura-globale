@@ -1,21 +1,22 @@
 "use client";
 
-import { AlertTriangle, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { appendAttempt, appendHelp, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
-type Mode = "teaching" | "test";
+type Mode = SessionMode;
 type Presentation = "images" | "words";
 type SessionActivity = "recognition" | "articles";
 type Article = "IL" | "LA";
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; remoteImageId?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
-type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
-type Sequence = { id: string; title: string; exerciseIds: string[] };
-type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string; childId?: string; therapistId?: string };
-type HelpEvent = { id: string; exerciseId: string; label: string; createdAt: string; childId?: string; therapistId?: string };
+type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string; deleted?: boolean };
+type Sequence = { id: string; title: string; exerciseIds: string[]; updatedAt?: string; deleted?: boolean };
+type Attempt = AttemptEvent;
+type HelpEvent = HelpEventRecord;
 type Therapist = { id: string; firstName: string; lastName: string; email: string; role: string; pinHash?: string; pin?: string; childIds: string[] };
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
-type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[] };
+type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[] };
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 
 const stockItems: LibraryItem[] = [
@@ -107,7 +108,9 @@ const articlesById: Record<string, Article> = {
 };
 const articleFor = (item: LibraryItem) => item.article !== undefined ? item.article ?? undefined : articlesById[item.id];
 const libraryCategories = ["Cibo", "Animali", "Corpo", "Casa", "Abbigliamento", "Trasporti", "Oggetti", "Scuola", "Luoghi", "Giochi", "Natura", "Altro"];
+const initialAdministrator: Therapist = { id: "admin-giuseppe", firstName: "Giuseppe", lastName: "Bernasconi", email: "giuseppe.bernasconi@letturaglobale.demo", role: "Amministratore", pinHash: "a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972", childIds: ["child-luca", "child-sara"] };
 const initialTherapists: Therapist[] = [
+  initialAdministrator,
   { id: "therapist-giulia", firstName: "Giulia", lastName: "Rossi", email: "giulia@letturaglobale.demo", role: "Terapista", pinHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", childIds: ["child-luca", "child-sara"] },
   { id: "therapist-marco", firstName: "Marco", lastName: "Neri", email: "marco@letturaglobale.demo", role: "Terapista", pinHash: "f8638b979b2f4f793ddb6dbd197e0ee25a7a6ea32b0ae22f5e3c5d119d839e75", childIds: ["child-luca"] },
 ];
@@ -260,7 +263,7 @@ export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
   const [therapists, setTherapists, therapistsLoaded] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
-    if (localStorage.getItem("lg-profiles-v2-seeded")) return saved;
+    if (localStorage.getItem("lg-profiles-v2-seeded")) return mergeById(saved, [initialAdministrator]);
     localStorage.setItem("lg-profiles-v2-seeded", "1");
     return mergeById(saved, initialTherapists);
   });
@@ -272,6 +275,7 @@ export default function HomePage() {
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
   const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
   const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
+  const [activeSequenceId, setActiveSequenceId, activeSequenceLoaded] = useStoredState<string>("lg-active-sequence", initialSequences[0].id);
   const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
   const [helps, setHelps, helpsLoaded] = useStoredState<HelpEvent[]>("lg-helps", []);
   const [search, setSearch] = useState("");
@@ -283,6 +287,10 @@ export default function HomePage() {
   const backendSaveTimer = useRef<number | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const [pendingExerciseDelete, setPendingExerciseDelete] = useState<Exercise | null>(null);
+  const [editingSequence, setEditingSequence] = useState<Sequence | "new" | null>(null);
+  const [pendingSequenceDelete, setPendingSequenceDelete] = useState<Sequence | null>(null);
   const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
   const [pendingLibraryDelete, setPendingLibraryDelete] = useState<LibraryItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
@@ -291,9 +299,9 @@ export default function HomePage() {
   const [sessionActivity, setSessionActivity] = useState<SessionActivity>("recognition");
   const [sessionIndex, setSessionIndex] = useState(0);
   const [singleExerciseId, setSingleExerciseId] = useState<string | null>(null);
+  const [sessionRunId, setSessionRunId] = useState("");
   const [sessionActive, setSessionActive] = useState(false);
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
-  const [currentAttempts, setCurrentAttempts] = useState(0);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -325,7 +333,7 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, [library, setLibrary]);
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && attemptsLoaded && helpsLoaded;
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded;
 
   useEffect(() => {
     if (!allLocalDataLoaded || backendStarted.current) return;
@@ -340,12 +348,13 @@ export default function HomePage() {
 
       if (result.state) {
         const saved = result.state;
-        setTherapists(saved.therapists?.length ? saved.therapists : initialTherapists);
+        setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
         setChildren(saved.children?.length ? saved.children : initialChildren);
         setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
         setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
         setExercises(mergeById(saved.exercises ?? [], initialExercises));
         setSequences(mergeById(saved.sequences ?? [], initialSequences));
+        setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
         setAttempts(saved.attempts ?? []);
         setHelps(saved.helps ?? []);
         backendHydrating.current = false;
@@ -363,7 +372,7 @@ export default function HomePage() {
         const remote = await uploadRemoteImage(item.id, localImage);
         migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
       }
-      const migrated: BackendState = { schemaVersion: 1, therapists, children, activeChildId, library: migratedLibrary, exercises, sequences, attempts, helps };
+      const migrated: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library: migratedLibrary, exercises, sequences, attempts, helps };
       const saveResponse = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) });
       if (!saveResponse.ok) throw new Error("backend_migration_failed");
       if (cancelled) return;
@@ -374,11 +383,11 @@ export default function HomePage() {
     };
     initializeBackend().catch(() => { if (!cancelled) setBackendStatus("error"); });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, therapists, children, activeChildId, library, exercises, sequences, attempts, helps, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setAttempts, setHelps]);
+  }, [allLocalDataLoaded, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, setTherapists, setChildren, setActiveChildId, setActiveSequenceId, setLibrary, setExercises, setSequences, setAttempts, setHelps]);
 
   useEffect(() => {
     if (backendHydrating.current || !backendInitialized) return;
-    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, library, exercises, sequences, attempts, helps };
+    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps };
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = window.setTimeout(async () => {
       setBackendStatus("syncing");
@@ -389,15 +398,16 @@ export default function HomePage() {
       } catch { setBackendStatus("error"); }
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); };
-  }, [backendInitialized, therapists, children, activeChildId, library, exercises, sequences, attempts, helps]);
+  }, [backendInitialized, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const associatedChildren = children.filter((child) => therapist?.childIds.includes(child.id));
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
   const visibleLibrary = library.filter((item) => !item.deleted);
   const visibleIds = new Set(visibleLibrary.map((item) => item.id));
-  const visibleExercises = exercises.map((exercise) => ({ ...exercise, optionIds: exercise.optionIds.filter((id) => visibleIds.has(id)) })).filter((exercise) => visibleIds.has(exercise.promptId) && exercise.optionIds.length >= 2);
-  const activeSequence = sequences[0] ?? initialSequences[0];
+  const visibleExercises = exercises.filter((exercise) => !exercise.deleted).map((exercise) => ({ ...exercise, optionIds: exercise.optionIds.filter((id) => visibleIds.has(id)) })).filter((exercise) => visibleIds.has(exercise.promptId) && exercise.optionIds.length >= 2);
+  const visibleSequences = sequences.filter((sequence) => !sequence.deleted);
+  const activeSequence = visibleSequences.find((sequence) => sequence.id === activeSequenceId) ?? visibleSequences[0] ?? initialSequences[0];
   const sequenceExercises = activeSequence.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
   const sessionExercises = singleExerciseId ? visibleExercises.filter((exercise) => exercise.id === singleExerciseId) : sequenceExercises;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
@@ -410,32 +420,93 @@ export default function HomePage() {
   const accuracy = firstAttempts.length ? Math.round((firstCorrect / firstAttempts.length) * 100) : 0;
 
   useEffect(() => {
+    if (visibleSequences.length && !visibleSequences.some((sequence) => sequence.id === activeSequenceId)) setActiveSequenceId(visibleSequences[0].id);
+  }, [activeSequenceId, visibleSequences, setActiveSequenceId]);
+
+  useEffect(() => {
     if (sessionActive && sessionActivity === "recognition" && sessionPresentation === "words" && promptWord) speakWord(promptWord);
   }, [sessionActive, sessionActivity, sessionPresentation, sessionIndex, promptWord]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const navigate = (next: View) => { setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const startSession = () => { setSingleExerciseId(null); setSessionIndex(0); setCurrentAttempts(0); setAnswerState("idle"); setSessionActive(true); setView("session"); };
-  const tryExercise = (exerciseId: string) => { setSingleExerciseId(exerciseId); setSessionActivity("recognition"); setSessionIndex(0); setCurrentAttempts(0); setAnswerState("idle"); setSessionActive(true); setView("session"); };
+  const startSession = () => { setSingleExerciseId(null); setSessionRunId(crypto.randomUUID()); setSessionIndex(0); setAnswerState("idle"); setSessionActive(true); setView("session"); };
+  const tryExercise = (exerciseId: string) => { setSingleExerciseId(exerciseId); setSessionRunId(crypto.randomUUID()); setSessionActivity("recognition"); setSessionIndex(0); setAnswerState("idle"); setSessionActive(true); setView("session"); };
   const chooseAnswer = (answerId: string) => {
     if (!currentExercise || answerState === "correct") return;
     const correct = answerId === currentExercise.promptId;
-    setAttempts((current) => [...current, { id: crypto.randomUUID(), exerciseId: currentExercise.id, answerId, correct, firstAttempt: currentAttempts === 0, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
-    setCurrentAttempts((count) => count + 1);
+    const sessionItemId = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
+    setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId: currentExercise.id, answerId, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }).events);
     setAnswerState(correct ? "correct" : "wrong");
   };
   const addHelp = (label: string) => {
     const exerciseId = sessionActivity === "articles" ? "articles-il-la" : currentExercise?.id;
     if (!exerciseId) return;
-    setHelps((current) => [...current, { id: crypto.randomUUID(), exerciseId, label, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
+    const sessionItemId = sessionActivity === "articles" ? `${sessionRunId}:articles:${sessionIndex}` : `${sessionRunId}:${exerciseId}:${sessionIndex}`;
+    setHelps((current) => appendHelp(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId, label, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }));
     notify(`Aiuto registrato: ${label}`);
   };
   const nextExercise = () => {
     if (sessionIndex >= sessionExercises.length - 1) { setSessionActive(false); setAnswerState("idle"); notify("Sessione completata e salvata"); setView("stats"); return; }
-    setSessionIndex((index) => index + 1); setCurrentAttempts(0); setAnswerState("idle");
+    setSessionIndex((index) => index + 1); setAnswerState("idle");
   };
-  const recordArticleAttempt = (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => {
-    setAttempts((current) => [...current, { id: crypto.randomUUID(), exerciseId: `article-${itemId}`, answerId: article, correct, firstAttempt, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }]);
+  const recordArticleAttempt = (itemId: string, article: Article, correct: boolean) => {
+    const exerciseId = `article-${itemId}`;
+    const sessionItemId = `${sessionRunId}:${exerciseId}`;
+    setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId, answerId: article, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }).events);
+  };
+
+  const saveExercise = (exercise: Exercise) => {
+    const exists = exercises.some((item) => item.id === exercise.id);
+    setExercises((current) => exists ? current.map((item) => item.id === exercise.id ? exercise : item) : [exercise, ...current]);
+    if (!exists) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, exercise.id], updatedAt: new Date().toISOString() } : sequence));
+    setShowBuilder(false);
+    setEditingExercise(null);
+    notify(exists ? "Esercizio aggiornato" : "Esercizio creato e aggiunto alla sequenza");
+  };
+  const duplicateExercise = (exercise: Exercise) => {
+    const duplicate = { ...exercise, id: crypto.randomUUID(), title: `${exercise.title} (copia)`, updatedAt: new Date().toISOString(), deleted: false };
+    setExercises((current) => [duplicate, ...current]);
+    setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, duplicate.id], updatedAt: new Date().toISOString() } : sequence));
+    notify("Esercizio duplicato nella sequenza attiva");
+  };
+  const deleteExercise = () => {
+    if (!pendingExerciseDelete) return;
+    const id = pendingExerciseDelete.id;
+    setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, deleted: true, updatedAt: new Date().toISOString() } : exercise));
+    setSequences((current) => current.map((sequence) => ({ ...sequence, exerciseIds: sequence.exerciseIds.filter((exerciseId) => exerciseId !== id), updatedAt: new Date().toISOString() })));
+    if (singleExerciseId === id) setSingleExerciseId(null);
+    setPendingExerciseDelete(null);
+    notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
+  };
+  const toggleExerciseInSequence = (exerciseId: string) => {
+    setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: sequence.exerciseIds.includes(exerciseId) ? sequence.exerciseIds.filter((id) => id !== exerciseId) : [...sequence.exerciseIds, exerciseId], updatedAt: new Date().toISOString() } : sequence));
+  };
+  const moveSequenceExercise = (exerciseId: string, direction: -1 | 1) => {
+    setSequences((current) => current.map((sequence) => {
+      if (sequence.id !== activeSequence.id) return sequence;
+      const from = sequence.exerciseIds.indexOf(exerciseId);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= sequence.exerciseIds.length) return sequence;
+      const exerciseIds = [...sequence.exerciseIds];
+      [exerciseIds[from], exerciseIds[to]] = [exerciseIds[to], exerciseIds[from]];
+      return { ...sequence, exerciseIds, updatedAt: new Date().toISOString() };
+    }));
+  };
+  const saveSequence = (sequence: Sequence) => {
+    const exists = sequences.some((item) => item.id === sequence.id);
+    setSequences((current) => exists ? current.map((item) => item.id === sequence.id ? sequence : item) : [...current, sequence]);
+    setActiveSequenceId(sequence.id);
+    setEditingSequence(null);
+    notify(exists ? "Sequenza rinominata" : "Nuova sequenza creata");
+  };
+  const deleteSequence = () => {
+    if (!pendingSequenceDelete || visibleSequences.length <= 1) return;
+    const id = pendingSequenceDelete.id;
+    const next = visibleSequences.find((sequence) => sequence.id !== id);
+    setSequences((current) => current.map((sequence) => sequence.id === id ? { ...sequence, deleted: true, updatedAt: new Date().toISOString() } : sequence));
+    if (next) setActiveSequenceId(next.id);
+    setPendingSequenceDelete(null);
+    notify("Sequenza eliminata; esercizi e storico restano disponibili");
   };
 
   const login = (therapistId: string) => {
@@ -477,15 +548,18 @@ export default function HomePage() {
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
-        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={sequences} library={visibleLibrary} onBuild={() => setShowBuilder(true)} onStart={startSession} onTry={tryExercise} />}
+        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => setEditingSequence(activeSequence)} onDeleteSequence={() => setPendingSequenceDelete(activeSequence)} onBuild={() => { setEditingExercise(null); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onStart={startSession} onTry={tryExercise} />}
         {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} activity={sessionActivity} setActivity={setSessionActivity} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={visibleLibrary} answerState={answerState} onChoose={chooseAnswer} onArticleAttempt={recordArticleAttempt} onArticleComplete={() => { setSessionActive(false); notify("Esercizio IL / LA completato e salvato"); setView("stats"); }} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={visibleExercises} library={visibleLibrary} />}
-        {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
+        {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Terapisti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { const remote = backendStatus === "local" ? null : await uploadRemoteImage(item.id, item.image!); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image!); setLibrary((current) => [{ ...item, imageKey, remoteImageId: remote?.id }, ...current]); setShowUpload(false); notify(remote ? "Immagine salvata nel cloud" : "Immagine salvata su questo dispositivo"); } catch { notify("Impossibile salvare la foto"); } }} />}
       {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(updated.id, updated.image); const imageKey = editingItem.imageKey ?? `library-image-${updated.id}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } setLibrary((current) => current.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(backendStatus === "local" ? "Elemento salvato su questo dispositivo" : "Elemento salvato nel cloud"); } catch { notify("Impossibile salvare le modifiche"); } }} />}
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={async () => { try { if (backendStatus !== "local" && pendingLibraryDelete.remoteImageId) await deleteRemoteImage(pendingLibraryDelete.remoteImageId); if (pendingLibraryDelete.imageKey) await removeLibraryImage(pendingLibraryDelete.imageKey).catch(() => undefined); setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, image: undefined, deleted: true } : item)); setPendingLibraryDelete(null); notify(backendStatus === "local" ? "Immagine rimossa da questo dispositivo e dagli esercizi" : "Immagine rimossa dal cloud e dagli esercizi"); } catch { notify("Impossibile eliminare l’immagine"); } }} />}
-      {showBuilder && <ExerciseBuilder library={visibleLibrary} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
+      {showBuilder && <ExerciseBuilder library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
+      {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
+      {pendingExerciseDelete && <ContentDeleteDialog title={`Eliminare “${pendingExerciseDelete.title}”?`} detail="L’esercizio sarà rimosso dalle sequenze. I risultati già registrati resteranno nello storico." onCancel={() => setPendingExerciseDelete(null)} onConfirm={deleteExercise} />}
+      {pendingSequenceDelete && <ContentDeleteDialog title={`Eliminare la sequenza “${pendingSequenceDelete.title}”?`} detail="Gli esercizi e i risultati già registrati resteranno disponibili." onCancel={() => setPendingSequenceDelete(null)} onConfirm={deleteSequence} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
     </div>
@@ -529,7 +603,7 @@ function TherapistLogin({ therapists, backendStatus, onLogin, onBack }: { therap
       setSubmitting(false);
     }
   };
-  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><button className="text-button login-back" type="button" onClick={onBack}>← Torna alla pagina iniziale</button><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit" disabled={submitting}><KeyRound />{submitting ? "Accesso…" : "Accedi"}</button></form><div className="demo-credentials"><strong>Accessi dimostrativi iniziali</strong><span>giulia@letturaglobale.demo</span><span>PIN 1234</span><span>marco@letturaglobale.demo</span><span>PIN 5678</span></div><small className="auth-disclaimer">L’accesso collega questo dispositivo ai dati salvati nel cloud.</small></section></main>;
+  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><button className="text-button login-back" type="button" onClick={onBack}>← Torna alla pagina iniziale</button><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi al pannello</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit" disabled={submitting}><KeyRound />{submitting ? "Accesso…" : "Accedi"}</button></form><div className="demo-credentials"><strong>Accessi dimostrativi iniziali</strong><span>giuseppe.bernasconi@letturaglobale.demo</span><span>PIN 2468</span><span>giulia@letturaglobale.demo</span><span>PIN 1234</span><span>marco@letturaglobale.demo</span><span>PIN 5678</span></div><small className="auth-disclaimer">L’accesso collega questo dispositivo ai dati salvati nel cloud.</small></section></main>;
 }
 
 function ChildChooser({ therapist, childProfiles, onChoose, onLogout }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void }) {
@@ -565,11 +639,19 @@ function LibraryView({ items, search, setSearch, onUpload, onEdit, onDelete }: {
   return <div className="page"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria parole</h1><p>Scegli le immagini da usare negli esercizi. Modifica una scheda per assegnarla a IL, LA oppure escluderla da quel gioco.</p></div><button className="primary-button" onClick={onUpload}><Upload size={18} />Carica immagine</button></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca parola o categoria…" /></label><div className="filter-chip">Tutte <span>{items.length}</span></div><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><div className="library-grid">{filtered.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{item.category}{articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3><p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>{!filtered.length && <div className="empty-state"><Search /><h3>Nessun risultato</h3><p>Prova un’altra parola o aggiungi una nuova immagine.</p></div>}</div>;
 }
 
-function ExercisesView({ exercises, sequences, library, onBuild, onStart, onTry }: { exercises: Exercise[]; sequences: Sequence[]; library: LibraryItem[]; onBuild: () => void; onStart: () => void; onTry: (exerciseId: string) => void }) {
-  return <div className="page"><section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Esercizi e sequenze</h1><p>Prepara attività brevi, chiare e riutilizzabili.</p></div><button className="primary-button" onClick={onBuild}><Plus size={19} />Nuovo esercizio</button></section><section className="sequence-banner"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div><span className="soft-label">SEQUENZA PRONTA</span><h2>{sequences[0]?.title ?? "Prime parole"}</h2><p>{sequences[0]?.exerciseIds.length ?? 0} esercizi · aggiornata oggi</p></div><button onClick={onStart}><Play size={17} fill="currentColor" />Avvia</button></section><div className="section-heading"><div><h2>Esercizi singoli</h2><p>Ogni modifica futura manterrà intatto lo storico delle sessioni.</p></div><span>{exercises.length} totali</span></div><div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className="tiny-art">{prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>Parola → immagine · {exercise.optionIds.length} opzioni</p></div><span className="ready-badge"><Check size={14} />Pronto</span><button className="ghost-button" onClick={() => onTry(exercise.id)}>Prova</button></article>; })}</div></div>;
+function ExercisesView({ exercises, sequences, activeSequence, library, onSelectSequence, onCreateSequence, onRenameSequence, onDeleteSequence, onBuild, onEdit, onDuplicate, onDelete, onToggleInSequence, onMove, onStart, onTry }: { exercises: Exercise[]; sequences: Sequence[]; activeSequence: Sequence; library: LibraryItem[]; onSelectSequence: (id: string) => void; onCreateSequence: () => void; onRenameSequence: () => void; onDeleteSequence: () => void; onBuild: () => void; onEdit: (exercise: Exercise) => void; onDuplicate: (exercise: Exercise) => void; onDelete: (exercise: Exercise) => void; onToggleInSequence: (exerciseId: string) => void; onMove: (exerciseId: string, direction: -1 | 1) => void; onStart: () => void; onTry: (exerciseId: string) => void }) {
+  const sequenceExercises = activeSequence.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
+  const includedIds = new Set(sequenceExercises.map((exercise) => exercise.id));
+  return <div className="page exercises-page">
+    <section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Esercizi e sequenze</h1><p>Crea, prova e organizza attività brevi senza modificare lo storico.</p></div><button className="primary-button" onClick={onBuild}><Plus size={19} />Nuovo esercizio</button></section>
+    <section className="sequence-banner sequence-manager"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div className="sequence-copy"><span className="soft-label">SEQUENZA ATTIVA</span><select value={activeSequence.id} onChange={(event) => onSelectSequence(event.target.value)} aria-label="Seleziona sequenza">{sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.title}</option>)}</select><p>{sequenceExercises.length} esercizi · salvata nel cloud</p><div className="sequence-actions"><button type="button" onClick={onCreateSequence}><Plus />Nuova</button><button type="button" onClick={onRenameSequence}><Pencil />Rinomina</button><button type="button" onClick={onDeleteSequence} disabled={sequences.length <= 1}><Trash2 />Elimina</button></div></div><button onClick={onStart} disabled={!sequenceExercises.length}><Play size={17} fill="currentColor" />Avvia</button></section>
+    <section className="sequence-editor"><div className="section-heading"><div><h2>Ordine della sequenza</h2><p>Usa le frecce per cambiare l’ordine di presentazione.</p></div><span>{sequenceExercises.length} elementi</span></div>{sequenceExercises.length ? <div className="sequence-order-list">{sequenceExercises.map((exercise, index) => <article key={exercise.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{exercise.title}</strong><div><button type="button" disabled={index === 0} onClick={() => onMove(exercise.id, -1)} aria-label={`Sposta ${exercise.title} su`}><ArrowUp /></button><button type="button" disabled={index === sequenceExercises.length - 1} onClick={() => onMove(exercise.id, 1)} aria-label={`Sposta ${exercise.title} giù`}><ArrowDown /></button><button type="button" onClick={() => onToggleInSequence(exercise.id)} aria-label={`Rimuovi ${exercise.title} dalla sequenza`}><X /></button></div></article>)}</div> : <div className="empty-state compact"><BookOpenCheck /><h3>Sequenza vuota</h3><p>Aggiungi almeno un esercizio dal catalogo qui sotto.</p></div>}</section>
+    <div className="section-heading exercise-catalog-heading"><div><h2>Catalogo esercizi</h2><p>Modifica, duplica o aggiungi gli esercizi alla sequenza attiva.</p></div><span>{exercises.length} totali</span></div>
+    <div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); const included = includedIds.has(exercise.id); return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className="tiny-art">{prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>Parola → immagine · {exercise.optionIds.length} opzioni</p></div><button className={`sequence-toggle ${included ? "included" : ""}`} onClick={() => onToggleInSequence(exercise.id)}>{included ? <><Check />Nella sequenza</> : <><Plus />Aggiungi</>}</button><div className="exercise-actions"><button onClick={() => onTry(exercise.id)}>Prova</button><button onClick={() => onEdit(exercise)} aria-label={`Modifica ${exercise.title}`} title="Modifica"><Pencil /></button><button onClick={() => onDuplicate(exercise)} aria-label={`Duplica ${exercise.title}`} title="Duplica"><Copy /></button><button className="delete" onClick={() => onDelete(exercise)} aria-label={`Elimina ${exercise.title}`} title="Elimina"><Trash2 /></button></div></article>; })}</div>
+  </div>;
 }
 
-function SessionView({ active, mode, setMode, activity, setActivity, presentation, setPresentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onArticleAttempt, onArticleComplete, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; activity: SessionActivity; setActivity: (activity: SessionActivity) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onArticleAttempt: (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => void; onArticleComplete: () => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
+function SessionView({ active, mode, setMode, activity, setActivity, presentation, setPresentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onArticleAttempt, onArticleComplete, onHelp, onStart, onNext }: { active: boolean; mode: Mode; setMode: (mode: Mode) => void; activity: SessionActivity; setActivity: (activity: SessionActivity) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onArticleAttempt: (itemId: string, article: Article, correct: boolean) => void; onArticleComplete: () => void; onHelp: (label: string) => void; onStart: () => void; onNext: () => void }) {
   if (!active) return <div className="page session-setup"><span className="session-big-icon"><Play /></span><span className="eyebrow">NUOVA SESSIONE</span><h1>Pronto per iniziare?</h1><p>Scegli attività, modalità e presentazione. Potrai registrare gli aiuti in qualsiasi momento.</p><div className="session-choice-group"><span className="choice-label">Attività</span><div className="mode-picker"><button className={activity === "recognition" ? "selected" : ""} onClick={() => setActivity("recognition")}><BookOpenCheck /><strong>Trova la parola</strong><small>Scegli fra tre alternative</small></button><button className={activity === "articles" ? "selected" : ""} onClick={() => setActivity("articles")}><Library /><strong>Categorie IL / LA</strong><small>Posiziona un’immagine alla volta</small></button></div></div><div className="session-choice-group"><span className="choice-label">Modalità</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Verifica</strong><small>Misura il primo tentativo</small></button></div></div>{activity === "recognition" && <div className="session-choice-group"><span className="choice-label">Presentazione</span><div className="mode-picker presentation-picker"><button className={presentation === "images" ? "selected" : ""} onClick={() => setPresentation("images")}><ImagePlus /><strong>Foto + parole</strong><small>Foto realistiche con etichette</small></button><button className={presentation === "words" ? "selected" : ""} onClick={() => setPresentation("words")}><Volume2 /><strong>Solo parole con voce</strong><small>Leggi, ascolta e scegli la scritta</small></button></div></div>}<button className="primary-button large" onClick={onStart}><Play fill="currentColor" />Avvia {activity === "articles" ? "IL / LA" : "Prime parole"}</button></div>;
   if (activity === "articles") return <ArticleSortSession library={library} mode={mode} onAttempt={onArticleAttempt} onComplete={onArticleComplete} onHelp={onHelp} />;
   if (!exercise || !prompt) return null;
@@ -581,12 +663,11 @@ function RecognitionSession({ mode, presentation, currentIndex, total, exercise,
   return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Verifica" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Ascolta la parola</strong><small>Premi per riascoltare</small></span></button></div>}<div className="answer-grid">{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><HelpDock onHelp={onHelp} /></div>;
 }
 
-function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { library: LibraryItem[]; mode: Mode; onAttempt: (itemId: string, article: Article, correct: boolean, firstAttempt: boolean) => void; onComplete: () => void; onHelp: (label: string) => void }) {
+function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { library: LibraryItem[]; mode: Mode; onAttempt: (itemId: string, article: Article, correct: boolean) => void; onComplete: () => void; onHelp: (label: string) => void }) {
   const [initialIds] = useState(() => shuffled(library.filter((item) => articleFor(item)).map((item) => item.id)).slice(0, 6));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [triedIds, setTriedIds] = useState<string[]>([]);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("Trascina un’immagine, oppure selezionala e poi scegli IL o LA.");
   const initialTotal = initialIds.length;
@@ -595,7 +676,7 @@ function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { 
     if (!itemId) return;
     const item = library.find((entry) => entry.id === itemId);
     const correct = Boolean(item && articleFor(item) === article);
-    onAttempt(itemId, article, correct, !triedIds.includes(itemId));
+    onAttempt(itemId, article, correct);
     if (correct) {
       setRemainingIds((current) => current.filter((id) => id !== itemId));
       setSelectedId(null);
@@ -603,7 +684,6 @@ function ArticleSortSession({ library, mode, onAttempt, onComplete, onHelp }: { 
       setWrongId(null);
       setFeedback("Giusto! L’immagine è stata abbinata.");
     } else {
-      setTriedIds((current) => current.includes(itemId) ? current : [...current, itemId]);
       setWrongId(itemId);
       setSelectedId(null);
       setDraggedId(null);
@@ -627,12 +707,40 @@ function StatsView({ child, attempts, helps, exercises, library }: { child: Chil
   return <div className="page"><section className="page-title-row"><div><span className="eyebrow">RISULTATI</span><h1>Progressi di {child.firstName}</h1><p>Dati descrittivi dell’attività, separati tra primo tentativo e correzioni.</p></div><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button></section><section className="stats-strip"><div><small>Accuratezza al primo tentativo</small><strong>{accuracy}%</strong><span>su {first.length} prove</span></div><div><small>Aiuti registrati</small><strong>{helps.length}</strong><span>decisi dall’adulto</span></div><div><small>Modalità verifica</small><strong>{test}</strong><span>tentativi totali</span></div><div><small>Modalità insegnamento</small><strong>{teaching}</strong><span>tentativi totali</span></div></section><section className="stats-layout"><div className="panel chart-panel"><div className="panel-heading"><div><span className="eyebrow">PRIMO TENTATIVO</span><h3>Risultati per parola</h3></div><span className="legend"><i />Corretto</span></div><div className="bars">{rows.map((row) => <div className="bar-row" key={row.label}><span>{row.label}</span><div><i style={{ width: `${row.percent}%` }} /></div><strong>{row.total ? `${row.percent}%` : "—"}</strong></div>)}</div></div><div className="panel help-panel"><span className="eyebrow">AIUTI</span><h3>Interventi registrati</h3>{helps.length ? <div className="help-counts">{helpTypes.map((label) => { const count = helps.filter((help) => help.label === label).length; return count ? <div key={label}><span>{label}</span><strong>{count}</strong></div> : null; })}</div> : <div className="empty-mini"><CircleHelp /><p>Nessun aiuto registrato.</p><small>Comparirà qui quando l’adulto ne seleziona uno.</small></div>}</div></section><div className="data-note"><CircleHelp /><p><strong>Come leggere questi dati</strong><br />I risultati descrivono soltanto le attività registrate e non costituiscono una diagnosi o una raccomandazione terapeutica.</p></div></div>;
 }
 
-function ProfilesView({ therapist, childProfiles, activeChildId, canDeleteTherapist, onSelectChild, onSaveTherapist, onSaveChild, onRequestDelete }: { therapist: Therapist; childProfiles: ChildProfile[]; activeChildId: string; canDeleteTherapist: boolean; onSelectChild: (id: string) => void; onSaveTherapist: (therapist: Therapist) => void; onSaveChild: (child: ChildProfile) => void; onRequestDelete: (item: { kind: "therapist" | "child"; id: string; name: string }) => void }) {
+function AdminPanel({ therapists, childProfiles, onSave }: { therapists: Therapist[]; childProfiles: ChildProfile[]; onSave: (therapists: Therapist[]) => void }) {
+  const [drafts, setDrafts] = useState(therapists);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [selectedChildIds, setSelectedChildIds] = useState<string[]>(childProfiles[0] ? [childProfiles[0].id] : []);
+  const [error, setError] = useState("");
+  const toggleAssignment = (therapistId: string, childId: string) => setDrafts((current) => current.map((item) => item.id === therapistId ? { ...item, childIds: item.childIds.includes(childId) ? item.childIds.filter((id) => id !== childId) : [...item.childIds, childId] } : item));
+  const persistAssignments = () => {
+    if (drafts.some((item) => !item.childIds.length)) { setError("Ogni profilo deve restare associato ad almeno un bambino."); return; }
+    setError("");
+    onSave(drafts);
+  };
+  const addTherapist = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (drafts.some((item) => item.email.toLowerCase() === normalizedEmail)) { setError("Esiste già un profilo con questa email."); return; }
+    if (pin.length < 4 || !selectedChildIds.length) { setError("Inserisci un PIN di almeno 4 cifre e associa almeno un bambino."); return; }
+    const created: Therapist = { id: crypto.randomUUID(), firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, role: "Terapista", pinHash: await hashPin(pin), childIds: selectedChildIds };
+    const next = [...drafts, created];
+    setDrafts(next);
+    onSave(next);
+    setFirstName(""); setLastName(""); setEmail(""); setPin(""); setSelectedChildIds(childProfiles[0] ? [childProfiles[0].id] : []); setError("");
+  };
+  return <section className="profile-section admin-panel"><div className="section-heading"><div><span className="eyebrow">AMMINISTRAZIONE</span><h2>Terapisti e associazioni</h2><p>Lo stesso bambino può essere seguito da più terapisti.</p></div><span>{drafts.length} profili</span></div><div className="therapist-assignment-list">{drafts.map((item) => <article key={item.id}><div><span className="avatar">{`${item.firstName[0] ?? ""}${item.lastName[0] ?? ""}`}</span><span><strong>{item.firstName} {item.lastName}</strong><small>{item.email} · {item.role}</small></span></div><fieldset disabled={item.role === "Amministratore"}><legend>Bambini associati</legend>{childProfiles.map((child) => <label key={child.id}><input type="checkbox" checked={item.childIds.includes(child.id)} onChange={() => toggleAssignment(item.id, child.id)} />{child.firstName} {child.lastName}</label>)}</fieldset></article>)}</div><div className="admin-save-row"><p>Le modifiche alle associazioni diventano attive al prossimo accesso del terapista.</p><button className="ghost-button" type="button" onClick={persistAssignments}><Save />Salva associazioni</button></div><form className="admin-create-form" onSubmit={addTherapist}><div className="section-heading"><div><h3>Aggiungi terapista</h3><p>Crea le credenziali e scegli subito i bambini associati.</p></div></div><div className="profile-form"><label>Nome<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label><label>Cognome<input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} required /></label><label>PIN iniziale<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} required /></label></div><fieldset className="new-therapist-children"><legend>Associa almeno un bambino</legend>{childProfiles.map((child) => <label key={child.id}><input type="checkbox" checked={selectedChildIds.includes(child.id)} onChange={() => setSelectedChildIds((current) => current.includes(child.id) ? current.filter((id) => id !== child.id) : [...current, child.id])} />{child.firstName} {child.lastName}</label>)}</fieldset>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" type="submit"><Plus />Aggiungi terapista</button></form></section>;
+}
+
+function ProfilesView({ therapist, therapists, childProfiles, allChildren, activeChildId, canDeleteTherapist, onSelectChild, onSaveTherapist, onSaveTherapists, onSaveChild, onRequestDelete }: { therapist: Therapist; therapists: Therapist[]; childProfiles: ChildProfile[]; allChildren: ChildProfile[]; activeChildId: string; canDeleteTherapist: boolean; onSelectChild: (id: string) => void; onSaveTherapist: (therapist: Therapist) => void; onSaveTherapists: (therapists: Therapist[]) => void; onSaveChild: (child: ChildProfile) => void; onRequestDelete: (item: { kind: "therapist" | "child"; id: string; name: string }) => void }) {
   const [therapistDraft, setTherapistDraft] = useState(therapist);
   const [newPin, setNewPin] = useState("");
   const [childDrafts, setChildDrafts] = useState(childProfiles);
   const updateChild = (id: string, field: keyof ChildProfile, value: string) => setChildDrafts((current) => current.map((child) => child.id === id ? { ...child, [field]: value } : child));
-  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso protetto e sincronizzato</strong><p>L’accesso ChatGPT protegge i dati nel cloud; il PIN seleziona il profilo terapista all’interno dell’app.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form><div className="danger-row"><div><strong>Elimina profilo terapista</strong><small>Verrai disconnesso. Deve restare almeno un terapista.</small></div><button className="danger-button" disabled={!canDeleteTherapist} onClick={() => onRequestDelete({ kind: "therapist", id: therapist.id, name: `${therapist.firstName} ${therapist.lastName}` })}><Trash2 />Elimina</button></div></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><div className="child-actions"><button className="danger-button subtle" disabled={childProfiles.length <= 1} onClick={() => onRequestDelete({ kind: "child", id: child.id, name: `${child.firstName} ${child.lastName}` })}><Trash2 />Elimina</button><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></div></article>)}</div></section></div>;
+  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso protetto e sincronizzato</strong><p>L’accesso ChatGPT protegge i dati nel cloud; il PIN seleziona il profilo terapista all’interno dell’app.</p></div></div>{therapist.role === "Amministratore" && <AdminPanel therapists={therapists} childProfiles={allChildren} onSave={onSaveTherapists} />}<section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} readOnly={therapist.role === "Amministratore"} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form><div className="danger-row"><div><strong>Elimina profilo terapista</strong><small>Verrai disconnesso. Deve restare almeno un terapista.</small></div><button className="danger-button" disabled={!canDeleteTherapist} onClick={() => onRequestDelete({ kind: "therapist", id: therapist.id, name: `${therapist.firstName} ${therapist.lastName}` })}><Trash2 />Elimina</button></div></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><div className="child-actions"><button className="danger-button subtle" disabled={childProfiles.length <= 1} onClick={() => onRequestDelete({ kind: "child", id: child.id, name: `${child.firstName} ${child.lastName}` })}><Trash2 />Elimina</button><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></div></article>)}</div></section></div>;
 }
 
 function DeleteDialog({ item, onCancel, onConfirm }: { item: { kind: "therapist" | "child"; name: string }; onCancel: () => void; onConfirm: () => void }) {
@@ -670,10 +778,36 @@ function LibraryDeleteDialog({ item, onCancel, onConfirm }: { item: LibraryItem;
   return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="library-delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">CONFERMA ELIMINAZIONE</span><h2 id="library-delete-title">Eliminare {item.word}?</h2><p>L’immagine non sarà più mostrata nella libreria né negli esercizi che la utilizzano.</p><div className="modal-actions"><button className="ghost-button" onClick={onCancel}>Annulla</button><button className="danger-button solid" onClick={onConfirm}><Trash2 />Elimina immagine</button></div></div></div>;
 }
 
-function ExerciseBuilder({ library, onClose, onSave }: { library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
-  const [promptId, setPromptId] = useState(library[0]?.id ?? ""); const [options, setOptions] = useState<string[]>(library.slice(0, 3).map((item) => item.id)); const prompt = library.find((item) => item.id === promptId); const toggle = (id: string) => setOptions((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 4 ? [...current, id] : current); const finalOptions = useMemo(() => Array.from(new Set([promptId, ...options])).slice(0, 4), [promptId, options]);
-  const save = () => onSave({ id: crypto.randomUUID(), title: `Trova ${prompt?.word.toLowerCase() ?? "la parola"}`, promptId, optionIds: finalOptions, updatedAt: "Adesso" });
-  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal wide"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVO ESERCIZIO</span><h2>Parola → immagine</h2><p>Scegli la parola corretta e almeno due alternative.</p><label>Parola da riconoscere<select value={promptId} onChange={(event) => { setPromptId(event.target.value); setOptions((current) => Array.from(new Set([event.target.value, ...current]))); }}>{library.map((item) => <option key={item.id} value={item.id}>{item.word}</option>)}</select></label><div className="builder-label">Immagini da mostrare <span>{finalOptions.length}/4</span></div><div className="builder-grid">{library.map((item) => <button key={item.id} className={finalOptions.includes(item.id) ? "selected" : ""} onClick={() => toggle(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")}</span>{finalOptions.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!promptId || finalOptions.length < 2} onClick={save}>Salva esercizio</button></div></div></div>;
+function ExerciseBuilder({ exercise, library, onClose, onSave }: { exercise?: Exercise; library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
+  const initialPromptId = exercise?.promptId ?? library[0]?.id ?? "";
+  const [title, setTitle] = useState(exercise?.title ?? "");
+  const [promptId, setPromptId] = useState(initialPromptId);
+  const [options, setOptions] = useState<string[]>(exercise?.optionIds ?? library.slice(0, 3).map((item) => item.id));
+  const prompt = library.find((item) => item.id === promptId);
+  const finalOptions = useMemo(() => Array.from(new Set([promptId, ...options])).filter(Boolean).slice(0, 4), [promptId, options]);
+  const toggle = (id: string) => {
+    if (id === promptId) return;
+    setOptions((current) => current.includes(id) ? current.filter((item) => item !== id) : finalOptions.length < 4 ? [...current, id] : current);
+  };
+  const save = () => onSave({
+    id: exercise?.id ?? crypto.randomUUID(),
+    title: title.trim() || `Trova ${prompt?.word.toLowerCase() ?? "la parola"}`,
+    promptId,
+    optionIds: finalOptions,
+    updatedAt: new Date().toISOString(),
+    deleted: false,
+  });
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Parola → immagine</h2><p>Scegli la parola corretta e almeno un’alternativa. La parola corretta resta sempre inclusa.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={prompt ? `Trova ${prompt.word.toLowerCase()}` : "Titolo esercizio"} /></label><label>Parola da riconoscere<select value={promptId} onChange={(event) => { const nextId = event.target.value; setPromptId(nextId); setOptions((current) => current.filter((id) => id !== nextId)); }}>{library.map((item) => <option key={item.id} value={item.id}>{item.word}</option>)}</select></label><div className="builder-label">Immagini da mostrare <span>{finalOptions.length}/4</span></div><div className="builder-grid">{library.map((item) => <button type="button" key={item.id} className={finalOptions.includes(item.id) ? "selected" : ""} onClick={() => toggle(item.id)} aria-pressed={finalOptions.includes(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")}</span>{finalOptions.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!promptId || finalOptions.length < 2} onClick={save}><Save />Salva esercizio</button></div></div></div>;
+}
+
+function SequenceDialog({ sequence, onClose, onSave }: { sequence?: Sequence; onClose: () => void; onSave: (sequence: Sequence) => void }) {
+  const [title, setTitle] = useState(sequence?.title ?? "");
+  const save = () => onSave({ id: sequence?.id ?? crypto.randomUUID(), title: title.trim(), exerciseIds: sequence?.exerciseIds ?? [], updatedAt: new Date().toISOString(), deleted: false });
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="sequence-dialog-title"><div className="modal"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{sequence ? "MODIFICA SEQUENZA" : "NUOVA SEQUENZA"}</span><h2 id="sequence-dialog-title">{sequence ? "Rinomina la sequenza" : "Crea una sequenza"}</h2><p>Gli esercizi si aggiungono e si riordinano dalla pagina successiva.</p><label>Nome della sequenza<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Es. Parole della settimana" /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!title.trim()} onClick={save}><Save />Salva sequenza</button></div></div></div>;
+}
+
+function ContentDeleteDialog({ title, detail, onCancel, onConfirm }: { title: string; detail: string; onCancel: () => void; onConfirm: () => void }) {
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="content-delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">CONFERMA ELIMINAZIONE</span><h2 id="content-delete-title">{title}</h2><p>{detail}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={onCancel}>Annulla</button><button className="danger-button solid" type="button" onClick={onConfirm}><Trash2 />Elimina</button></div></div></div>;
 }
 
 function downloadCsv(attempts: Attempt[]) {
