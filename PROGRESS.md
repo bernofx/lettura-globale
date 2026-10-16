@@ -61,4 +61,5 @@
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
-- Browser QA da ripetere dopo la pubblicazione per gestione esercizi/sequenze e layout responsive.
+- Sites versione 19 pubblicata sul runtime Cloudflare con binding D1/R2 invariati.
+- Browser QA live: landing pubblica, login amministratore, matrice terapisti-bambini, gestione esercizi/sequenze e anteprima `Prova` dell'esercizio selezionato verificati.
