@@ -53,7 +53,9 @@ Configurazione iniziale proposta per la valutazione: OpenAI Images API con model
 - API versionate e convalida degli input al confine server;
 - ambienti dev, staging e prod completamente separati.
 
-Durante la prototipazione il frontend viene pubblicato su ChatGPT Sites e usa storage locale. Dal 15 ottobre 2026 l'hosting demo è pubblico tramite link; l'accesso terapista interno è soltanto una simulazione browser-local e non un confine di sicurezza. Nessun dato reale di minori è ammesso in questa fase.
+La demo è pubblicata tramite ChatGPT Sites su runtime Cloudflare Workers. La pagina iniziale è pubblica, mentre API, pannello e file privati richiedono la sessione dell'applicazione: D1 conserva lo stato per account e le credenziali dei profili adulto, R2 conserva le immagini private e il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i terapisti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
+
+La destinazione di pubblicazione resta Cloudflare: Workers per applicazione e API, D1 per lo stato strutturato e R2 privato per i file. Lo snapshot JSON attuale in D1 riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
 
 ## Dati essenziali
 
@@ -88,11 +90,11 @@ Vincoli fondamentali:
 
 ## Milestone
 
-### M0 — Fondazioni
+### M0 — Fondazioni *(in corso)*
 
 Repository, pipeline, ambienti, ADR iniziali, threat model e documentazione. Accettazione: lint, typecheck e build verdi; nessun secret; hosting di prova privato.
 
-### M1 — Libreria e accesso adulto
+### M1 — Libreria e accesso adulto *(base cloud completata, hardening in corso)*
 
 Autenticazione, ruoli, parole, upload privato, varianti R2 e audit. Accettazione: utente non autorizzato escluso, upload validato e interfaccia mouse/touch verificata.
 
@@ -100,11 +102,11 @@ Autenticazione, ruoli, parole, upload privato, varianti R2 e audit. Accettazione
 
 Provider ufficiali, import sicuro, metadati di provenienza e generazione AI facoltativa con anteprima. Accettazione: un click/tap completa import e resize; la generazione richiede conferma esplicita; chiavi soltanto server-side; limiti e costi verificabili.
 
-### M3 — Esercizi e sequenze
+### M3 — Esercizi e sequenze *(flusso applicativo completato)*
 
 Creazione, anteprima, duplicazione, riordino, versioni e validazione. Accettazione: flusso completo desktop e touch.
 
-### M4 — Sessioni
+### M4 — Sessioni *(flusso applicativo e test dominio completati)*
 
 Insegnamento, verifica, aiuti e idempotenza. Accettazione: un solo primo tentativo per item e correzioni separate anche con retry/doppio tap.
 
@@ -118,11 +120,11 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 
 ## ADR ancora necessari
 
-1. identità e permessi terapista/genitore per la versione Cloudflare (il prototipo locale è descritto in ADR-0001);
+1. permessi distinti fra terapista e genitore, inviti e recupero accesso;
 2. provider stock e licenze;
-3. pipeline di resize immagini;
-4. CI/CD definitiva e strategia deploy Cloudflare;
+3. pipeline definitiva di resize e varianti immagini;
+4. CI/CD definitiva e promozione fra ambienti Cloudflare;
 5. tipi di esercizio e catalogo aiuti;
 6. retention, RPO/RTO e backup;
-7. osservabilità e browser supportati.
+7. osservabilità e browser supportati;
 8. provider e governance della generazione AI: trattamento dei prompt, moderazione, budget, retention e diritti d'uso.

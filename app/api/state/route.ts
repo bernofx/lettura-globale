@@ -33,15 +33,24 @@ export async function PUT(request: Request) {
 
   const now = Date.now();
   const db = getDb();
+  const therapists = (state as { therapists?: Array<{ id?: string; email?: string; firstName?: string; lastName?: string; pinHash?: string }> }).therapists ?? [];
+  const credentials = therapists.filter((item) => item.id && item.email && item.pinHash).map((item) => ({
+    loginEmail: item.email!.trim().toLowerCase(),
+    ownerUserId: user.userId,
+    therapistId: item.id!,
+    pinHash: item.pinHash!,
+    displayName: `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() || item.email!.trim().toLowerCase(),
+    updatedAt: now,
+  }));
+  if (new Set(credentials.map((item) => item.loginEmail)).size !== credentials.length) return Response.json({ error: "duplicate_therapist_email" }, { status: 409 });
+  for (const item of credentials) {
+    const existingCredential = (await db.select({ ownerUserId: therapistCredentials.ownerUserId }).from(therapistCredentials).where(eq(therapistCredentials.loginEmail, item.loginEmail)).limit(1))[0];
+    if (existingCredential && existingCredential.ownerUserId !== user.userId) return Response.json({ error: "therapist_email_unavailable" }, { status: 409 });
+  }
   const existing = await db.select({ revision: userStates.revision, createdAt: userStates.createdAt }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
   const revision = (existing[0]?.revision ?? 0) + 1;
   await db.insert(userStates).values({ userId: user.userId, email: user.email, payload: raw, schemaVersion: 1, revision, createdAt: existing[0]?.createdAt ?? now, updatedAt: now }).onConflictDoUpdate({ target: userStates.userId, set: { email: user.email, payload: raw, schemaVersion: 1, revision, updatedAt: now } });
-  const therapists = (state as { therapists?: Array<{ id?: string; email?: string; firstName?: string; lastName?: string; pinHash?: string }> }).therapists ?? [];
-  for (const therapist of therapists) {
-    if (!therapist.id || !therapist.email || !therapist.pinHash) continue;
-    const loginEmail = therapist.email.trim().toLowerCase();
-    const displayName = `${therapist.firstName ?? ""} ${therapist.lastName ?? ""}`.trim() || loginEmail;
-    await db.insert(therapistCredentials).values({ loginEmail, ownerUserId: user.userId, therapistId: therapist.id, pinHash: therapist.pinHash, displayName, updatedAt: now }).onConflictDoUpdate({ target: therapistCredentials.loginEmail, set: { ownerUserId: user.userId, therapistId: therapist.id, pinHash: therapist.pinHash, displayName, updatedAt: now } });
-  }
+  await db.delete(therapistCredentials).where(eq(therapistCredentials.ownerUserId, user.userId));
+  for (const credential of credentials) await db.insert(therapistCredentials).values(credential);
   return Response.json({ ok: true, revision, updatedAt: now });
 }
