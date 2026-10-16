@@ -18,10 +18,13 @@ Terapisti e genitori devono poter creare, modificare, duplicare, ordinare e rimu
 - La duplicazione crea un nuovo identificatore e aggiunge la copia alla sequenza attiva.
 - Ogni item della sessione ha un `sessionItemId`; il primo evento accettato è il primo tentativo e gli eventi successivi sono correzioni.
 - Una risposta identica ripetuta sullo stesso item viene ignorata per rendere innocuo il doppio tap.
-- Gli aiuti sono eventi append-only associati, quando possibile, alla sessione e all'item corrente.
+- Gli aiuti sono eventi append-only associati, quando possibile, alla sessione, alla parola, all'item corrente e alla modalità (`teaching` o `test`).
 - Ogni esercizio dichiara il proprio tipo: riconoscimento oppure classificazione `IL / LA`; una sequenza può mescolare liberamente entrambi.
 - Un esercizio `IL / LA` salva l'insieme delle immagini ammesse e il numero di turni; a ogni esecuzione l'ordine viene casualizzato e viene mostrata una sola immagine alla volta.
-- I tentativi salvano anche l'identificatore della parola, così le statistiche possono essere aggregate per parola, coppia parola-esercizio o solo esercizio.
+- I tentativi salvano anche l'identificatore della parola. La vista principale usa una matrice con le parole sulle righe e i tipi di attività sulle colonne; evita aggregazioni ridondanti per esercizio.
+- Le modalità restano separate: `test` rappresenta la valutazione del primo tentativo, `teaching` la pratica guidata e il carico di aiuti.
+- L'evoluzione temporale è aggregata per mese, con il tempo sull'asse X e l'accuratezza del primo tentativo sull'asse Y. Le serie dei diversi tipi di attività restano distinguibili.
+- La Home apre la configurazione della sessione; da lì l'adulto può avviare una singola attività oppure scegliere esplicitamente una sequenza salvata.
 - Durante la preparazione è disponibile un azzeramento esplicito dei tentativi e degli aiuti del solo bambino attivo, protetto da conferma.
 
 ## Motivazione

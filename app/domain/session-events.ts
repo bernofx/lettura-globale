@@ -20,6 +20,8 @@ export type HelpEventRecord = {
   sessionId?: string;
   sessionItemId?: string;
   exerciseId: string;
+  wordId?: string;
+  mode?: SessionMode;
   label: string;
   createdAt: string;
   childId?: string;

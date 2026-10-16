@@ -38,9 +38,11 @@ test("un nuovo item riceve un nuovo primo tentativo", () => {
 
 test("registra gli aiuti senza modificare la collezione precedente", () => {
   const original: HelpEventRecord[] = [];
-  const event: HelpEventRecord = { id: "h1", sessionId: "session-1", sessionItemId: "session-1:exercise-1:0", exerciseId: "exercise-1", label: "Gesto", createdAt: "2026-10-16T10:00:03.000Z", childId: "child-1", therapistId: "therapist-1" };
+  const event: HelpEventRecord = { id: "h1", sessionId: "session-1", sessionItemId: "session-1:exercise-1:0", exerciseId: "exercise-1", wordId: "schiena", mode: "teaching", label: "Gesto", createdAt: "2026-10-16T10:00:03.000Z", childId: "child-1", therapistId: "therapist-1" };
   const result = appendHelp(original, event);
 
   assert.equal(original.length, 0);
   assert.deepEqual(result, [event]);
+  assert.equal(result[0].wordId, "schiena");
+  assert.equal(result[0].mode, "teaching");
 });
