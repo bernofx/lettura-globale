@@ -8,13 +8,15 @@ type Mode = "teaching" | "test";
 type Presentation = "images" | "words";
 type SessionActivity = "recognition" | "articles";
 type Article = "IL" | "LA";
-type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
+type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; remoteImageId?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
 type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string; childId?: string; therapistId?: string };
 type HelpEvent = { id: string; exerciseId: string; label: string; createdAt: string; childId?: string; therapistId?: string };
 type Therapist = { id: string; firstName: string; lastName: string; email: string; role: string; pinHash?: string; pin?: string; childIds: string[] };
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
+type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[] };
+type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "unauthorized" | "error";
 
 const stockItems: LibraryItem[] = [
   { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibo", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
@@ -186,8 +188,25 @@ async function prepareUploadedImage(file: File) {
   return canvas.toDataURL("image/webp", 0.78);
 }
 
+async function uploadRemoteImage(mediaId: string, image: string) {
+  const blob = await fetch(image).then((response) => response.blob());
+  const response = await fetch("/api/media", { method: "POST", headers: { "content-type": blob.type || "image/webp", "x-media-id": mediaId }, body: blob });
+  if (!response.ok) throw new Error("remote_image_upload_failed");
+  return (await response.json()) as { id: string; url: string };
+}
+
+async function deleteRemoteImage(mediaId: string) {
+  const response = await fetch(`/api/media/${encodeURIComponent(mediaId)}`, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) throw new Error("remote_image_delete_failed");
+}
+
+function backendStateForStorage(state: BackendState): BackendState {
+  return { ...state, library: state.library.map((item) => ({ ...item, image: item.remoteImageId ? undefined : item.image?.startsWith("data:") ? undefined : item.image })) };
+}
+
 function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T, prepare?: (value: T) => T) {
   const [value, setValue] = useState<T>(fallback);
+  const [isLoaded, setIsLoaded] = useState(false);
   const loaded = useRef(false);
   const migrateRef = useRef(migrate);
   const prepareRef = useRef(prepare);
@@ -195,11 +214,12 @@ function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T, 
     const timer = window.setTimeout(() => {
       try { const saved = localStorage.getItem(key); if (saved) { const parsed = JSON.parse(saved) as T; setValue(migrateRef.current ? migrateRef.current(parsed) : parsed); } } catch { /* storage can be unavailable */ }
       loaded.current = true;
+      setIsLoaded(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [key]);
   useEffect(() => { if (!loaded.current) return; try { localStorage.setItem(key, JSON.stringify(prepareRef.current ? prepareRef.current(value) : value)); } catch { /* storage can be unavailable */ } }, [key, value]);
-  return [value, setValue] as const;
+  return [value, setValue, isLoaded] as const;
 }
 
 function Artwork({ item, compact = false }: { item: LibraryItem; compact?: boolean }) {
@@ -239,22 +259,27 @@ function speakWord(word: string) {
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [therapists, setTherapists] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
+  const [therapists, setTherapists, therapistsLoaded] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
     if (localStorage.getItem("lg-profiles-v2-seeded")) return saved;
     localStorage.setItem("lg-profiles-v2-seeded", "1");
     return mergeById(saved, initialTherapists);
   });
-  const [children, setChildren] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
-  const [activeChildId, setActiveChildId] = useStoredState<string>("lg-active-child", initialChildren[0].id);
+  const [children, setChildren, childrenLoaded] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
+  const [activeChildId, setActiveChildId, activeChildLoaded] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
-  const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
-  const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
-  const [attempts, setAttempts] = useStoredState<Attempt[]>("lg-attempts", []);
-  const [helps, setHelps] = useStoredState<HelpEvent[]>("lg-helps", []);
+  const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
+  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
+  const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
+  const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
+  const [helps, setHelps, helpsLoaded] = useStoredState<HelpEvent[]>("lg-helps", []);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
+  const backendStarted = useRef(false);
+  const [backendInitialized, setBackendInitialized] = useState(false);
+  const backendHydrating = useRef(true);
+  const backendSaveTimer = useRef<number | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
@@ -297,6 +322,72 @@ export default function HomePage() {
     restoreImages().catch(() => { setToast("Non è stato possibile recuperare una foto salvata"); window.setTimeout(() => setToast(null), 2600); });
     return () => { cancelled = true; };
   }, [library, setLibrary]);
+
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && attemptsLoaded && helpsLoaded;
+
+  useEffect(() => {
+    if (!allLocalDataLoaded || backendStarted.current) return;
+    backendStarted.current = true;
+    let cancelled = false;
+    const initializeBackend = async () => {
+      const response = await fetch("/api/state", { cache: "no-store" });
+      if (response.status === 401) { if (!cancelled) setBackendStatus("unauthorized"); return; }
+      if (!response.ok) throw new Error("backend_load_failed");
+      const result = await response.json() as { state: BackendState | null };
+      if (cancelled) return;
+
+      if (result.state) {
+        const saved = result.state;
+        setTherapists(saved.therapists?.length ? saved.therapists : initialTherapists);
+        setChildren(saved.children?.length ? saved.children : initialChildren);
+        setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
+        setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
+        setExercises(mergeById(saved.exercises ?? [], initialExercises));
+        setSequences(mergeById(saved.sequences ?? [], initialSequences));
+        setAttempts(saved.attempts ?? []);
+        setHelps(saved.helps ?? []);
+        backendHydrating.current = false;
+        setBackendInitialized(true);
+        setBackendStatus("ready");
+        return;
+      }
+
+      setBackendStatus("migrating");
+      const migratedLibrary: LibraryItem[] = [];
+      for (const item of library) {
+        if (!item.privateUpload || item.remoteImageId) { migratedLibrary.push(item); continue; }
+        const localImage = item.image?.startsWith("data:") ? item.image : item.imageKey ? await readLibraryImage(item.imageKey) : undefined;
+        if (!localImage) { migratedLibrary.push(item); continue; }
+        const remote = await uploadRemoteImage(item.id, localImage);
+        migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
+      }
+      const migrated: BackendState = { schemaVersion: 1, therapists, children, activeChildId, library: migratedLibrary, exercises, sequences, attempts, helps };
+      const saveResponse = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) });
+      if (!saveResponse.ok) throw new Error("backend_migration_failed");
+      if (cancelled) return;
+      setLibrary(migratedLibrary);
+      backendHydrating.current = false;
+      setBackendInitialized(true);
+      setBackendStatus("ready");
+    };
+    initializeBackend().catch(() => { if (!cancelled) setBackendStatus("error"); });
+    return () => { cancelled = true; };
+  }, [allLocalDataLoaded, therapists, children, activeChildId, library, exercises, sequences, attempts, helps, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setAttempts, setHelps]);
+
+  useEffect(() => {
+    if (backendHydrating.current || !backendInitialized) return;
+    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, library, exercises, sequences, attempts, helps };
+    if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
+    backendSaveTimer.current = window.setTimeout(async () => {
+      setBackendStatus("syncing");
+      try {
+        const response = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(snapshot)) });
+        if (!response.ok) throw new Error("backend_save_failed");
+        setBackendStatus("ready");
+      } catch { setBackendStatus("error"); }
+    }, 500);
+    return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); };
+  }, [backendInitialized, therapists, children, activeChildId, library, exercises, sequences, attempts, helps]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const associatedChildren = children.filter((child) => therapist?.childIds.includes(child.id));
@@ -370,7 +461,9 @@ export default function HomePage() {
     notify("Profilo bambino e dati locali collegati eliminati");
   };
 
-  if (!sessionChecked) return <div className="auth-loading"><Sparkles /></div>;
+  if (!sessionChecked || !allLocalDataLoaded || backendStatus === "loading" || backendStatus === "migrating") return <div className="auth-loading"><Sparkles /><span>{backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Caricamento dati…"}</span></div>;
+  if (backendStatus === "unauthorized") return <BackendAccessScreen />;
+  if (backendStatus === "error" && !backendInitialized) return <BackendErrorScreen />;
   if (!therapist) return <TherapistLogin therapists={therapists} onLogin={login} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -378,7 +471,7 @@ export default function HomePage() {
     <div className="app-shell">
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} />
       <main className="main-content">
-        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} />
+        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={sequences} library={visibleLibrary} onBuild={() => setShowBuilder(true)} onStart={startSession} />}
@@ -386,14 +479,22 @@ export default function HomePage() {
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={visibleExercises} library={visibleLibrary} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
-      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image!); setLibrary((current) => [{ ...item, imageKey }, ...current]); setShowUpload(false); notify("Immagine salvata nella libreria"); } catch { notify("Impossibile salvare la foto nel browser"); } }} />}
-      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const imageKey = editingItem.imageKey ?? `library-image-${updated.id}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey }; } setLibrary((current) => current.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify("Elemento della libreria salvato"); } catch { notify("Impossibile salvare le modifiche nel browser"); } }} />}
-      {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={async () => { if (pendingLibraryDelete.imageKey) await removeLibraryImage(pendingLibraryDelete.imageKey).catch(() => undefined); setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, image: undefined, deleted: true } : item)); setPendingLibraryDelete(null); notify("Immagine rimossa dalla libreria e dagli esercizi"); }} />}
+      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { const remote = await uploadRemoteImage(item.id, item.image!); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image!); setLibrary((current) => [{ ...item, imageKey, remoteImageId: remote.id }, ...current]); setShowUpload(false); notify("Immagine salvata nel cloud"); } catch { notify("Impossibile salvare la foto nel cloud"); } }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = await uploadRemoteImage(updated.id, updated.image); const imageKey = editingItem.imageKey ?? `library-image-${updated.id}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote.id }; } setLibrary((current) => current.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify("Elemento salvato nel cloud"); } catch { notify("Impossibile salvare le modifiche nel cloud"); } }} />}
+      {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={async () => { try { if (pendingLibraryDelete.remoteImageId) await deleteRemoteImage(pendingLibraryDelete.remoteImageId); if (pendingLibraryDelete.imageKey) await removeLibraryImage(pendingLibraryDelete.imageKey).catch(() => undefined); setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, image: undefined, deleted: true } : item)); setPendingLibraryDelete(null); notify("Immagine rimossa dal cloud e dagli esercizi"); } catch { notify("Impossibile eliminare l’immagine dal cloud"); } }} />}
       {showBuilder && <ExerciseBuilder library={visibleLibrary} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
     </div>
   );
+}
+
+function BackendAccessScreen() {
+  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Cloud /></span><span>Lettura <strong>Globale</strong></span><p>I profili, gli esercizi e le immagini vengono ora sincronizzati nel cloud.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO SICURO</span><h1>Accedi per continuare</h1><p>Serve l’accesso ChatGPT per proteggere e sincronizzare i dati tra dispositivi.</p><a className="primary-button large auth-link" href="/signin-with-chatgpt?return_to=%2F" target="_top"><KeyRound />Accedi con ChatGPT</a></section></main>;
+}
+
+function BackendErrorScreen() {
+  return <main className="auth-page"><section className="login-card"><div className="auth-icon"><Cloud /></div><span className="eyebrow">SINCRONIZZAZIONE</span><h1>Il cloud non è raggiungibile</h1><p>I dati locali non sono stati cancellati. Riprova quando la connessione è disponibile.</p><button className="primary-button large" onClick={() => window.location.reload()}>Riprova</button></section></main>;
 }
 
 function TherapistLogin({ therapists, onLogin }: { therapists: Therapist[]; onLogin: (therapistId: string) => void }) {
@@ -407,7 +508,7 @@ function TherapistLogin({ therapists, onLogin }: { therapists: Therapist[]; onLo
     if (!match) { setError("Email o PIN non corretti."); return; }
     onLogin(match.id);
   };
-  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit"><KeyRound />Accedi</button></form><div className="demo-credentials"><strong>Accessi dimostrativi iniziali</strong><span>giulia@letturaglobale.demo</span><span>PIN 1234</span><span>marco@letturaglobale.demo</span><span>PIN 5678</span></div><small className="auth-disclaimer">I profili e il PIN restano solo in questo browser. Non usare dati reali in questa versione di prova.</small></section></main>;
+  return <main className="auth-page"><section className="auth-brand"><span className="brand-mark large"><Sparkles /></span><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi come terapista</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit"><KeyRound />Accedi</button></form><div className="demo-credentials"><strong>Accessi dimostrativi iniziali</strong><span>giulia@letturaglobale.demo</span><span>PIN 1234</span><span>marco@letturaglobale.demo</span><span>PIN 5678</span></div><small className="auth-disclaimer">Profili, esercizi e immagini vengono sincronizzati nel cloud dell’account autenticato.</small></section></main>;
 }
 
 function ChildChooser({ therapist, childProfiles, onChoose, onLogout }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void }) {
@@ -421,11 +522,12 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
 
 function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void }) {
   const initials = `${therapist.firstName[0] ?? ""}${therapist.lastName[0] ?? ""}`;
-  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark"><Sparkles size={21} /></span><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className="sidebar-note"><span className="status-dot" /><div><strong>Dati locali</strong><small>Prototipo dimostrativo</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
+  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark"><Sparkles size={21} /></span><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className="sidebar-note"><span className="status-dot" /><div><strong>Dati nel cloud</strong><small>Sincronizzati e protetti</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
 }
 
-function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void }) {
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className="private-pill"><Cloud size={15} />Salvataggio locale</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus }) {
+  const syncLabel = backendStatus === "syncing" ? "Sincronizzazione…" : backendStatus === "error" ? "Cloud non raggiungibile" : "Salvato nel cloud";
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className={`private-pill ${backendStatus === "error" ? "sync-error" : ""}`}><Cloud size={15} />{syncLabel}</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }
 
 function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; sequenceCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
@@ -508,7 +610,7 @@ function ProfilesView({ therapist, childProfiles, activeChildId, canDeleteTherap
   const [newPin, setNewPin] = useState("");
   const [childDrafts, setChildDrafts] = useState(childProfiles);
   const updateChild = (id: string, field: keyof ChildProfile, value: string) => setChildDrafts((current) => current.map((child) => child.id === id ? { ...child, [field]: value } : child));
-  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso dimostrativo locale</strong><p>Il PIN e i profili sono salvati solo in questo browser. Non costituiscono ancora un sistema di autenticazione sicuro.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form><div className="danger-row"><div><strong>Elimina profilo terapista</strong><small>Verrai disconnesso. Deve restare almeno un terapista.</small></div><button className="danger-button" disabled={!canDeleteTherapist} onClick={() => onRequestDelete({ kind: "therapist", id: therapist.id, name: `${therapist.firstName} ${therapist.lastName}` })}><Trash2 />Elimina</button></div></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><div className="child-actions"><button className="danger-button subtle" disabled={childProfiles.length <= 1} onClick={() => onRequestDelete({ kind: "child", id: child.id, name: `${child.firstName} ${child.lastName}` })}><Trash2 />Elimina</button><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></div></article>)}</div></section></div>;
+  return <div className="page profiles-page"><section className="page-title-row"><div><span className="eyebrow">GESTIONE PROFILI</span><h1>Terapista e bambini</h1><p>Aggiorna i dati e scegli il bambino attivo per le prossime attività.</p></div></section><div className="prototype-alert"><ShieldCheck /><div><strong>Accesso protetto e sincronizzato</strong><p>L’accesso ChatGPT protegge i dati nel cloud; il PIN seleziona il profilo terapista all’interno dell’app.</p></div></div><section className="profile-section"><div className="section-heading"><div><h2>Profilo terapista</h2><p>Questi dati identificano l’adulto che conduce la sessione.</p></div></div><form className="profile-form" onSubmit={async (event) => { event.preventDefault(); const updated = { ...therapistDraft, pinHash: newPin ? await hashPin(newPin) : therapistDraft.pinHash ?? await hashPin(therapistDraft.pin ?? "1234"), pin: undefined }; onSaveTherapist(updated); setTherapistDraft(updated); setNewPin(""); }}><label>Nome<input value={therapistDraft.firstName} onChange={(event) => setTherapistDraft({ ...therapistDraft, firstName: event.target.value })} required /></label><label>Cognome<input value={therapistDraft.lastName} onChange={(event) => setTherapistDraft({ ...therapistDraft, lastName: event.target.value })} required /></label><label>Email di accesso<input type="email" value={therapistDraft.email} onChange={(event) => setTherapistDraft({ ...therapistDraft, email: event.target.value })} required /></label><label>Ruolo<input value={therapistDraft.role} onChange={(event) => setTherapistDraft({ ...therapistDraft, role: event.target.value })} required /></label><label>Nuovo PIN (opzionale)<input type="password" inputMode="numeric" minLength={4} maxLength={8} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ""))} placeholder="Lascia vuoto per non cambiarlo" /></label><div className="form-submit"><button className="primary-button" type="submit"><Save />Salva terapista</button></div></form><div className="danger-row"><div><strong>Elimina profilo terapista</strong><small>Verrai disconnesso. Deve restare almeno un terapista.</small></div><button className="danger-button" disabled={!canDeleteTherapist} onClick={() => onRequestDelete({ kind: "therapist", id: therapist.id, name: `${therapist.firstName} ${therapist.lastName}` })}><Trash2 />Elimina</button></div></section><section className="profile-section"><div className="section-heading"><div><h2>Bambini associati</h2><p>Le statistiche e i nuovi tentativi seguono il profilo selezionato.</p></div><span>{childProfiles.length} profili</span></div><div className="children-editor-grid">{childDrafts.map((child) => <article className={child.id === activeChildId ? "child-editor active" : "child-editor"} key={child.id}><button className="child-editor-heading" type="button" onClick={() => onSelectChild(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><strong>{child.firstName} {child.lastName}</strong><small>{child.id === activeChildId ? "Profilo attivo" : "Seleziona profilo"}</small></span>{child.id === activeChildId && <Check />}</button><div className="child-fields"><label>Nome<input value={child.firstName} onChange={(event) => updateChild(child.id, "firstName", event.target.value)} /></label><label>Cognome<input value={child.lastName} onChange={(event) => updateChild(child.id, "lastName", event.target.value)} /></label><label>Anno di nascita<input inputMode="numeric" maxLength={4} value={child.birthYear} onChange={(event) => updateChild(child.id, "birthYear", event.target.value.replace(/\D/g, ""))} /></label><label className="full-field">Note<textarea rows={3} value={child.notes} onChange={(event) => updateChild(child.id, "notes", event.target.value)} /></label></div><div className="child-actions"><button className="danger-button subtle" disabled={childProfiles.length <= 1} onClick={() => onRequestDelete({ kind: "child", id: child.id, name: `${child.firstName} ${child.lastName}` })}><Trash2 />Elimina</button><button className="ghost-button save-child" onClick={() => onSaveChild(child)}><Save />Salva profilo</button></div></article>)}</div></section></div>;
 }
 
 function DeleteDialog({ item, onCancel, onConfirm }: { item: { kind: "therapist" | "child"; name: string }; onCancel: () => void; onConfirm: () => void }) {
@@ -520,7 +622,7 @@ function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item:
   const [word, setWord] = useState(""); const [category, setCategory] = useState("Altro"); const [article, setArticle] = useState<Article | "">(""); const [image, setImage] = useState<string | null>(null); const [rights, setRights] = useState(false); const [processing, setProcessing] = useState(false); const [fileError, setFileError] = useState(""); const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; setProcessing(true); setFileError(""); try { setImage(await prepareUploadedImage(file)); } catch { setFileError("Non è stato possibile elaborare questa immagine."); } finally { setProcessing(false); } };
   const save = async () => { if (!word.trim() || !image || !rights || processing) return; setProcessing(true); await onSave({ id: crypto.randomUUID(), word: word.trim(), image, category, article: article || null, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente", privateUpload: true }); setProcessing(false); };
-  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>La foto viene ottimizzata e salvata nel browser, così resta disponibile dopo l’aggiornamento della pagina.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>{processing ? "Ottimizzazione…" : "Scegli un’immagine"}</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button>{fileError && <p className="form-error" role="alert">{fileError}</p>}<label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">Scegli IL o LA per inserire automaticamente questa immagine nel gioco degli articoli.</p><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights || processing} onClick={save}>{processing ? "Salvataggio…" : "Aggiungi immagine"}</button></div></div></div>;
+  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>La foto viene ottimizzata e salvata nel cloud, così resta disponibile anche sugli altri dispositivi.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>{processing ? "Ottimizzazione…" : "Scegli un’immagine"}</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button>{fileError && <p className="form-error" role="alert">{fileError}</p>}<label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">Scegli IL o LA per inserire automaticamente questa immagine nel gioco degli articoli.</p><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights || processing} onClick={save}>{processing ? "Salvataggio…" : "Aggiungi immagine"}</button></div></div></div>;
 }
 
 function EditLibraryDialog({ item, onClose, onSave }: { item: LibraryItem; onClose: () => void; onSave: (item: LibraryItem) => Promise<void> }) {
