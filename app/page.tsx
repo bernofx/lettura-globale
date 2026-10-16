@@ -307,6 +307,8 @@ export default function HomePage() {
   const [sessionRunId, setSessionRunId] = useState("");
   const [sessionActive, setSessionActive] = useState(false);
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
+  const spokenPromptKey = useRef("");
+  const spokenCorrectKey = useRef("");
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -433,8 +435,12 @@ export default function HomePage() {
   }, [activeSequenceId, visibleSequences, setActiveSequenceId]);
 
   useEffect(() => {
-    if (sessionActive && currentExercise && exerciseKind(currentExercise) === "recognition" && sessionPresentation === "words" && promptWord) speakWord(promptWord);
-  }, [sessionActive, currentExercise, sessionPresentation, sessionIndex, promptWord]);
+    if (!sessionActive || !currentExercise || exerciseKind(currentExercise) !== "recognition" || sessionPresentation !== "words" || !promptWord) return;
+    const promptKey = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
+    if (spokenPromptKey.current === promptKey) return;
+    spokenPromptKey.current = promptKey;
+    speakWord(promptWord);
+  }, [sessionActive, currentExercise, sessionPresentation, sessionIndex, sessionRunId, promptWord]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const navigate = (next: View) => { setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -453,6 +459,10 @@ export default function HomePage() {
     const sessionItemId = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
     setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId: currentExercise.id, wordId: currentExercise.promptId, answerId, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: activeChild?.id, therapistId: therapist?.id }).events);
     setAnswerState(correct ? "correct" : "wrong");
+    if (correct && sessionPresentation === "words" && promptWord && spokenCorrectKey.current !== sessionItemId) {
+      spokenCorrectKey.current = sessionItemId;
+      speakWord(promptWord);
+    }
   };
   const addHelp = (label: string, wordId?: string) => {
     const exerciseId = currentExercise?.id;
@@ -679,7 +689,7 @@ function SessionView({ active, mode, setMode, activity, setActivity, presentatio
 
 function RecognitionSession({ mode, presentation, currentIndex, total, exercise, prompt, library, answerState, onChoose, onHelp, onNext }: { mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void }) {
   const [optionIds] = useState(() => shuffled(exercise.optionIds));
-  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Ascolta la parola</strong><small>Premi per riascoltare</small></span></button></div>}<div className="answer-grid">{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><HelpDock onHelp={(label) => onHelp(label, prompt.id)} /></div>;
+  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>Prime parole</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><button className="ghost-button" onClick={() => window.location.reload()}>Termina</button></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><div className="voice-cue" aria-live="polite"><Volume2 /><span><strong>Parola pronunciata</strong><small>Verrà ripetuta dopo la risposta corretta</small></span></div></div>}<div className="answer-grid">{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; return <button key={id} aria-label={item.word} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i><Check /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct"><span>Ottimo!</span><button onClick={onNext}>{currentIndex === total - 1 ? "Concludi" : "Prossimo"}<ChevronRight /></button></div>}</div><HelpDock onHelp={(label) => onHelp(label, prompt.id)} /></div>;
 }
 
 function ArticleSortSession({ exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp }: { exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, article: Article, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void }) {
