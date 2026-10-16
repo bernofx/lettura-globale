@@ -110,9 +110,9 @@ Creazione, anteprima, duplicazione, riordino, versioni e validazione. Accettazio
 
 Insegnamento, verifica, aiuti e idempotenza. Accettazione: un solo primo tentativo per item e correzioni separate anche con retry/doppio tap.
 
-### M5 — Statistiche
+### M5 — Statistiche *(base applicativa completata)*
 
-Dashboard, filtri ed export. Accettazione: risultati verificati su dataset noto e accesso riservato all'adulto.
+Dashboard, viste per parola, parola + esercizio ed esercizio, andamento temporale, azzeramento controllato ed export. Accettazione: risultati verificati su dataset noto e accesso riservato all'adulto.
 
 ### M6 — Hardening e pilot
 
