@@ -8,7 +8,7 @@ type Mode = "teaching" | "test";
 type Presentation = "images" | "words";
 type SessionActivity = "recognition" | "articles";
 type Article = "IL" | "LA";
-type LibraryItem = { id: string; word: string; emoji?: string; image?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
+type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; privateUpload?: boolean; deleted?: boolean };
 type Exercise = { id: string; title: string; promptId: string; optionIds: string[]; updatedAt: string };
 type Sequence = { id: string; title: string; exerciseIds: string[] };
 type Attempt = { id: string; exerciseId: string; answerId: string; correct: boolean; firstAttempt: boolean; mode: Mode; createdAt: string; childId?: string; therapistId?: string };
@@ -126,10 +126,71 @@ function hydrateLibrary(items: LibraryItem[]) {
   });
 }
 
-function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T) {
+function libraryForStorage(items: LibraryItem[]) {
+  return items.map((item) => item.imageKey ? { ...item, image: undefined } : item);
+}
+
+function openImageDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("lettura-globale-media", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("images");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storeLibraryImage(key: string, image: string) {
+  const database = await openImageDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction("images", "readwrite");
+    transaction.objectStore("images").put(image, key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function readLibraryImage(key: string) {
+  const database = await openImageDatabase();
+  const image = await new Promise<string | undefined>((resolve, reject) => {
+    const request = database.transaction("images", "readonly").objectStore("images").get(key);
+    request.onsuccess = () => resolve(request.result as string | undefined);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return image;
+}
+
+async function removeLibraryImage(key: string) {
+  const database = await openImageDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction("images", "readwrite");
+    transaction.objectStore("images").delete(key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function prepareUploadedImage(file: File) {
+  const bitmap = await createImageBitmap(file);
+  const maxSide = 900;
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Impossibile elaborare l’immagine");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/webp", 0.78);
+}
+
+function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T, prepare?: (value: T) => T) {
   const [value, setValue] = useState<T>(fallback);
   const loaded = useRef(false);
   const migrateRef = useRef(migrate);
+  const prepareRef = useRef(prepare);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try { const saved = localStorage.getItem(key); if (saved) { const parsed = JSON.parse(saved) as T; setValue(migrateRef.current ? migrateRef.current(parsed) : parsed); } } catch { /* storage can be unavailable */ }
@@ -137,7 +198,7 @@ function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T) 
     }, 0);
     return () => window.clearTimeout(timer);
   }, [key]);
-  useEffect(() => { if (!loaded.current) return; try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* keep the prototype usable */ } }, [key, value]);
+  useEffect(() => { if (!loaded.current) return; try { localStorage.setItem(key, JSON.stringify(prepareRef.current ? prepareRef.current(value) : value)); } catch { /* storage can be unavailable */ } }, [key, value]);
   return [value, setValue] as const;
 }
 
@@ -187,7 +248,7 @@ export default function HomePage() {
   const [activeChildId, setActiveChildId] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary);
+  const [library, setLibrary] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
   const [exercises, setExercises] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
   const [sequences, setSequences] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences).map((sequence) => sequence.id === "seq-prime" ? { ...sequence, exerciseIds: Array.from(new Set([...sequence.exerciseIds, ...initialExercises.map((exercise) => exercise.id)])) } : sequence));
   const [attempts, setAttempts] = useStoredState<Attempt[]>("lg-attempts", []);
@@ -217,6 +278,25 @@ export default function HomePage() {
     }, 0);
     return () => window.clearTimeout(authTimer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const restoreImages = async () => {
+      const missing = library.filter((item) => item.imageKey && !item.image);
+      const legacy = library.filter((item) => item.privateUpload && item.image?.startsWith("data:") && !item.imageKey);
+      if (!missing.length && !legacy.length) return;
+      const restored = new Map<string, string>();
+      await Promise.all(missing.map(async (item) => { const image = await readLibraryImage(item.imageKey!); if (image) restored.set(item.id, image); }));
+      await Promise.all(legacy.map(async (item) => { const key = `library-image-${item.id}`; await storeLibraryImage(key, item.image!); restored.set(item.id, item.image!); }));
+      if (cancelled || !restored.size) return;
+      setLibrary((current) => current.map((item) => {
+        const legacyItem = legacy.find((candidate) => candidate.id === item.id);
+        return restored.has(item.id) ? { ...item, image: restored.get(item.id), imageKey: item.imageKey ?? (legacyItem ? `library-image-${item.id}` : undefined) } : item;
+      }));
+    };
+    restoreImages().catch(() => { setToast("Non è stato possibile recuperare una foto salvata"); window.setTimeout(() => setToast(null), 2600); });
+    return () => { cancelled = true; };
+  }, [library, setLibrary]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const associatedChildren = children.filter((child) => therapist?.childIds.includes(child.id));
@@ -306,9 +386,9 @@ export default function HomePage() {
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={visibleExercises} library={visibleLibrary} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} childProfiles={associatedChildren} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
-      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={(item) => { setLibrary((current) => [item, ...current]); setShowUpload(false); notify("Immagine privata aggiunta alla libreria"); }} />}
-      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={(updated) => { setLibrary((current) => current.map((item) => item.id === updated.id ? updated : item)); setEditingItem(null); notify("Elemento della libreria aggiornato"); }} />}
-      {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Immagine rimossa dalla libreria e dagli esercizi"); }} />}
+      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image!); setLibrary((current) => [{ ...item, imageKey }, ...current]); setShowUpload(false); notify("Immagine salvata nella libreria"); } catch { notify("Impossibile salvare la foto nel browser"); } }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const imageKey = editingItem.imageKey ?? `library-image-${updated.id}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey }; } setLibrary((current) => current.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify("Elemento della libreria salvato"); } catch { notify("Impossibile salvare le modifiche nel browser"); } }} />}
+      {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={async () => { if (pendingLibraryDelete.imageKey) await removeLibraryImage(pendingLibraryDelete.imageKey).catch(() => undefined); setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, image: undefined, deleted: true } : item)); setPendingLibraryDelete(null); notify("Immagine rimossa dalla libreria e dagli esercizi"); }} />}
       {showBuilder && <ExerciseBuilder library={visibleLibrary} onClose={() => setShowBuilder(false)} onSave={(exercise) => { setExercises((current) => [exercise, ...current]); setSequences((current) => current.length ? [{ ...current[0], exerciseIds: [...current[0].exerciseIds, exercise.id] }, ...current.slice(1)] : [{ id: crypto.randomUUID(), title: "La mia sequenza", exerciseIds: [exercise.id] }]); setShowBuilder(false); notify("Esercizio salvato e aggiunto alla sequenza"); }} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
@@ -436,26 +516,30 @@ function DeleteDialog({ item, onCancel, onConfirm }: { item: { kind: "therapist"
   return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">CONFERMA ELIMINAZIONE</span><h2 id="delete-title">Eliminare {item.name}?</h2><p>{isChild ? "Saranno eliminati da questo browser anche i tentativi e gli aiuti collegati al bambino." : "Il profilo terapista verrà eliminato da questo browser e la sessione verrà chiusa."}</p><p className="irreversible-note">Questa operazione non può essere annullata.</p><div className="modal-actions"><button className="ghost-button" onClick={onCancel}>Annulla</button><button className="danger-button solid" onClick={onConfirm}><Trash2 />Elimina definitivamente</button></div></div></div>;
 }
 
-function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item: LibraryItem) => void }) {
-  const [word, setWord] = useState(""); const [category, setCategory] = useState("Altro"); const [article, setArticle] = useState<Article | "">(""); const [image, setImage] = useState<string | null>(null); const [rights, setRights] = useState(false); const inputRef = useRef<HTMLInputElement>(null);
-  const handleFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; const reader = new FileReader(); reader.onload = () => setImage(String(reader.result)); reader.readAsDataURL(file); };
-  const save = () => { if (!word.trim() || !image || !rights) return; onSave({ id: crypto.randomUUID(), word: word.trim(), image, category, article: article || null, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente", privateUpload: true }); };
-  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>Il file resta nel browser in questa versione di prova.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>Scegli un’immagine</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button><label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">Scegli IL o LA per inserire automaticamente questa immagine nel gioco degli articoli.</p><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights} onClick={save}>Aggiungi immagine</button></div></div></div>;
+function UploadDialog({ onClose, onSave }: { onClose: () => void; onSave: (item: LibraryItem) => Promise<void> }) {
+  const [word, setWord] = useState(""); const [category, setCategory] = useState("Altro"); const [article, setArticle] = useState<Article | "">(""); const [image, setImage] = useState<string | null>(null); const [rights, setRights] = useState(false); const [processing, setProcessing] = useState(false); const [fileError, setFileError] = useState(""); const inputRef = useRef<HTMLInputElement>(null);
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; setProcessing(true); setFileError(""); try { setImage(await prepareUploadedImage(file)); } catch { setFileError("Non è stato possibile elaborare questa immagine."); } finally { setProcessing(false); } };
+  const save = async () => { if (!word.trim() || !image || !rights || processing) return; setProcessing(true); await onSave({ id: crypto.randomUUID(), word: word.trim(), image, category, article: article || null, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente", privateUpload: true }); setProcessing(false); };
+  return <div className="modal-layer" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">NUOVA IMMAGINE</span><h2>Aggiungi alla libreria</h2><p>La foto viene ottimizzata e salvata nel browser, così resta disponibile dopo l’aggiornamento della pagina.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt="Anteprima caricamento" /> : <><Upload /><strong>{processing ? "Ottimizzazione…" : "Scegli un’immagine"}</strong><small>JPG, PNG o WebP</small></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button>{fileError && <p className="form-error" role="alert">{fileError}</p>}<label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} placeholder="Es. Bicchiere" /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">Scegli IL o LA per inserire automaticamente questa immagine nel gioco degli articoli.</p><label className="check-line"><input type="checkbox" checked={rights} onChange={(event) => setRights(event.target.checked)} />Confermo di avere il diritto di usare questa immagine.</label><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || !image || !rights || processing} onClick={save}>{processing ? "Salvataggio…" : "Aggiungi immagine"}</button></div></div></div>;
 }
 
-function EditLibraryDialog({ item, onClose, onSave }: { item: LibraryItem; onClose: () => void; onSave: (item: LibraryItem) => void }) {
+function EditLibraryDialog({ item, onClose, onSave }: { item: LibraryItem; onClose: () => void; onSave: (item: LibraryItem) => Promise<void> }) {
   const [word, setWord] = useState(item.word);
   const [category, setCategory] = useState(item.category);
   const [article, setArticle] = useState<Article | "">(articleFor(item) ?? "");
   const [image, setImage] = useState(item.image);
   const [imageChanged, setImageChanged] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [fileError, setFileError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const handleFile = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; const reader = new FileReader(); reader.onload = () => { setImage(String(reader.result)); setImageChanged(true); }; reader.readAsDataURL(file); };
-  const save = () => {
-    if (!word.trim()) return;
-    onSave({ ...item, word: word.trim(), category, article: article || null, ...(imageChanged ? { image, emoji: undefined, source: "Upload privato", sourceUrl: undefined, license: "Diritto d’uso dichiarato", licenseUrl: undefined, author: "Utente", privateUpload: true } : {}) });
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith("image/")) return; setProcessing(true); setFileError(""); try { setImage(await prepareUploadedImage(file)); setImageChanged(true); } catch { setFileError("Non è stato possibile elaborare questa immagine."); } finally { setProcessing(false); } };
+  const save = async () => {
+    if (!word.trim() || processing) return;
+    setProcessing(true);
+    await onSave({ ...item, word: word.trim(), category, article: article || null, ...(imageChanged ? { image, emoji: undefined, source: "Upload privato", sourceUrl: undefined, license: "Diritto d’uso dichiarato", licenseUrl: undefined, author: "Utente", privateUpload: true } : {}) });
+    setProcessing(false);
   };
-  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="edit-library-title"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">MODIFICA IMMAGINE</span><h2 id="edit-library-title">Modifica la scheda</h2><p>Cambia la parola, la foto o l’assegnazione al gioco IL / LA.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt={`Anteprima ${word}`} /> : <><span className="edit-emoji">{item.emoji}</span><strong>Sostituisci immagine</strong></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button><label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">L’immagine comparirà nel gioco soltanto se scegli IL o LA.</p><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim()} onClick={save}><Save />Salva modifiche</button></div></div></div>;
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="edit-library-title"><div className="modal"><button className="modal-close" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">MODIFICA IMMAGINE</span><h2 id="edit-library-title">Modifica la scheda</h2><p>Cambia la parola, la foto o l’assegnazione al gioco IL / LA.</p><button className={`drop-zone ${image ? "has-image" : ""}`} onClick={() => inputRef.current?.click()}>{image ? <img src={image} alt={`Anteprima ${word}`} /> : <><span className="edit-emoji">{item.emoji}</span><strong>{processing ? "Ottimizzazione…" : "Sostituisci immagine"}</strong></>}<input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} /></button>{fileError && <p className="form-error" role="alert">{fileError}</p>}<label>Parola<input value={word} onChange={(event) => setWord(event.target.value)} /></label><label>Categoria<select value={category} onChange={(event) => setCategory(event.target.value)}>{libraryCategories.map((value) => <option key={value}>{value}</option>)}</select></label><label>Articolo nell’esercizio IL / LA<select value={article} onChange={(event) => setArticle(event.target.value as Article | "")}><option value="">Non usare nell’esercizio</option><option value="IL">IL</option><option value="LA">LA</option></select></label><p className="field-note">L’immagine comparirà nel gioco soltanto se scegli IL o LA.</p><div className="modal-actions"><button className="ghost-button" onClick={onClose}>Annulla</button><button className="primary-button" disabled={!word.trim() || processing} onClick={save}><Save />{processing ? "Salvataggio…" : "Salva modifiche"}</button></div></div></div>;
 }
 
 function LibraryDeleteDialog({ item, onCancel, onConfirm }: { item: LibraryItem; onCancel: () => void; onConfirm: () => void }) {
