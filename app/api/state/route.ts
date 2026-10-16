@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
-import { userStates } from "../../../db/schema";
+import { therapistCredentials, userStates } from "../../../db/schema";
 
 const MAX_STATE_BYTES = 4_000_000;
 
@@ -36,5 +36,12 @@ export async function PUT(request: Request) {
   const existing = await db.select({ revision: userStates.revision, createdAt: userStates.createdAt }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
   const revision = (existing[0]?.revision ?? 0) + 1;
   await db.insert(userStates).values({ userId: user.userId, email: user.email, payload: raw, schemaVersion: 1, revision, createdAt: existing[0]?.createdAt ?? now, updatedAt: now }).onConflictDoUpdate({ target: userStates.userId, set: { email: user.email, payload: raw, schemaVersion: 1, revision, updatedAt: now } });
+  const therapists = (state as { therapists?: Array<{ id?: string; email?: string; firstName?: string; lastName?: string; pinHash?: string }> }).therapists ?? [];
+  for (const therapist of therapists) {
+    if (!therapist.id || !therapist.email || !therapist.pinHash) continue;
+    const loginEmail = therapist.email.trim().toLowerCase();
+    const displayName = `${therapist.firstName ?? ""} ${therapist.lastName ?? ""}`.trim() || loginEmail;
+    await db.insert(therapistCredentials).values({ loginEmail, ownerUserId: user.userId, therapistId: therapist.id, pinHash: therapist.pinHash, displayName, updatedAt: now }).onConflictDoUpdate({ target: therapistCredentials.loginEmail, set: { ownerUserId: user.userId, therapistId: therapist.id, pinHash: therapist.pinHash, displayName, updatedAt: now } });
+  }
   return Response.json({ ok: true, revision, updatedAt: now });
 }

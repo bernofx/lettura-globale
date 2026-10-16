@@ -12,6 +12,7 @@ export type ChatGPTUser = {
 };
 
 const USER_EMAIL_HEADER = "oai-authenticated-user-email";
+const USER_ID_HEADER = "oai-authenticated-user-id";
 const USER_FULL_NAME_HEADER = "oai-authenticated-user-full-name";
 const USER_FULL_NAME_ENCODING_HEADER =
   "oai-authenticated-user-full-name-encoding";
@@ -20,6 +21,7 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 export const CHATGPT_SESSION_COOKIE = "lg-cloud-session";
+export const CHATGPT_SESSION_DURATION_SECONDS = 60 * 60 * 24 * 30;
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
@@ -32,7 +34,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     if (!saved) return null;
     return { userId: saved.userId, displayName: saved.displayName, email: saved.email, fullName: saved.displayName };
   }
-  const userId = await stableEmailId(email);
+  const userId = requestHeaders.get(USER_ID_HEADER) ?? await stableEmailId(email);
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
@@ -56,6 +58,21 @@ async function stableEmailId(email: string): Promise<string> {
 export async function hashText(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createCloudSession(user: ChatGPTUser): Promise<string> {
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = Array.from(tokenBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const now = Date.now();
+  await getDb().insert(authSessions).values({
+    tokenHash: await hashText(token),
+    userId: user.userId,
+    email: user.email,
+    displayName: user.displayName,
+    expiresAt: now + CHATGPT_SESSION_DURATION_SECONDS * 1000,
+    createdAt: now,
+  });
+  return token;
 }
 
 export async function requireChatGPTUser(
