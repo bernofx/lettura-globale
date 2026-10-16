@@ -18,3 +18,12 @@ export const authSessions = sqliteTable("auth_sessions", {
   expiresAt: integer("expires_at").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+export const therapistCredentials = sqliteTable("therapist_credentials", {
+  loginEmail: text("login_email").primaryKey(),
+  ownerUserId: text("owner_user_id").notNull(),
+  therapistId: text("therapist_id").notNull(),
+  pinHash: text("pin_hash").notNull(),
+  displayName: text("display_name").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
