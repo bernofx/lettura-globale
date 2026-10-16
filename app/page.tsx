@@ -398,8 +398,8 @@ export default function HomePage() {
   const visibleIds = new Set(visibleLibrary.map((item) => item.id));
   const visibleExercises = exercises.map((exercise) => ({ ...exercise, optionIds: exercise.optionIds.filter((id) => visibleIds.has(id)) })).filter((exercise) => visibleIds.has(exercise.promptId) && exercise.optionIds.length >= 2);
   const activeSequence = sequences[0] ?? initialSequences[0];
-  const sessionExerciseIds = singleExerciseId ? [singleExerciseId] : activeSequence.exerciseIds;
-  const sessionExercises = sessionExerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
+  const sequenceExercises = activeSequence.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
+  const sessionExercises = singleExerciseId ? visibleExercises.filter((exercise) => exercise.id === singleExerciseId) : sequenceExercises;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
   const promptItem = visibleLibrary.find((item) => item.id === currentExercise?.promptId);
   const promptWord = promptItem?.word;
@@ -475,7 +475,7 @@ export default function HomePage() {
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content">
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} />
-        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sessionExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
+        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={startSession} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={sequences} library={visibleLibrary} onBuild={() => setShowBuilder(true)} onStart={startSession} onTry={tryExercise} />}
         {view === "session" && <SessionView active={sessionActive} mode={sessionMode} setMode={setSessionMode} activity={sessionActivity} setActivity={setSessionActivity} presentation={sessionPresentation} setPresentation={setSessionPresentation} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={visibleLibrary} answerState={answerState} onChoose={chooseAnswer} onArticleAttempt={recordArticleAttempt} onArticleComplete={() => { setSessionActive(false); notify("Esercizio IL / LA completato e salvato"); setView("stats"); }} onHelp={addHelp} onStart={startSession} onNext={nextExercise} />}
