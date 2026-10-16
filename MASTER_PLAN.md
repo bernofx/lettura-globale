@@ -7,10 +7,10 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 ## Vincoli di prodotto
 
 - esercizi singoli e sequenze salvabili;
-- modalità insegnamento e verifica;
+- modalità insegnamento e valutazione, analizzate separatamente;
 - primo tentativo unico e immutabile, separato dalle correzioni;
-- tracciamento del tipo e del momento degli aiuti;
-- statistiche separate per modalità, primo tentativo e correzioni;
+- tracciamento del tipo, del momento, della parola e della modalità degli aiuti;
+- statistiche separate per modalità, con matrice parola × attività ed evoluzione mensile;
 - PC/mouse come riferimento, touch responsive su tablet e smartphone;
 - nessuna diagnosi o raccomandazione clinica automatica.
 
@@ -55,7 +55,7 @@ Configurazione iniziale proposta per la valutazione: OpenAI Images API con model
 
 La demo è pubblicata tramite ChatGPT Sites su runtime Cloudflare Workers. La pagina iniziale è pubblica, mentre API, pannello e file privati richiedono la sessione dell'applicazione: D1 conserva lo stato per account e le credenziali dei profili adulto, R2 conserva le immagini private e il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i terapisti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
 
-La destinazione di pubblicazione resta Cloudflare: Workers per applicazione e API, D1 per lo stato strutturato e R2 privato per i file. Lo snapshot JSON attuale in D1 riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
+La demo viene aggiornata su ChatGPT Sites durante lo sviluppo. La pubblicazione autonoma su Cloudflare resta sospesa fino a quando il prodotto sarà stabile e consolidato; a quel punto Workers, D1 e R2 saranno promossi attraverso ambienti separati e una pipeline approvata. Lo snapshot JSON attuale riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
 
 ## Dati essenziali
 
@@ -110,9 +110,9 @@ Creazione, anteprima, duplicazione, riordino, versioni e validazione. Accettazio
 
 Insegnamento, verifica, aiuti e idempotenza. Accettazione: un solo primo tentativo per item e correzioni separate anche con retry/doppio tap.
 
-### M5 — Statistiche *(base applicativa completata)*
+### M5 — Statistiche *(nuova sintesi applicativa completata; validazione sul campo da fare)*
 
-Dashboard, viste per parola, parola + esercizio ed esercizio, andamento temporale, azzeramento controllato ed export. Accettazione: risultati verificati su dataset noto e accesso riservato all'adulto.
+Matrice con parole sulle righe e tipologie di attività sulle colonne, separazione fra valutazione e insegnamento, andamento mensile, aiuti per parola, azzeramento controllato ed export. Accettazione: risultati verificati su dataset noto, leggibilità validata con terapista e accesso riservato all'adulto.
 
 ### M6 — Hardening e pilot
 
