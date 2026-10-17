@@ -7,6 +7,9 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 ## Vincoli di prodotto
 
 - esercizi singoli e sequenze salvabili;
+- `Trova la parola` casuale come modalità standard, con configurazione fissa avanzata;
+- classificazione di immagini per articolo e di parole per categorie configurabili;
+- feedback visivo, testuale e sonoro disattivabile;
 - modalità insegnamento e valutazione, analizzate separatamente;
 - primo tentativo unico e immutabile, separato dalle correzioni;
 - tracciamento del tipo, del momento, della parola e della modalità degli aiuti;
@@ -104,7 +107,7 @@ Provider ufficiali, import sicuro, metadati di provenienza e generazione AI faco
 
 ### M3 — Esercizi e sequenze *(flusso applicativo completato)*
 
-Creazione, anteprima, duplicazione, riordino, versioni e validazione. Accettazione: flusso completo desktop e touch.
+Creazione, anteprima, duplicazione, riordino, generazione casuale, classificazioni, versioni e validazione. Accettazione: flusso completo desktop e touch.
 
 ### M4 — Sessioni *(flusso applicativo e test dominio completati)*
 
