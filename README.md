@@ -14,7 +14,7 @@ Funzioni disponibili:
 - scelta fra i bambini associati, modifica ed eliminazione protetta dei profili;
 - libreria di 28 parole/immagini con provenienza e licenza;
 - upload privato con dichiarazione del diritto d'uso;
-- esercizi singoli e più sequenze salvabili, anche miste;
+- esercizi singoli e più sequenze salvabili, anche miste, associate al terapista proprietario;
 - avvio rapido di una singola attività o di una sequenza scelta;
 - modalità insegnamento e valutazione separate;
 - primo tentativo distinto dalle correzioni;
