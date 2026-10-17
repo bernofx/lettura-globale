@@ -29,12 +29,16 @@
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
 - [x] Esercizio `Parola nella categoria` configurabile, inseribile nelle sequenze e utilizzabile con tocco o trascinamento.
 - [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.
+- [x] `Trova la parola` avanza automaticamente dopo la risposta corretta, con spunta verde temporanea; l'errore mostra una X rossa temporanea e mantiene il turno corrente.
 - [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
 - [x] L’amministratore può creare, associare ed eliminare i profili terapista non amministrativi.
 - [x] Link autenticati condivisibili per singoli esercizi e sequenze, con avvio diretto dopo l’accesso e ritorno alla Home al termine.
+- [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, riepilogo e schermata `PRONTI?`.
+- [x] Creazione completa di una sequenza durante l’avvio, con scelta, creazione e riordino degli esercizi, salvataggio e partenza immediata.
+- [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 
 ## Scelte di persistenza e costo
@@ -56,17 +60,20 @@
 
 ## Prossimi passi
 
-1. Aggiungere controllo di revisione D1 e gestione esplicita dei conflitti.
-2. Definire permessi terapista/genitore, inviti e recupero accesso.
-3. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
-4. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
-5. Definire retention, backup e prova di ripristino D1/R2.
-6. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
-7. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
+1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
+3. Introdurre autorizzazioni server-side granulari per amministratore, terapista, genitore e bambino.
+4. Migrare sessioni, trial, tentativi e aiuti verso tabelle D1 relazionali e idempotenti.
+5. Aggiungere controllo di revisione allo snapshot D1 e gestione esplicita dei conflitti.
+6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
+7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
+8. Definire retention, backup e prova di ripristino D1/R2.
+9. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, assenza di duplicati, ripetizioni consecutive e composizione/lettura dei link condivisi.
+- `pnpm test`: 17 test; copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori e composizione/lettura dei link condivisi.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
