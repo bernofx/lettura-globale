@@ -47,7 +47,7 @@ test("registra gli aiuti senza modificare la collezione precedente", () => {
   assert.equal(result[0].mode, "teaching");
 });
 
-test("non registra eventi durante un'anteprima condivisa", () => {
+test("non registra eventi durante anteprime condivise o prove", () => {
   assert.equal(shouldRecordSessionEvents(true), false);
   assert.equal(shouldRecordSessionEvents(false), true);
 });

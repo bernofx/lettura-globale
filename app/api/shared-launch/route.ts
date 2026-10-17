@@ -6,7 +6,7 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
   id?: string;
-  kind?: "recognition" | "articles" | "word-categories";
+  kind?: "recognition" | "articles" | "word-categories" | "naming";
   deleted?: boolean;
   promptId?: string;
   optionIds?: string[];
@@ -15,6 +15,8 @@ type SharedExercise = Record<string, unknown> & {
   recognitionMode?: "fixed" | "random";
   recognitionItemIds?: string[];
   recognitionCategories?: string[];
+  namingItemIds?: string[];
+  namingCategories?: string[];
 };
 type StoredState = {
   library?: Array<Record<string, unknown> & { id?: string; category?: string; deleted?: boolean }>;
@@ -48,6 +50,10 @@ export async function POST(request: Request) {
   for (const exercise of selectedExercises) {
     if (exercise.kind === "articles") exercise.articleItemIds?.forEach((id) => referencedIds.add(id));
     else if (exercise.kind === "word-categories") exercise.categoryItemIds?.forEach((id) => referencedIds.add(id));
+    else if (exercise.kind === "naming") {
+      if (exercise.namingItemIds?.length) exercise.namingItemIds.forEach((id) => referencedIds.add(id));
+      else availableLibrary.filter((item) => !exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? "")).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+    }
     else if (exercise.recognitionMode === "random") {
       if (exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
       else availableLibrary.filter((item) => !exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")).forEach((item) => { if (item.id) referencedIds.add(item.id); });
