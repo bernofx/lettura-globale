@@ -123,6 +123,10 @@ Matrice con parole sulle righe e tipologie di attività sulle colonne, separazio
 
 PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettazione: nessun finding critico/alto aperto e approvazione esplicita prima di Cloudflare produzione.
 
+### M7 — Sessioni guidate e console realtime *(wizard completato; realtime pianificato)*
+
+Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, creazione completa nel flusso, avvio rapido, riepilogo e schermata `PRONTI?`. Restano da realizzare l'interfaccia bambino priva di controlli adulto, la console mobile collegata tramite QR e il fallback adulto protetto sul PC. Queste parti richiedono autorizzazioni server-side granulari, sessioni ed eventi relazionali in D1 e uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+
 ## ADR ancora necessari
 
 1. permessi distinti fra terapista e genitore, inviti e recupero accesso;
@@ -133,3 +137,7 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 6. retention, RPO/RTO e backup;
 7. osservabilità e browser supportati;
 8. provider e governance della generazione AI: trattamento dei prompt, moderazione, budget, retention e diritti d'uso.
+9. modello della sessione e protocollo idempotente degli eventi;
+10. trasporto realtime e topologia di deploy;
+11. identità, ruoli, autorizzazioni e pairing QR;
+12. migrazione progressiva dello storico dallo snapshot JSON alle tabelle D1.
