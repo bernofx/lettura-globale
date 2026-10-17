@@ -27,3 +27,13 @@ export const therapistCredentials = sqliteTable("therapist_credentials", {
   displayName: text("display_name").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const sharedLaunches = sqliteTable("shared_launches", {
+  token: text("token").primaryKey(),
+  ownerUserId: text("owner_user_id").notNull(),
+  kind: text("kind").notNull(),
+  contentId: text("content_id").notNull(),
+  payload: text("payload").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

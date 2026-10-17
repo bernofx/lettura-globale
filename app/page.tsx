@@ -4,8 +4,8 @@ import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, Che
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRandomRecognitionRounds, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
-import { appendAttempt, appendHelp, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
-import { buildSharedLaunchUrl, parseSharedLaunch, type SharedLaunch } from "./domain/shared-launch";
+import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
+import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
 import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
@@ -24,6 +24,7 @@ type Therapist = { id: string; firstName: string; lastName: string; email: strin
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
 type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[] };
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
+type SharedPreviewPayload = { schemaVersion: 1; kind: "exercise" | "sequence"; title: string; exercises: Exercise[]; library: LibraryItem[] };
 
 const stockItems: LibraryItem[] = [
   { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
@@ -361,6 +362,18 @@ function playFeedbackTone(kind: "correct" | "wrong", enabled: boolean) {
   window.setTimeout(() => context.close().catch(() => undefined), 650);
 }
 
+function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[]) {
+  return selectedExercises.flatMap((exercise) => {
+    if (exerciseKind(exercise) !== "recognition" || recognitionModeFor(exercise) !== "random") return [exercise];
+    return createRandomRecognitionRounds(sourceLibrary, {
+      rounds: exercise.rounds ?? 6,
+      distractorCount: exercise.distractorCount ?? 3,
+      allowedIds: exercise.recognitionItemIds,
+      categories: exercise.recognitionCategories,
+    }).map((round, index) => ({ ...exercise, id: `${exercise.id}:round:${index}:${crypto.randomUUID()}`, sourceExerciseId: exercise.id, recognitionMode: "fixed" as const, promptId: round.promptId, optionIds: round.optionIds }));
+  });
+}
+
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -410,6 +423,9 @@ export default function HomePage() {
   const [quickExerciseToSave, setQuickExerciseToSave] = useState<Exercise | null>(null);
   const [sessionFromSharedLink, setSessionFromSharedLink] = useState(false);
   const [pendingSharedLaunch, setPendingSharedLaunch] = useState<SharedLaunch | null>(null);
+  const [pendingSharedPreviewToken, setPendingSharedPreviewToken] = useState<string | null>(null);
+  const [sharedPreview, setSharedPreview] = useState<SharedPreviewPayload | null>(null);
+  const [sharedPreviewStatus, setSharedPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
   const [wrongAnswerId, setWrongAnswerId] = useState<string | null>(null);
   const spokenPromptKey = useRef("");
@@ -422,11 +438,44 @@ export default function HomePage() {
     }
     const authTimer = window.setTimeout(() => {
       setPendingSharedLaunch(parseSharedLaunch(window.location.search));
+      setPendingSharedPreviewToken(parseSharedPreview(window.location.search)?.token ?? null);
       setLoggedInTherapistId(sessionStorage.getItem("lg-therapist-session"));
       setSessionChecked(true);
     }, 0);
     return () => window.clearTimeout(authTimer);
   }, []);
+
+  useEffect(() => {
+    if (!pendingSharedPreviewToken) return;
+    let cancelled = false;
+    fetch(`/api/shared-launch/${encodeURIComponent(pendingSharedPreviewToken)}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("preview_load_failed");
+        return response.json() as Promise<SharedPreviewPayload>;
+      })
+      .then((payload) => {
+        if (cancelled || payload.schemaVersion !== 1 || !payload.exercises?.length || !payload.library?.length) throw new Error("invalid_preview");
+        const plan = compileExercises(payload.exercises, payload.library.filter((item) => !item.deleted));
+        if (!plan.length) throw new Error("empty_preview");
+        setSharedPreview(payload);
+        setSessionPlan(plan);
+        setSessionRunId(crypto.randomUUID());
+        setSessionChildId("");
+        setSessionIndex(0);
+        setSessionMode("test");
+        setSessionPresentation("images");
+        setAnswerState("idle");
+        setWrongAnswerId(null);
+        setSessionComplete(false);
+        setSessionFromSharedLink(true);
+        setSessionActive(true);
+        setView("session");
+        setSharedPreviewStatus("ready");
+        window.history.replaceState({}, "", window.location.pathname);
+      })
+      .catch(() => { if (!cancelled) setSharedPreviewStatus("error"); });
+    return () => { cancelled = true; };
+  }, [pendingSharedPreviewToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -542,7 +591,8 @@ export default function HomePage() {
   const sequenceExercises = activeSequence?.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [];
   const sessionExercises = sessionPlan;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
-  const promptItem = visibleLibrary.find((item) => item.id === currentExercise?.promptId);
+  const sessionLibrary = sessionFromSharedLink && sharedPreview ? sharedPreview.library.filter((item) => !item.deleted) : visibleLibrary;
+  const promptItem = sessionLibrary.find((item) => item.id === currentExercise?.promptId);
   const promptWord = promptItem?.word;
   const childAttempts = attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id);
   const childHelps = helps.filter((help) => !help.childId || help.childId === activeChild?.id);
@@ -611,10 +661,14 @@ export default function HomePage() {
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const shareLaunch = async (launch: SharedLaunch, title: string) => {
-    const url = buildSharedLaunchUrl(window.location.origin, launch);
+    let url = "";
     try {
+      const response = await fetch("/api/shared-launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(launch) });
+      if (!response.ok) throw new Error("share_create_failed");
+      const { token } = await response.json() as { token: string };
+      url = buildSharedPreviewUrl(window.location.origin, token);
       if (navigator.share) {
-        await navigator.share({ title: `Lettura Globale · ${title}`, text: `Apri “${title}” in Lettura Globale`, url });
+        await navigator.share({ title: `Lettura Globale · ${title}`, text: `Prova “${title}” senza registrare risultati`, url });
         notify("Link condiviso");
       } else {
         await navigator.clipboard.writeText(url);
@@ -622,19 +676,12 @@ export default function HomePage() {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (!url) { notify("Non è stato possibile creare il link"); return; }
       try { await navigator.clipboard.writeText(url); notify("Link copiato negli appunti"); } catch { notify("Non è stato possibile copiare il link"); }
     }
   };
   const navigate = (next: View) => { setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const compileSession = (selectedExercises: Exercise[]) => selectedExercises.flatMap((exercise) => {
-    if (exerciseKind(exercise) !== "recognition" || recognitionModeFor(exercise) !== "random") return [exercise];
-    return createRandomRecognitionRounds(visibleLibrary, {
-      rounds: exercise.rounds ?? 6,
-      distractorCount: exercise.distractorCount ?? 3,
-      allowedIds: exercise.recognitionItemIds,
-      categories: exercise.recognitionCategories,
-    }).map((round, index) => ({ ...exercise, id: `${exercise.id}:round:${index}:${crypto.randomUUID()}`, sourceExerciseId: exercise.id, recognitionMode: "fixed" as const, promptId: round.promptId, optionIds: round.optionIds }));
-  });
+  const compileSession = (selectedExercises: Exercise[]) => compileExercises(selectedExercises, visibleLibrary);
   const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionComplete(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
   const startSequenceById = (sequenceId: string) => {
     const sequence = visibleSequences.find((item) => item.id === sequenceId);
@@ -663,7 +710,7 @@ export default function HomePage() {
     if (!currentExercise || answerState === "correct") return;
     const correct = answerId === currentExercise.promptId;
     const sessionItemId = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
-    setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId: currentExercise.sourceExerciseId ?? currentExercise.id, wordId: currentExercise.promptId, answerId, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: sessionChildId || activeChild?.id, therapistId: therapist?.id }).events);
+    if (shouldRecordSessionEvents(sessionFromSharedLink)) setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId: currentExercise.sourceExerciseId ?? currentExercise.id, wordId: currentExercise.promptId, answerId, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: sessionChildId || activeChild?.id, therapistId: therapist?.id }).events);
     setAnswerState(correct ? "correct" : "wrong");
     setWrongAnswerId(correct ? null : answerId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
@@ -674,6 +721,7 @@ export default function HomePage() {
     }
   };
   const addHelp = (label: string, wordId?: string) => {
+    if (!shouldRecordSessionEvents(sessionFromSharedLink)) return;
     const exerciseId = currentExercise?.sourceExerciseId ?? currentExercise?.id;
     if (!exerciseId) return;
     const sessionItemId = `${sessionRunId}:${exerciseId}:${sessionIndex}`;
@@ -681,11 +729,11 @@ export default function HomePage() {
     notify(`Aiuto registrato: ${label}`);
   };
   const nextExercise = () => {
-    if (sessionIndex >= sessionExercises.length - 1) { const returnHome = sessionFromSharedLink; setSessionActive(false); setSessionFromSharedLink(false); setSessionComplete(!returnHome); setAnswerState("idle"); setWrongAnswerId(null); notify("Sessione completata e salvata"); if (returnHome) setView("home"); return; }
+    if (sessionIndex >= sessionExercises.length - 1) { const returnHome = sessionFromSharedLink; setSessionActive(false); setSessionFromSharedLink(false); setSharedPreview(null); setSessionComplete(!returnHome); setAnswerState("idle"); setWrongAnswerId(null); notify(returnHome ? "Anteprima completata" : "Sessione completata e salvata"); if (returnHome) setView("home"); return; }
     setSessionIndex((index) => index + 1); setAnswerState("idle"); setWrongAnswerId(null);
   };
   const recordClassificationAttempt = (itemId: string, answer: string, correct: boolean) => {
-    if (!currentExercise) return;
+    if (!currentExercise || !shouldRecordSessionEvents(sessionFromSharedLink)) return;
     const exerciseId = currentExercise.sourceExerciseId ?? currentExercise.id;
     const sessionItemId = `${sessionRunId}:${exerciseId}:${itemId}`;
     setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId, wordId: itemId, answerId: answer, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: sessionChildId || activeChild?.id, therapistId: therapist?.id }).events);
@@ -786,7 +834,13 @@ export default function HomePage() {
     notify("Profilo bambino e dati locali collegati eliminati");
   };
 
-  if (!sessionChecked || !allLocalDataLoaded || backendStatus === "loading" || backendStatus === "migrating") return <div className="auth-loading"><Sparkles /><span>{backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Caricamento dati…"}</span></div>;
+  if (!sessionChecked || (pendingSharedPreviewToken && (sharedPreviewStatus === "idle" || sharedPreviewStatus === "loading"))) return <div className="auth-loading"><Sparkles /><span>{pendingSharedPreviewToken ? "Caricamento anteprima…" : "Caricamento dati…"}</span></div>;
+  if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
+  if (sessionFromSharedLink && sharedPreview && sessionActive) {
+    const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
+    return <main className="public-preview-shell"><SessionView active complete={false} fromSharedLink mode={sessionMode} setMode={setSessionMode} presentation={sessionPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} onCloseComplete={() => undefined} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
+  }
+  if (!allLocalDataLoaded || backendStatus === "loading" || backendStatus === "migrating") return <div className="auth-loading"><Sparkles /><span>{backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Caricamento dati…"}</span></div>;
   if (backendStatus === "error" && !backendInitialized) return <BackendErrorScreen />;
   if (!therapist) return showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
@@ -799,7 +853,7 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && <SessionView active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} mode={sessionMode} setMode={setSessionMode} presentation={sessionPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); setView("stats"); }} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={visibleLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
+        {view === "session" && <SessionView active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} mode={sessionMode} setMode={setSessionMode} presentation={sessionPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); setView("stats"); }} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
         {view === "stats" && <StatsView child={activeChild} attempts={childAttempts} helps={childHelps} exercises={visibleExercises} library={visibleLibrary} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo terapista aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Terapisti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -819,6 +873,10 @@ export default function HomePage() {
 
 function BackendErrorScreen() {
   return <main className="auth-page"><section className="login-card"><div className="auth-icon"><Cloud /></div><span className="eyebrow">SINCRONIZZAZIONE</span><h1>Il cloud non è raggiungibile</h1><p>I dati locali non sono stati cancellati. Riprova quando la connessione è disponibile.</p><button className="primary-button large" onClick={() => window.location.reload()}>Riprova</button></section></main>;
+}
+
+function PublicPreviewError() {
+  return <main className="auth-page public-preview-error"><section className="login-card"><div className="auth-icon"><AlertTriangle /></div><span className="eyebrow">ANTEPRIMA</span><h1>Link non disponibile</h1><p>Questa anteprima non esiste più oppure il collegamento non è valido.</p><button className="primary-button large" onClick={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }}>Torna alla home</button></section></main>;
 }
 
 function PublicLanding({ onLogin }: { onLogin: () => void }) {
@@ -953,7 +1011,7 @@ function RecognitionSession({ fromSharedLink, mode, presentation, currentIndex, 
     const timer = window.setTimeout(() => onNextRef.current(), presentation === "words" ? 1100 : 750);
     return () => window.clearTimeout(timer);
   }, [answerState, presentation]);
-  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}<div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; const isWrong = wrongAnswerId === id; return <button key={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>Il primo tentativo è stato registrato separatamente.</small></div>}{answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (fromSharedLink ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}</div><HelpDock onHelp={(label) => onHelp(label, prompt.id)} /></div>;
+  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{fromSharedLink ? "Anteprima" : mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}<div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; const isWrong = wrongAnswerId === id; return <button key={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<span>{item.word.toLocaleUpperCase("it-IT")}</span>{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{fromSharedLink ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}{answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (fromSharedLink ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}</div>{!fromSharedLink && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}</div>;
 }
 
 function ArticleSortSession({ fromSharedLink, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, soundEffects, onToggleSound }: { fromSharedLink: boolean; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; soundEffects: boolean; onToggleSound: () => void }) {
@@ -1000,7 +1058,7 @@ function ArticleSortSession({ fromSharedLink, exercise, library, mode, currentIn
   const completed = remainingIds.length === 0;
   const currentId = remainingIds[0];
   const currentItem = library.find((entry) => entry.id === currentId);
-  return <div className="session-screen article-session"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className="article-body"><p className="instruction">Tocca l’articolo corretto. Da computer puoi anche trascinare.</p><h1>IL O LA?</h1>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le immagini sono state abbinate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (fromSharedLink ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="article-tray single"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala da computer${wrongId === currentId ? ". Scelta errata" : ""}`} className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}><div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div><strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong></button></div><div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" className={`article-dropbox ${wrongArticle === article ? "wrong" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(article, event.dataTransfer.getData("text/plain")); }}><span>{article}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : null}</div>{currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  return <div className="session-screen article-session"><div className="session-header"><div><span className="mode-tag">{fromSharedLink ? "Anteprima" : mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className="article-body"><p className="instruction">Tocca l’articolo corretto. Da computer puoi anche trascinare.</p><h1>IL O LA?</h1>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le immagini sono state abbinate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (fromSharedLink ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="article-tray single"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala da computer${wrongId === currentId ? ". Scelta errata" : ""}`} className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}><div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div><strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong></button></div><div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" className={`article-dropbox ${wrongArticle === article ? "wrong" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(article, event.dataTransfer.getData("text/plain")); }}><span>{article}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : null}</div>{!fromSharedLink && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function WordCategorySession({ fromSharedLink, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, soundEffects, onToggleSound }: { fromSharedLink: boolean; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; soundEffects: boolean; onToggleSound: () => void }) {
@@ -1033,7 +1091,7 @@ function WordCategorySession({ fromSharedLink, exercise, library, mode, currentI
       window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongCategory((current) => current === category ? null : current); }, 900);
     }
   };
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · parola {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (fromSharedLink ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}>{currentItem.word.toLocaleUpperCase("it-IT")}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(category, event.dataTransfer.getData("text/plain")); }}><span>{category.toLocaleUpperCase("it-IT")}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{fromSharedLink ? "Anteprima" : mode === "test" ? "Valutazione" : "Insegnamento"}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · parola {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (fromSharedLink ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}>{currentItem.word.toLocaleUpperCase("it-IT")}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(category, event.dataTransfer.getData("text/plain")); }}><span>{category.toLocaleUpperCase("it-IT")}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!fromSharedLink && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {

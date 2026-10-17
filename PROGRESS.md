@@ -36,7 +36,7 @@
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
 - [x] L’amministratore può creare, associare, promuovere a supervisore ed eliminare i profili terapista non amministrativi.
-- [x] Link autenticati condivisibili per singoli esercizi e sequenze, con avvio diretto dopo l’accesso e ritorno alla Home al termine.
+- [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
 - [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
 - [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
@@ -74,7 +74,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: 20 test; copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link condivisi e accesso alle sequenze per ruolo/proprietario.
+- `pnpm test`: 22 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione delle anteprime dalle statistiche, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
