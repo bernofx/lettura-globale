@@ -330,21 +330,23 @@ function playFeedbackTone(kind: "correct" | "wrong", enabled: boolean) {
   if (!AudioContextClass) return;
   const context = new AudioContextClass();
   const now = context.currentTime;
-  const notes = kind === "correct" ? [659.25, 880] : [220, 164.81];
+  const notes = kind === "correct" ? [659.25, 880] : [118, 126];
   notes.forEach((frequency, index) => {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    const start = now + index * 0.11;
-    oscillator.type = kind === "correct" ? "sine" : "triangle";
+    const start = kind === "correct" ? now + index * 0.11 : now;
+    const duration = kind === "correct" ? 0.16 : 0.27;
+    const volume = kind === "correct" ? 0.12 : 0.1;
+    oscillator.type = kind === "correct" ? "sine" : "sawtooth";
     oscillator.frequency.setValueAtTime(frequency, start);
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain).connect(context.destination);
     oscillator.start(start);
-    oscillator.stop(start + 0.17);
+    oscillator.stop(start + duration + 0.01);
   });
-  window.setTimeout(() => context.close().catch(() => undefined), 500);
+  window.setTimeout(() => context.close().catch(() => undefined), 650);
 }
 
 export default function HomePage() {
