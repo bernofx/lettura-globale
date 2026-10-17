@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v9";
+const CACHE_NAME = "lettura-globale-v10";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -15,7 +15,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/") || url.pathname === "/signin-with-chatgpt") return;
 
   if (request.mode === "navigate") {
     event.respondWith(
