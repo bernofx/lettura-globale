@@ -20,6 +20,7 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 ## Contenuti e immagini
 
 - libreria privata di parole e immagini;
+- vocabolario iniziale organizzato nelle categorie didattiche `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, con termini semplici e facilmente rappresentabili;
 - upload JPEG/PNG/WebP validato, normalizzato e ridimensionato;
 - ricerca futura soltanto tramite API ufficiali di provider stock approvati;
 - generazione AI opzionale, attivabile dall'adulto, tramite API ufficiale di un provider approvato;
