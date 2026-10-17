@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor } from "../app/domain/activity-generation.ts";
+import { createRandomRecognitionRounds, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "../app/domain/activity-generation.ts";
 
 const candidates = [
   { id: "mela", word: "Mela", category: "Cibo" },
@@ -44,4 +44,12 @@ test("la classificazione non ripete parole nello stesso ciclo", () => {
 test("gli esercizi salvati prima della modalità casuale restano fissi", () => {
   assert.equal(recognitionModeFor({}), "fixed");
   assert.equal(recognitionModeFor({ recognitionMode: "random" }), "random");
+});
+
+test("normalizza i nomi storici delle categorie senza cambiare quelli nuovi", () => {
+  assert.equal(normalizeLearningCategory("Cibo"), "Cibi");
+  assert.equal(normalizeLearningCategory("Corpo"), "Parti del corpo");
+  assert.equal(normalizeLearningCategory("Abbigliamento"), "Vestiti");
+  assert.equal(normalizeLearningCategory("Natura"), "Oggetti della natura");
+  assert.equal(normalizeLearningCategory("Animali"), "Animali");
 });

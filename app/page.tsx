@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
+import { createRandomRecognitionRounds, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { appendAttempt, appendHelp, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
@@ -21,53 +21,103 @@ type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: Child
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 
 const stockItems: LibraryItem[] = [
-  { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibo", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "gatto", word: "Gatto", image: "/images/demo/gatto.png", category: "Animali", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
-  { id: "pane", word: "Pane", image: "/images/demo/pane.png", category: "Cibo", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "pane", word: "Pane", image: "/images/demo/pane.png", category: "Cibi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "casa", word: "Casa", image: "/images/demo/casa.png", category: "Luoghi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "palla", word: "Palla", image: "/images/demo/palla.png", category: "Giochi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
-  { id: "sole", word: "Sole", image: "/images/demo/sole.png", category: "Natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "sole", word: "Sole", image: "/images/demo/sole.png", category: "Oggetti della natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "auto", word: "Auto", image: "/images/demo/auto.png", category: "Trasporti", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
-  { id: "fiore", word: "Fiore", image: "/images/demo/fiore.png", category: "Natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
-  {"id": "caramelle", "word": "Caramelle", "image": "/images/library/caramelle.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Assorted_candies.png", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Tiia Monto"},
-  {"id": "yogurt", "word": "Yogurt", "image": "/images/library/yogurt.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Yoghurt_in_bowl_011715.jpg", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Susan Slater"},
-  {"id": "acqua", "word": "Acqua", "image": "/images/library/acqua.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Glass-of-water.jpg", "license": "Public domain", "licenseUrl": "", "author": "Derek Jensen (Tysto)"},
-  {"id": "grissini", "word": "Grissini", "image": "/images/library/grissini.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Soepstengels_(3871017999).jpg", "license": "CC BY-SA 2.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0", "author": "Sander van der Wel from Netherlands"},
-  {"id": "bocca", "word": "Bocca", "image": "/images/library/bocca.webp", "category": "Corpo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Mundpartie_014.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Norden"},
-  {"id": "schiena", "word": "Schiena", "image": "/images/library/schiena.webp", "category": "Corpo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:La_belle_jardiniere.jpg", "license": "CC BY 3.0", "licenseUrl": "https://creativecommons.org/licenses/by/3.0", "author": "Creator:Jonathan abbou"},
+  { id: "fiore", word: "Fiore", image: "/images/demo/fiore.png", category: "Oggetti della natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  {"id": "caramelle", "word": "Caramelle", "image": "/images/library/caramelle.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Assorted_candies.png", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Tiia Monto"},
+  {"id": "yogurt", "word": "Yogurt", "image": "/images/library/yogurt.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Yoghurt_in_bowl_011715.jpg", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Susan Slater"},
+  {"id": "acqua", "word": "Acqua", "image": "/images/library/acqua.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Glass-of-water.jpg", "license": "Public domain", "licenseUrl": "", "author": "Derek Jensen (Tysto)"},
+  {"id": "grissini", "word": "Grissini", "image": "/images/library/grissini.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Soepstengels_(3871017999).jpg", "license": "CC BY-SA 2.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0", "author": "Sander van der Wel from Netherlands"},
+  {"id": "bocca", "word": "Bocca", "image": "/images/library/bocca.webp", "category": "Parti del corpo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Mundpartie_014.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Norden"},
+  {"id": "schiena", "word": "Schiena", "image": "/images/library/schiena.webp", "category": "Parti del corpo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:La_belle_jardiniere.jpg", "license": "CC BY 3.0", "licenseUrl": "https://creativecommons.org/licenses/by/3.0", "author": "Creator:Jonathan abbou"},
   {"id": "telefono", "word": "Telefono", "image": "/images/library/telefono.webp", "category": "Oggetti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Idea-Aurus-III.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Sam wikione"},
-  {"id": "pigiama", "word": "Pigiama", "image": "/images/library/pigiama.webp", "category": "Abbigliamento", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pyjamas_wiki.jpg", "license": "CC BY-SA 2.5", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.5", "author": "Janmad"},
+  {"id": "pigiama", "word": "Pigiama", "image": "/images/library/pigiama.webp", "category": "Vestiti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pyjamas_wiki.jpg", "license": "CC BY-SA 2.5", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.5", "author": "Janmad"},
   {"id": "bicicletta", "word": "Bicicletta", "image": "/images/library/bicicletta.webp", "category": "Trasporti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:%D0%9A%D0%BE%D0%BB%D0%B5%D0%BB%D0%BE_%D0%9C%D0%B8%D0%BB%D0%B0%D0%BD.jpg", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "StefanZehirov"},
   {"id": "gallo", "word": "Gallo", "image": "/images/library/gallo.webp", "category": "Animali", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rooster04_adjusted.jpg", "license": "GFDL 1.2", "licenseUrl": "http://www.gnu.org/licenses/old-licenses/fdl-1.2.html", "author": "User:Fir0002"},
-  {"id": "gelato", "word": "Gelato", "image": "/images/library/gelato.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ice_cream_cone_-_superman_flavor.jpg", "license": "CC BY 2.0", "licenseUrl": "https://creativecommons.org/licenses/by/2.0", "author": "Ben Dominguez-Benner"},
+  {"id": "gelato", "word": "Gelato", "image": "/images/library/gelato.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ice_cream_cone_-_superman_flavor.jpg", "license": "CC BY 2.0", "licenseUrl": "https://creativecommons.org/licenses/by/2.0", "author": "Ben Dominguez-Benner"},
   {"id": "maiale", "word": "Maiale", "image": "/images/library/maiale.webp", "category": "Animali", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tamworth_Pig_in_Camperdown_Zoo_-_geograph.org.uk_-_902120.jpg", "license": "CC BY-SA 2.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0", "author": "Mike Pennington"},
   {"id": "coniglio", "word": "Coniglio", "image": "/images/library/coniglio.webp", "category": "Animali", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Lapin_blanc.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "http://creativecommons.org/licenses/by-sa/3.0/", "author": "Fabien1309"},
-  {"id": "maglietta", "word": "Maglietta", "image": "/images/library/maglietta.webp", "category": "Abbigliamento", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Inuit_t-shirt_from_Greenland.png", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Roberto Fortuna"},
-  {"id": "piadina", "word": "Piadina", "image": "/images/library/piadina.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Piadina.jpg", "license": "CC BY-SA 2.5", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.5", "author": "Kobako"},
-  {"id": "giacca", "word": "Giacca", "image": "/images/library/giacca.webp", "category": "Abbigliamento", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Windbreaker_Jacket,_Hood_Outside.jpg", "license": "Public domain", "licenseUrl": "", "author": "Ingolfson"},
+  {"id": "maglietta", "word": "Maglietta", "image": "/images/library/maglietta.webp", "category": "Vestiti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Inuit_t-shirt_from_Greenland.png", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Roberto Fortuna"},
+  {"id": "piadina", "word": "Piadina", "image": "/images/library/piadina.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Piadina.jpg", "license": "CC BY-SA 2.5", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.5", "author": "Kobako"},
+  {"id": "giacca", "word": "Giacca", "image": "/images/library/giacca.webp", "category": "Vestiti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Windbreaker_Jacket,_Hood_Outside.jpg", "license": "Public domain", "licenseUrl": "", "author": "Ingolfson"},
   {"id": "camion", "word": "Camion", "image": "/images/library/camion.webp", "category": "Trasporti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Steam_Whistle_Mack_truck_20110613-IMG_3584.JPG", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Matti Blume"},
   {"id": "granchio", "word": "Granchio", "image": "/images/library/granchio.webp", "category": "Animali", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ocypode-ceratophthalma-horned-ghost-crab-krabi-thailand.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "Rushenb"},
-  {"id": "coca-cola", "word": "Coca Cola", "image": "/images/library/coca-cola.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Coca-cola_50cl_can_-_Italia.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "M0tty"},
-  {"id": "carota", "word": "Carota", "image": "/images/library/carota.webp", "category": "Cibo", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Carrots_..jpg", "license": "CC0", "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en", "author": "Wilfredor"},
+  {"id": "coca-cola", "word": "Coca Cola", "image": "/images/library/coca-cola.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Coca-cola_50cl_can_-_Italia.jpg", "license": "CC BY-SA 3.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0", "author": "M0tty"},
+  {"id": "carota", "word": "Carota", "image": "/images/library/carota.webp", "category": "Cibi", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Carrots_..jpg", "license": "CC0", "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en", "author": "Wilfredor"},
   {"id": "sedia", "word": "Sedia", "image": "/images/library/sedia.webp", "category": "Casa", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Asahikawa_furniture_chair.jpg", "license": "CC BY-SA 4.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0", "author": "Nissy-KITAQ"},
   {"id": "barca", "word": "Barca", "image": "/images/library/barca.webp", "category": "Trasporti", "source": "Wikimedia Commons", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Small_boat_at_high_water_on_the_Ythan_Estuary_-_geograph.org.uk_-_612559.jpg", "license": "CC BY-SA 2.0", "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0", "author": "Martyn Gorman"},
   { id: "cane", word: "Cane", emoji: "🐕", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "pesce", word: "Pesce", emoji: "🐟", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "mucca", word: "Mucca", emoji: "🐄", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "uccello", word: "Uccello", emoji: "🐦", category: "Animali", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "banana", word: "Banana", emoji: "🍌", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "pera", word: "Pera", emoji: "🍐", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "latte", word: "Latte", emoji: "🥛", category: "Cibo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "banana", word: "Banana", emoji: "🍌", category: "Cibi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "pera", word: "Pera", emoji: "🍐", category: "Cibi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "latte", word: "Latte", emoji: "🥛", category: "Cibi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "letto", word: "Letto", emoji: "🛏️", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "porta", word: "Porta", emoji: "🚪", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "libro", word: "Libro", emoji: "📖", category: "Scuola", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "matita", word: "Matita", emoji: "✏️", category: "Scuola", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "scarpa", word: "Scarpa", emoji: "👟", category: "Oggetti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "mano", word: "Mano", emoji: "✋", category: "Corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "occhio", word: "Occhio", emoji: "👁️", category: "Corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "luna", word: "Luna", emoji: "🌙", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
-  { id: "albero", word: "Albero", emoji: "🌳", category: "Natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "mano", word: "Mano", emoji: "✋", category: "Parti del corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "occhio", word: "Occhio", emoji: "👁️", category: "Parti del corpo", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "luna", word: "Luna", emoji: "🌙", category: "Oggetti della natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "albero", word: "Albero", emoji: "🌳", category: "Oggetti della natura", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "treno", word: "Treno", emoji: "🚆", category: "Trasporti", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
+  { id: "rana", word: "Rana", emoji: "🐸", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "topo", word: "Topo", emoji: "🐭", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "orso", word: "Orso", emoji: "🐻", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: null },
+  { id: "volpe", word: "Volpe", emoji: "🦊", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "zebra", word: "Zebra", emoji: "🦓", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "tigre", word: "Tigre", emoji: "🐯", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "lepre", word: "Lepre", emoji: "🐇", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "gufo", word: "Gufo", emoji: "🦉", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "ape", word: "Ape", emoji: "🐝", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: null },
+  { id: "mosca", word: "Mosca", emoji: "🪰", category: "Animali", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "naso", word: "Naso", emoji: "👃", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "dito", word: "Dito", emoji: "☝️", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "piede", word: "Piede", emoji: "🦶", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "gamba", word: "Gamba", emoji: "🦵", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "braccio", word: "Braccio", emoji: "💪", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "spalla", word: "Spalla", emoji: "🧍", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "collo", word: "Collo", emoji: "🧣", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "pancia", word: "Pancia", emoji: "🫃", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "dente", word: "Dente", emoji: "🦷", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "testa", word: "Testa", emoji: "🙂", category: "Parti del corpo", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "gonna", word: "Gonna", emoji: "👗", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "calza", word: "Calza", emoji: "🧦", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "guanto", word: "Guanto", emoji: "🧤", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "felpa", word: "Felpa", emoji: "🧥", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "tuta", word: "Tuta", emoji: "🥋", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "borsa", word: "Borsa", emoji: "👜", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "fascia", word: "Fascia", emoji: "🎽", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "sciarpa", word: "Sciarpa", emoji: "🧣", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "casco", word: "Casco", emoji: "⛑️", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "cuffia", word: "Cuffia", emoji: "🧢", category: "Vestiti", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "sasso", word: "Sasso", emoji: "🪨", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "roccia", word: "Roccia", emoji: "🪨", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "foglia", word: "Foglia", emoji: "🍃", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "ramo", word: "Ramo", emoji: "🌿", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "tronco", word: "Tronco", emoji: "🪵", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "prato", word: "Prato", emoji: "🌱", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "monte", word: "Monte", emoji: "⛰️", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "mare", word: "Mare", emoji: "🌊", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "lago", word: "Lago", emoji: "🏞️", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "neve", word: "Neve", emoji: "❄️", category: "Oggetti della natura", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "pasta", word: "Pasta", emoji: "🍝", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "pizza", word: "Pizza", emoji: "🍕", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "riso", word: "Riso", emoji: "🍚", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "pollo", word: "Pollo", emoji: "🍗", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "torta", word: "Torta", emoji: "🍰", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "uovo", word: "Uovo", emoji: "🥚", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: null },
+  { id: "burro", word: "Burro", emoji: "🧈", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "IL" },
+  { id: "zuppa", word: "Zuppa", emoji: "🥣", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "pesca", word: "Pesca", emoji: "🍑", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
+  { id: "noce", word: "Noce", emoji: "🌰", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
 ];
 const initialRecognitionExercises: Exercise[] = [
   { id: "ex-mela", title: "Trova la mela", promptId: "mela", optionIds: ["mela", "gatto", "pane"], updatedAt: "Oggi" },
@@ -99,7 +149,7 @@ const initialRecognitionExercises: Exercise[] = [
 ];
 const initialArticleExercise: Exercise = { id: "ex-articles-il-la", title: "Classifica IL o LA", kind: "articles", promptId: "", optionIds: [], articleItemIds: ["mela", "gatto", "pane", "casa", "palla", "sole"], rounds: 6, updatedAt: "Oggi" };
 const initialRandomRecognitionExercise: Exercise = { id: "ex-recognition-random", title: "Trova la parola · casuale", kind: "recognition", recognitionMode: "random", promptId: "", optionIds: [], recognitionItemIds: [], recognitionCategories: [], distractorCount: 3, rounds: 6, updatedAt: "Oggi" };
-const initialWordCategoryExercise: Exercise = { id: "ex-word-categories", title: "Metti la parola nella categoria", kind: "word-categories", promptId: "", optionIds: [], categoryItemIds: ["mela", "pane", "gatto", "cane", "auto", "treno"], categoryNames: ["Cibo", "Animali", "Trasporti"], rounds: 6, updatedAt: "Oggi" };
+const initialWordCategoryExercise: Exercise = { id: "ex-word-categories", title: "Metti la parola nella categoria", kind: "word-categories", promptId: "", optionIds: [], categoryItemIds: ["mela", "pane", "gatto", "cane", "auto", "treno"], categoryNames: ["Cibi", "Animali", "Trasporti"], rounds: 6, updatedAt: "Oggi" };
 const initialExercises: Exercise[] = [initialRandomRecognitionExercise, initialArticleExercise, initialWordCategoryExercise, ...initialRecognitionExercises];
 const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: [initialRandomRecognitionExercise.id, initialArticleExercise.id, initialWordCategoryExercise.id] }];
 const helpTypes = ["Indicazione verbale", "Gesto", "Riduci le opzioni", "Evidenzia", "Dimostrazione"];
@@ -113,7 +163,7 @@ const articlesById: Record<string, Article> = {
 };
 const articleFor = (item: LibraryItem) => item.article !== undefined ? item.article ?? undefined : articlesById[item.id];
 const exerciseKind = (exercise: Exercise): SessionActivity => exercise.kind ?? "recognition";
-const libraryCategories = ["Cibo", "Animali", "Corpo", "Casa", "Abbigliamento", "Trasporti", "Oggetti", "Scuola", "Luoghi", "Giochi", "Natura", "Altro"];
+const libraryCategories = ["Animali", "Parti del corpo", "Vestiti", "Oggetti della natura", "Cibi", "Casa", "Trasporti", "Oggetti", "Scuola", "Luoghi", "Giochi", "Altro"];
 const initialAdministrator: Therapist = { id: "admin-giuseppe", firstName: "Giuseppe", lastName: "Bernasconi", email: "giuseppe.bernasconi@letturaglobale.demo", role: "Amministratore", pinHash: "a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972", childIds: ["child-luca", "child-sara"] };
 const initialTherapists: Therapist[] = [
   initialAdministrator,
@@ -133,8 +183,17 @@ function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
 function hydrateLibrary(items: LibraryItem[]) {
   return mergeById(items, stockItems).map((item) => {
     const demoItem = stockItems.find((candidate) => candidate.id === item.id);
-    return demoItem?.image && !item.privateUpload ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
+    const hydratedItem = demoItem?.image && !item.privateUpload ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
+    return { ...hydratedItem, category: normalizeLearningCategory(hydratedItem.category) };
   });
+}
+
+function hydrateExercises(items: Exercise[]) {
+  return mergeById(items, initialExercises).map((exercise) => ({
+    ...exercise,
+    categoryNames: exercise.categoryNames?.map(normalizeLearningCategory),
+    recognitionCategories: exercise.recognitionCategories?.map(normalizeLearningCategory),
+  }));
 }
 
 function libraryForStorage(items: LibraryItem[]) {
@@ -302,7 +361,7 @@ export default function HomePage() {
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
-  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, (saved) => mergeById(saved, initialExercises));
+  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
   const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, (saved) => mergeById(saved, initialSequences));
   const [activeSequenceId, setActiveSequenceId, activeSequenceLoaded] = useStoredState<string>("lg-active-sequence", initialSequences[0].id);
   const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
@@ -387,7 +446,7 @@ export default function HomePage() {
         setChildren(saved.children?.length ? saved.children : initialChildren);
         setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
         setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-        setExercises(mergeById(saved.exercises ?? [], initialExercises));
+        setExercises(hydrateExercises(saved.exercises ?? []));
         setSequences(mergeById(saved.sequences ?? [], initialSequences));
         setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
         setAttempts(saved.attempts ?? []);
@@ -996,7 +1055,7 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
   const articleCandidates = useMemo(() => library.filter((item) => articleFor(item)), [library]);
   const [articleItemIds, setArticleItemIds] = useState<string[]>(exercise?.articleItemIds ?? articleCandidates.slice(0, 6).map((item) => item.id));
   const availableCategories = useMemo(() => Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
-  const defaultCategoryNames = ["Cibo", "Animali", "Trasporti"].filter((category) => availableCategories.includes(category));
+  const defaultCategoryNames = ["Cibi", "Animali", "Trasporti"].filter((category) => availableCategories.includes(category));
   const [categoryNames, setCategoryNames] = useState<string[]>(exercise?.categoryNames ?? defaultCategoryNames);
   const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? defaultCategoryNames.flatMap((category) => library.filter((item) => item.category === category).slice(0, 3).map((item) => item.id)));
   const [rounds, setRounds] = useState(exercise?.rounds ?? 6);

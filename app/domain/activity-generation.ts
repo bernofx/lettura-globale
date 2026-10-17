@@ -16,6 +16,17 @@ export type RecognitionRound = {
   optionIds: string[];
 };
 
+const learningCategoryAliases: Record<string, string> = {
+  Cibo: "Cibi",
+  Corpo: "Parti del corpo",
+  Abbigliamento: "Vestiti",
+  Natura: "Oggetti della natura",
+};
+
+export function normalizeLearningCategory(category: string) {
+  return learningCategoryAliases[category] ?? category;
+}
+
 export function recognitionModeFor(exercise: { recognitionMode?: "fixed" | "random" }) {
   return exercise.recognitionMode ?? "fixed";
 }
