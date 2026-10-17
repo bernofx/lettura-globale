@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendAttempt, appendHelp, type AttemptEvent, type HelpEventRecord } from "../app/domain/session-events.ts";
+import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord } from "../app/domain/session-events.ts";
 
 const baseAttempt = {
   sessionId: "session-1",
@@ -45,4 +45,9 @@ test("registra gli aiuti senza modificare la collezione precedente", () => {
   assert.deepEqual(result, [event]);
   assert.equal(result[0].wordId, "schiena");
   assert.equal(result[0].mode, "teaching");
+});
+
+test("non registra eventi durante un'anteprima condivisa", () => {
+  assert.equal(shouldRecordSessionEvents(true), false);
+  assert.equal(shouldRecordSessionEvents(false), true);
 });

@@ -7,7 +7,7 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 ## Vincoli di prodotto
 
 - esercizi singoli e sequenze salvabili;
-- esercizi singoli e sequenze condivisibili tramite link autenticato, con apertura diretta dell’attività assegnata;
+- esercizi singoli e sequenze condivisibili tramite link pubblico di anteprima, senza login e senza registrazione di statistiche;
 - `Trova la parola` casuale come modalità standard, con configurazione fissa avanzata;
 - classificazione di immagini per articolo e di parole per categorie configurabili;
 - feedback visivo, testuale e sonoro disattivabile;
@@ -58,7 +58,7 @@ Configurazione iniziale proposta per la valutazione: OpenAI Images API con model
 - API versionate e convalida degli input al confine server;
 - ambienti dev, staging e prod completamente separati.
 
-La demo è pubblicata tramite ChatGPT Sites su runtime Cloudflare Workers. La pagina iniziale è pubblica, mentre API, pannello e file privati richiedono la sessione dell'applicazione: D1 conserva lo stato per account e le credenziali dei profili adulto, R2 conserva le immagini private e il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i terapisti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
+La demo è pubblicata tramite ChatGPT Sites su runtime Cloudflare Workers. La pagina iniziale e le anteprime condivise sono pubbliche, mentre pannello e dati privati richiedono la sessione dell'applicazione. D1 conserva lo stato per account, le credenziali dei profili adulto e gli snapshot minimali delle anteprime protetti da token casuali; R2 conserva le immagini e le rende disponibili all’anteprima soltanto tramite il relativo token. Il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i terapisti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
 
 La demo viene aggiornata su ChatGPT Sites durante lo sviluppo. La pubblicazione autonoma su Cloudflare resta sospesa fino a quando il prodotto sarà stabile e consolidato; a quel punto Workers, D1 e R2 saranno promossi attraverso ambienti separati e una pipeline approvata. Lo snapshot JSON attuale riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
 
