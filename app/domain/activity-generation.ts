@@ -7,6 +7,7 @@ export type ActivityCandidate = {
 export type RandomRecognitionConfig = {
   rounds: number;
   distractorCount: 1 | 2 | 3 | 4;
+  distractorSource?: "mixed" | "same-category";
   allowedIds?: string[];
   categories?: string[];
 };
@@ -29,6 +30,11 @@ export function normalizeLearningCategory(category: string) {
 
 export function recognitionModeFor(exercise: { recognitionMode?: "fixed" | "random" }) {
   return exercise.recognitionMode ?? "fixed";
+}
+
+export function hasSameCategoryDistractors(candidates: ActivityCandidate[], distractorCount: number) {
+  const categoryCounts = candidates.reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.category]: (counts[item.category] ?? 0) + 1 }), {});
+  return Object.values(categoryCounts).some((count) => count >= distractorCount + 1);
 }
 
 function shuffledWith<T>(items: T[], random: () => number) {
@@ -56,14 +62,15 @@ export function createRandomRecognitionRounds(candidates: ActivityCandidate[], c
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
   const pool = candidates.filter((item) => (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)));
-  if (pool.length < 2) return [];
+  const promptPool = config.distractorSource === "same-category"
+    ? pool.filter((prompt) => pool.filter((item) => item.id !== prompt.id && item.category === prompt.category).length >= config.distractorCount)
+    : pool;
+  if (promptPool.length < 1 || pool.length < 2) return [];
 
-  return promptOrder(pool, Math.max(1, config.rounds), random).map((prompt) => {
+  return promptOrder(promptPool, Math.max(1, config.rounds), random).map((prompt) => {
     const alternatives = pool.filter((item) => item.id !== prompt.id);
-    const sameCategory = shuffledWith(alternatives.filter((item) => item.category === prompt.category), random);
-    const similar = shuffledWith(alternatives.filter((item) => item.category !== prompt.category && (item.word[0]?.toLocaleLowerCase("it-IT") === prompt.word[0]?.toLocaleLowerCase("it-IT") || Math.abs(item.word.length - prompt.word.length) <= 2)), random);
-    const remaining = shuffledWith(alternatives.filter((item) => !sameCategory.some((candidate) => candidate.id === item.id) && !similar.some((candidate) => candidate.id === item.id)), random);
-    const distractors = [...sameCategory, ...similar, ...remaining].slice(0, Math.min(config.distractorCount, alternatives.length));
+    const eligibleDistractors = config.distractorSource === "same-category" ? alternatives.filter((item) => item.category === prompt.category) : alternatives;
+    const distractors = shuffledWith(eligibleDistractors, random).slice(0, Math.min(config.distractorCount, eligibleDistractors.length));
     return { promptId: prompt.id, optionIds: shuffledWith([prompt, ...distractors].map((item) => item.id), random) };
   });
 }
