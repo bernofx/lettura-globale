@@ -109,7 +109,7 @@ Provider ufficiali, import sicuro, metadati di provenienza e generazione AI faco
 
 ### M3 — Esercizi e sequenze *(flusso applicativo completato)*
 
-Configurazione separata dall'avvio, con creazione, anteprima, duplicazione, riordino, generazione casuale, classificazioni, versioni e validazione. Le prove avviate dalla configurazione non alimentano le statistiche e, al termine o alla chiusura, riportano alla schermata di provenienza. La navigazione interna usa la cronologia del browser. Le sequenze appartengono al terapista che le crea; supervisori e amministratori possono consultarle tutte con proprietario esplicito. Accettazione: flusso completo desktop e touch.
+Configurazione separata dall'avvio, con creazione, anteprima, duplicazione, riordino, generazione casuale, classificazioni, versioni e validazione. Il catalogo include `Mix and vary`: mostra una foto senza testo e affida all’adulto la registrazione dell’esito e dell’eventuale aiuto. Le prove avviate dalla configurazione non alimentano le statistiche e, al termine o alla chiusura, riportano alla schermata di provenienza. La navigazione interna usa la cronologia del browser. Le sequenze appartengono al terapista che le crea; supervisori e amministratori possono consultarle tutte con proprietario esplicito. Accettazione: flusso completo desktop e touch.
 
 ### M4 — Sessioni *(flusso applicativo e test dominio completati)*
 
@@ -117,7 +117,7 @@ Insegnamento, verifica, aiuti e idempotenza. Accettazione: un solo primo tentati
 
 ### M5 — Statistiche *(nuova sintesi applicativa completata; validazione sul campo da fare)*
 
-Matrice con parole sulle righe e tipologie di attività sulle colonne, separazione fra valutazione e insegnamento, andamento mensile, aiuti per parola, azzeramento controllato ed export. Accettazione: risultati verificati su dataset noto, leggibilità validata con terapista e accesso riservato all'adulto.
+Matrice con parole sulle righe e tipologie di attività sulle colonne, compreso `Mix and vary`, separazione fra valutazione e insegnamento, andamento mensile, aiuti per parola, azzeramento controllato ed export. Accettazione: risultati verificati su dataset noto, leggibilità validata con terapista e accesso riservato all'adulto.
 
 ### M6 — Hardening e pilot
 

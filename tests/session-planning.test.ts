@@ -34,3 +34,9 @@ test("trova la parola richiede abbastanza elementi per tutti i distrattori", () 
   assert.equal(quickStartIsValid({ ...base, distractorCount: 4 }, 4), false);
   assert.equal(quickStartIsValid({ ...base, distractorCount: 4 }, 5), true);
 });
+
+test("mix and vary richiede almeno un'immagine", () => {
+  const config = { activity: "naming" as const, selection: "all" as const, categoryNames: [], itemIds: [] };
+  assert.equal(quickStartIsValid(config, 0), false);
+  assert.equal(quickStartIsValid(config, 1), true);
+});

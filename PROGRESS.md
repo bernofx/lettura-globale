@@ -10,14 +10,15 @@
 
 - [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
 - [x] Landing pubblica separata dal pannello adulto autenticato.
-- [x] Sessione applicativa server-side e accesso ai profili terapista con email e PIN.
-- [x] Profilo amministratore iniziale, creazione di terapisti e associazione molti-a-molti fra terapisti e bambini.
+- [x] Sessione applicativa server-side e accesso ai profili adulti con email e PIN.
+- [x] Profili `Amministratore`, `Genitore`, `Supervisore` e `Terapista`; creazione e associazione molti-a-molti fra adulti e bambini.
 - [x] Stato sincronizzato per account in Cloudflare D1; copia locale usata per reattività e migrazione.
 - [x] Immagini private ottimizzate nel browser, caricate in Cloudflare R2 e servite da endpoint autenticato.
 - [x] Selezione e modifica dei profili terapista/bambino; tentativi, aiuti e statistiche associati al bambino attivo.
 - [x] Libreria con ricerca, metadati, upload, sostituzione, eliminazione e assegnazione `IL / LA` persistenti.
 - [x] Catalogo ampliato con 50 parole bisillabiche, dieci per ciascuna delle categorie `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, predisposte per la sostituzione dell'emoji con una fotografia.
 - [x] Migrazione trasparente dei nomi storici delle categorie negli elementi e negli esercizi già salvati.
+- [x] Migrazione automatica dei doppioni: una foto privata caricata prevale sul placeholder omonimo, che viene disattivato, e i riferimenti degli esercizi vengono riallineati.
 - [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
 - [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
 - [x] Configurazione separata dall'avvio: creazione, selezione, rinomina, riordino e cancellazione logica di esercizi e sequenze in un solo pannello.
@@ -29,13 +30,14 @@
 - [x] Generazione dei distrattori senza duplicati, con priorità alla stessa categoria e senza ripetizioni consecutive della parola-obiettivo.
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
 - [x] Esercizio `Parola nella categoria` configurabile, inseribile nelle sequenze e utilizzabile con tocco o trascinamento.
+- [x] Esercizio `Mix and vary`: una foto senza testo alla volta, scelta casuale o configurata, esito corretto/errato e indicatore di aiuto registrati dall’adulto.
 - [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.
 - [x] `Trova la parola` avanza automaticamente dopo la risposta corretta, con spunta verde temporanea; l'errore mostra una X rossa temporanea e mantiene il turno corrente.
 - [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
-- [x] L’amministratore può creare, associare, promuovere a supervisore ed eliminare i profili terapista non amministrativi.
+- [x] L’amministratore può creare, associare, cambiare ruolo ed eliminare i profili adulti non amministrativi.
 - [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
 - [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
 - [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
@@ -64,7 +66,7 @@
 
 1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
-3. Introdurre autorizzazioni server-side granulari per amministratore, terapista, genitore e bambino.
+3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
 4. Migrare sessioni, trial, tentativi e aiuti verso tabelle D1 relazionali e idempotenti.
 5. Aggiungere controllo di revisione allo snapshot D1 e gestione esplicita dei conflitti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
@@ -75,7 +77,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: 22 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
+- `pnpm test`: 25 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, generazione casuale, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
