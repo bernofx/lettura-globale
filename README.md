@@ -12,13 +12,14 @@ Funzioni disponibili:
 - pagina iniziale pubblica e accesso al pannello adulto con PIN;
 - profili adulti `Amministratore`, `Genitore`, `Supervisore` e `Terapista`, con gestione centralizzata da parte dell’amministratore;
 - scelta fra i bambini associati, modifica ed eliminazione protetta dei profili;
-- libreria di parole e immagini con provenienza, licenza e rimozione automatica dei placeholder duplicati quando è disponibile una foto caricata;
+- libreria di parole e immagini con provenienza, licenza, cancellazione logica e rimozione automatica dei placeholder duplicati quando è disponibile una foto caricata;
 - upload privato con dichiarazione del diritto d'uso;
 - esercizi singoli e più sequenze salvabili, anche miste, associate al terapista proprietario, compresa l’attività `Mix and vary` con valutazione manuale dell’adulto;
 - avvio rapido di una singola attività o di una sequenza scelta;
 - modalità insegnamento e valutazione separate;
 - primo tentativo distinto dalle correzioni;
 - aiuti scelti dall'adulto e registrati per parola;
+- storico persistente per bambino con riepilogo immediato degli errori, dettaglio delle risposte, miniature e valutazione testuale della sessione;
 - matrice dei risultati per parola e attività, andamento mensile ed export CSV.
 
 ## Sviluppo
