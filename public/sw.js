@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v10";
+const CACHE_NAME = "lettura-globale-v11";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {

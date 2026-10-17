@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 16 ottobre 2026
+**Aggiornato:** 17 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -22,7 +22,11 @@
 - [x] Anteprima `Prova` collegata all'esercizio selezionato.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.
+- [x] Modalità casuale standard per `Trova la parola`, con 3/4 distrattori, filtri per parole e categorie e modalità fissa avanzata.
+- [x] Generazione dei distrattori senza duplicati, con priorità alla stessa categoria e senza ripetizioni consecutive della parola-obiettivo.
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
+- [x] Esercizio `Parola nella categoria` configurabile, inseribile nelle sequenze e utilizzabile con tocco o trascinamento.
+- [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.
 - [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
@@ -59,7 +63,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: copre primo tentativo, correzione, doppio tap e aiuti.
+- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, assenza di duplicati e ripetizioni consecutive.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
