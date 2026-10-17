@@ -34,6 +34,7 @@
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
 - [x] L’amministratore può creare, associare ed eliminare i profili terapista non amministrativi.
+- [x] Link autenticati condivisibili per singoli esercizi e sequenze, con avvio diretto dopo l’accesso e ritorno alla Home al termine.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 
 ## Scelte di persistenza e costo
@@ -65,7 +66,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, assenza di duplicati e ripetizioni consecutive.
+- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, assenza di duplicati, ripetizioni consecutive e composizione/lettura dei link condivisi.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.

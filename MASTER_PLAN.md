@@ -7,6 +7,7 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 ## Vincoli di prodotto
 
 - esercizi singoli e sequenze salvabili;
+- esercizi singoli e sequenze condivisibili tramite link autenticato, con apertura diretta dell’attività assegnata;
 - `Trova la parola` casuale come modalità standard, con configurazione fissa avanzata;
 - classificazione di immagini per articolo e di parole per categorie configurabili;
 - feedback visivo, testuale e sonoro disattivabile;
