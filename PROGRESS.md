@@ -20,7 +20,8 @@
 - [x] Migrazione trasparente dei nomi storici delle categorie negli elementi e negli esercizi già salvati.
 - [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
 - [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
-- [x] Creazione, selezione, rinomina, riordino e cancellazione logica delle sequenze; sequenza attiva salvata in D1.
+- [x] Configurazione separata dall'avvio: creazione, selezione, rinomina, riordino e cancellazione logica di esercizi e sequenze in un solo pannello.
+- [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
 - [x] Anteprima `Prova` collegata all'esercizio selezionato.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.
@@ -34,10 +35,10 @@
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
-- [x] L’amministratore può creare, associare ed eliminare i profili terapista non amministrativi.
+- [x] L’amministratore può creare, associare, promuovere a supervisore ed eliminare i profili terapista non amministrativi.
 - [x] Link autenticati condivisibili per singoli esercizi e sequenze, con avvio diretto dopo l’accesso e ritorno alla Home al termine.
-- [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, riepilogo e schermata `PRONTI?`.
-- [x] Creazione completa di una sequenza durante l’avvio, con scelta, creazione e riordino degli esercizi, salvataggio e partenza immediata.
+- [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
+- [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 
@@ -73,9 +74,9 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: 17 test; copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori e composizione/lettura dei link condivisi.
+- `pnpm test`: 20 test; copre primo tentativo, correzione, doppio tap, aiuti, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link condivisi e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
 - Pubblicazione Sites successiva alla verifica corrente, con binding D1/R2 invariati.
-- Browser QA prevista su sequenza mista, configuratore IL/LA, ordine stabile delle risposte, statistiche e cancellazione terapista.
+- Browser QA automatizzata locale non disponibile su questa macchina perché il runtime Workers/Miniflare termina con `ERR_RUNTIME_FAILURE`; build e verifiche statiche sono completati.

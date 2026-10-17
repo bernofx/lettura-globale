@@ -109,7 +109,7 @@ Provider ufficiali, import sicuro, metadati di provenienza e generazione AI faco
 
 ### M3 — Esercizi e sequenze *(flusso applicativo completato)*
 
-Creazione, anteprima, duplicazione, riordino, generazione casuale, classificazioni, versioni e validazione. Accettazione: flusso completo desktop e touch.
+Configurazione separata dall'avvio, con creazione, anteprima, duplicazione, riordino, generazione casuale, classificazioni, versioni e validazione. Le sequenze appartengono al terapista che le crea; supervisori e amministratori possono consultarle tutte con proprietario esplicito. Accettazione: flusso completo desktop e touch.
 
 ### M4 — Sessioni *(flusso applicativo e test dominio completati)*
 
@@ -125,7 +125,7 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 
 ### M7 — Sessioni guidate e console realtime *(wizard completato; realtime pianificato)*
 
-Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, creazione completa nel flusso, avvio rapido, riepilogo e schermata `PRONTI?`. Restano da realizzare l'interfaccia bambino priva di controlli adulto, la console mobile collegata tramite QR e il fallback adulto protetto sul PC. Queste parti richiedono autorizzazioni server-side granulari, sessioni ed eventi relazionali in D1 e uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`; la creazione delle sequenze resta nel pannello Configurazione. Restano da realizzare l'interfaccia bambino priva di controlli adulto, la console mobile collegata tramite QR e il fallback adulto protetto sul PC. Queste parti richiedono autorizzazioni server-side granulari, sessioni ed eventi relazionali in D1 e uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 
 ## ADR ancora necessari
 
