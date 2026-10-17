@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRandomRecognitionRounds, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "../app/domain/activity-generation.ts";
+import { createRandomRecognitionRounds, hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "../app/domain/activity-generation.ts";
 
 const candidates = [
   { id: "mela", word: "Mela", category: "Cibo" },
@@ -34,12 +34,32 @@ test("supporta sessioni semplificate con uno o due distrattori", () => {
   }
 });
 
+test("usa tutta la selezione per impostazione predefinita", () => {
+  const rounds = createRandomRecognitionRounds(candidates, { rounds: 6, distractorCount: 2 }, deterministic);
+  assert.ok(rounds.some((round) => {
+    const prompt = candidates.find((item) => item.id === round.promptId)!;
+    return round.optionIds.some((id) => candidates.find((item) => item.id === id)?.category !== prompt.category);
+  }));
+});
+
+test("limita i distrattori alla stessa categoria solo quando richiesto", () => {
+  const rounds = createRandomRecognitionRounds(candidates, { rounds: 4, distractorCount: 1, distractorSource: "same-category" }, deterministic);
+  assert.equal(rounds.length, 4);
+  rounds.forEach((round) => {
+    const categories = round.optionIds.map((id) => candidates.find((item) => item.id === id)?.category);
+    assert.equal(new Set(categories).size, 1);
+  });
+  assert.equal(hasSameCategoryDistractors(candidates, 1), true);
+  assert.equal(hasSameCategoryDistractors(candidates, 2), true);
+  assert.equal(hasSameCategoryDistractors(candidates.filter((item) => item.category === "Animali"), 2), false);
+});
+
 test("evita la stessa parola in due turni consecutivi", () => {
   const rounds = createRandomRecognitionRounds(candidates, { rounds: 12, distractorCount: 3 }, deterministic);
   rounds.slice(1).forEach((round, index) => assert.notEqual(round.promptId, rounds[index].promptId));
 });
 
-test("rispetta filtri e categorie e privilegia distrattori della stessa categoria", () => {
+test("rispetta i filtri per categoria della libreria", () => {
   const rounds = createRandomRecognitionRounds(candidates, { rounds: 2, distractorCount: 3, categories: ["Animali"] }, deterministic);
   assert.equal(rounds.length, 2);
   assert.ok(rounds.every((round) => ["gatto", "cane"].includes(round.promptId)));
