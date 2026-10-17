@@ -82,6 +82,7 @@
 
 - Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
+- Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
 - `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.

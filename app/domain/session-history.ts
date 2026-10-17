@@ -23,6 +23,7 @@ export type SessionHistoryItem = {
   exerciseId: string;
   exerciseTitle: string;
   kind: "recognition" | "articles" | "word-categories" | "naming";
+  presentation?: "images" | "words";
   target?: HistoryImageSnapshot;
   options: HistoryImageSnapshot[];
   responses: SessionHistoryResponse[];
@@ -37,7 +38,7 @@ export type SessionHistoryRecord = {
   title: string;
   source: "sequence" | "quick";
   mode: SessionMode;
-  presentation: "images" | "words";
+  presentation: "images" | "words" | "mixed";
   startedAt: string;
   completedAt: string;
   comment: string;
@@ -50,6 +51,7 @@ type HistoryExercise = {
   sourceExerciseId?: string;
   title: string;
   kind?: SessionHistoryItem["kind"];
+  presentation?: "images" | "words";
   promptId?: string;
   optionIds: string[];
 };
@@ -102,6 +104,7 @@ export function buildSessionHistoryItems(
       exerciseId: first.exerciseId,
       exerciseTitle: exercise?.title ?? "Esercizio archiviato",
       kind: exercise?.kind ?? "recognition",
+      presentation: exercise?.presentation,
       target: snapshotImage(targetId ? itemMap.get(targetId) : undefined),
       options: optionIds.map((optionId) => snapshotImage(itemMap.get(optionId))).filter((item): item is HistoryImageSnapshot => Boolean(item)),
       responses: responses.map((attempt) => ({
