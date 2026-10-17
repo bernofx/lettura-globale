@@ -14,6 +14,7 @@
 - [x] Profili `Amministratore`, `Genitore`, `Supervisore` e `Terapista`; creazione e associazione molti-a-molti fra adulti e bambini.
 - [x] Stato sincronizzato per account in Cloudflare D1; copia locale usata per reattività e migrazione.
 - [x] Immagini private ottimizzate nel browser, caricate in Cloudflare R2 e servite da endpoint autenticato.
+- [x] Cancellazione logica e versionamento delle immagini: una scheda archiviata non compare nei nuovi esercizi, mentre il file resta disponibile agli storici che lo referenziano.
 - [x] Selezione e modifica dei profili terapista/bambino; tentativi, aiuti e statistiche associati al bambino attivo.
 - [x] Libreria con ricerca, metadati, upload, sostituzione, eliminazione e assegnazione `IL / LA` persistenti.
 - [x] Catalogo ampliato con 50 parole bisillabiche, dieci per ciascuna delle categorie `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, predisposte per la sostituzione dell'emoji con una fotografia.
@@ -37,6 +38,8 @@
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
 - [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
+- [x] Storico persistente delle sessioni per bambino con esito visivo verde/rosso al primo tentativo, sequenza completa delle risposte, aiuti, miniature e valutazione testuale modificabile dall’autore della sessione.
+- [x] Accesso allo storico per ruolo: il terapista vede le proprie sessioni, genitore e supervisore tutte le sessioni dei bambini associati, l’amministratore ha visibilità completa e può cancellare logicamente singoli storici o l’intero storico del bambino.
 - [x] L’amministratore può creare, associare, cambiare ruolo ed eliminare i profili adulti non amministrativi.
 - [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
 - [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
@@ -50,7 +53,7 @@
 - D1 contiene per ora uno snapshot JSON versionato per account. Una singola scrittura con debounce di 500 ms riduce query e mantiene atomici i dati collegati.
 - R2 contiene soltanto i file binari privati, separati dallo stato D1. I riferimenti alle immagini sono salvati nello snapshot.
 - Esercizi e sequenze cancellati restano nello snapshot con flag `deleted`, così i risultati storici continuano a essere interpretabili senza duplicare dati.
-- Le immagini rimosse vengono eliminate da R2; i record applicativi restano marcati come cancellati finché servono ai riferimenti esistenti.
+- Le immagini rimosse o sostituite non vengono eliminate fisicamente da R2: la libreria usa la cancellazione logica e ogni storico conserva il riferimento alla versione mostrata durante la sessione.
 - La struttura rimane compatibile con una futura migrazione verso tabelle D1 relazionali, da introdurre quando serve ricerca server-side o modifica concorrente.
 
 ## Limitazioni note
@@ -77,7 +80,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: 25 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, generazione casuale, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
+- `pnpm test`: 26 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
