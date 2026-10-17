@@ -23,6 +23,17 @@ test("genera turni senza duplicati e mantiene la risposta corretta", () => {
   });
 });
 
+test("supporta sessioni semplificate con uno o due distrattori", () => {
+  for (const distractorCount of [1, 2] as const) {
+    const rounds = createRandomRecognitionRounds(candidates, { rounds: 3, distractorCount }, deterministic);
+    assert.equal(rounds.length, 3);
+    rounds.forEach((round) => {
+      assert.equal(round.optionIds.length, distractorCount + 1);
+      assert.ok(round.optionIds.includes(round.promptId));
+    });
+  }
+});
+
 test("evita la stessa parola in due turni consecutivi", () => {
   const rounds = createRandomRecognitionRounds(candidates, { rounds: 12, distractorCount: 3 }, deterministic);
   rounds.slice(1).forEach((round, index) => assert.notEqual(round.promptId, rounds[index].promptId));

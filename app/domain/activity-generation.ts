@@ -6,7 +6,7 @@ export type ActivityCandidate = {
 
 export type RandomRecognitionConfig = {
   rounds: number;
-  distractorCount: 3 | 4;
+  distractorCount: 1 | 2 | 3 | 4;
   allowedIds?: string[];
   categories?: string[];
 };

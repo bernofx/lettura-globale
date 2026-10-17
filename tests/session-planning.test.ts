@@ -31,6 +31,10 @@ test("trova la parola richiede abbastanza elementi per tutti i distrattori", () 
   const base = { activity: "recognition" as const, selection: "all" as const, categoryNames: [], itemIds: [] };
   assert.equal(quickStartIsValid({ ...base, distractorCount: 3 }, 3), false);
   assert.equal(quickStartIsValid({ ...base, distractorCount: 3 }, 4), true);
+  assert.equal(quickStartIsValid({ ...base, distractorCount: 1 }, 1), false);
+  assert.equal(quickStartIsValid({ ...base, distractorCount: 1 }, 2), true);
+  assert.equal(quickStartIsValid({ ...base, distractorCount: 2 }, 2), false);
+  assert.equal(quickStartIsValid({ ...base, distractorCount: 2 }, 3), true);
   assert.equal(quickStartIsValid({ ...base, distractorCount: 4 }, 4), false);
   assert.equal(quickStartIsValid({ ...base, distractorCount: 4 }, 5), true);
 });

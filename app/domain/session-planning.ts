@@ -8,7 +8,7 @@ export type QuickFilterConfig = {
   selection: "all" | "categories" | "items";
   categoryNames: string[];
   itemIds: string[];
-  distractorCount?: 3 | 4;
+  distractorCount?: 1 | 2 | 3 | 4;
 };
 
 export function filterQuickCandidates<T extends QuickCandidate>(candidates: T[], config: QuickFilterConfig) {
