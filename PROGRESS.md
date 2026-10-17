@@ -22,7 +22,7 @@
 - [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
 - [x] Configurazione separata dall'avvio: creazione, selezione, rinomina, riordino e cancellazione logica di esercizi e sequenze in un solo pannello.
 - [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
-- [x] Anteprima `Prova` collegata all'esercizio selezionato.
+- [x] Anteprima `Prova` collegata all'esercizio selezionato, esclusa dalle statistiche e con ritorno automatico alla pagina di configurazione.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.
 - [x] Modalità casuale standard per `Trova la parola`, con 3/4 distrattori, filtri per parole e categorie e modalità fissa avanzata.
@@ -37,6 +37,7 @@
 - [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
 - [x] L’amministratore può creare, associare, promuovere a supervisore ed eliminare i profili terapista non amministrativi.
 - [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
+- [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
 - [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
 - [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
@@ -74,7 +75,7 @@
 
 ## Verifiche della versione corrente
 
-- `pnpm test`: 22 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione delle anteprime dalle statistiche, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
+- `pnpm test`: 22 test; copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, generazione casuale, filtri dell’avvio rapido, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.

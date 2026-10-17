@@ -45,6 +45,6 @@ export function appendHelp(events: HelpEventRecord[], event: HelpEventRecord) {
   return [...events, event];
 }
 
-export function shouldRecordSessionEvents(fromSharedPreview: boolean) {
-  return !fromSharedPreview;
+export function shouldRecordSessionEvents(untrackedRun: boolean) {
+  return !untrackedRun;
 }
