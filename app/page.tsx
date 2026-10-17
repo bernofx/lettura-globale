@@ -996,8 +996,9 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
   const articleCandidates = useMemo(() => library.filter((item) => articleFor(item)), [library]);
   const [articleItemIds, setArticleItemIds] = useState<string[]>(exercise?.articleItemIds ?? articleCandidates.slice(0, 6).map((item) => item.id));
   const availableCategories = useMemo(() => Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
-  const [categoryNames, setCategoryNames] = useState<string[]>(exercise?.categoryNames ?? availableCategories.slice(0, 3));
-  const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? library.filter((item) => availableCategories.slice(0, 3).includes(item.category)).slice(0, 9).map((item) => item.id));
+  const defaultCategoryNames = ["Cibo", "Animali", "Trasporti"].filter((category) => availableCategories.includes(category));
+  const [categoryNames, setCategoryNames] = useState<string[]>(exercise?.categoryNames ?? defaultCategoryNames);
+  const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? defaultCategoryNames.flatMap((category) => library.filter((item) => item.category === category).slice(0, 3).map((item) => item.id)));
   const [rounds, setRounds] = useState(exercise?.rounds ?? 6);
   const prompt = library.find((item) => item.id === promptId);
   const finalOptions = useMemo(() => Array.from(new Set([promptId, ...options])).filter(Boolean).slice(0, 4), [promptId, options]);
