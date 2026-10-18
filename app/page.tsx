@@ -325,8 +325,8 @@ function shuffled<T>(items: T[]) {
   return result;
 }
 
-function speakWord(word: string) {
-  if (!("speechSynthesis" in window)) return;
+function speakWord(word: string, onComplete?: () => void) {
+  if (!("speechSynthesis" in window)) { onComplete?.(); return; }
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(`${word}.`);
   utterance.lang = "it-IT";
@@ -336,6 +336,19 @@ function speakWord(word: string) {
   utterance.rate = 0.7;
   utterance.pitch = 0.96;
   utterance.volume = 1;
+  if (onComplete) {
+    let completed = false;
+    let fallback = 0;
+    const finish = () => {
+      if (completed) return;
+      completed = true;
+      window.clearTimeout(fallback);
+      onComplete();
+    };
+    fallback = window.setTimeout(finish, Math.max(3000, Math.min(7000, 1500 + word.length * 300)));
+    utterance.onend = finish;
+    utterance.onerror = finish;
+  }
   window.speechSynthesis.speak(utterance);
 }
 
@@ -437,7 +450,6 @@ export default function HomePage() {
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
   const [wrongAnswerId, setWrongAnswerId] = useState<string | null>(null);
   const spokenPromptKey = useRef("");
-  const spokenCorrectKey = useRef("");
   const handledSharedLaunch = useRef("");
   const sessionReturnView = useRef<View>("session");
 
@@ -813,10 +825,6 @@ export default function HomePage() {
     setWrongAnswerId(correct ? null : answerId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (!correct) window.setTimeout(() => setWrongAnswerId((current) => current === answerId ? null : current), 900);
-    if (correct && currentPresentation === "words" && promptWord && spokenCorrectKey.current !== sessionItemId) {
-      spokenCorrectKey.current = sessionItemId;
-      window.setTimeout(() => speakWord(promptWord), soundEffects ? 360 : 0);
-    }
   };
   const addHelp = (label: string, wordId?: string) => {
     if (!shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
@@ -827,6 +835,7 @@ export default function HomePage() {
     notify(`Aiuto registrato: ${label}`);
   };
   const closeActiveSession = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     const shared = sessionFromSharedLink;
     const returnView = sessionReturnView.current;
     setSessionActive(false);
@@ -1187,9 +1196,24 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useEffect(() => {
     if (answerState !== "correct") return;
-    const timer = window.setTimeout(() => onNextRef.current(), presentation === "words" ? 1100 : 750);
-    return () => window.clearTimeout(timer);
-  }, [answerState, presentation]);
+    let cancelled = false;
+    let completionTimer: number | null = null;
+    const timer = window.setTimeout(() => {
+      if (presentation === "words") {
+        speakWord(prompt.word, () => {
+          if (cancelled) return;
+          completionTimer = window.setTimeout(() => onNextRef.current(), 180);
+        });
+      } else {
+        onNextRef.current();
+      }
+    }, presentation === "words" ? (soundEffects ? 360 : 120) : 750);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (completionTimer) window.clearTimeout(completionTimer);
+    };
+  }, [answerState, presentation, prompt.word, soundEffects]);
   return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} /></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}<div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; const isWrong = wrongAnswerId === id; return <button key={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<AnswerLabel word={item.word} wordOnly={presentation === "words"} />{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}{answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}</div>{!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}</div>;
 }
 
