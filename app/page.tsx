@@ -715,6 +715,16 @@ export default function HomePage() {
   }, [sessionActive, sessionIndex]);
 
   useEffect(() => {
+    const lockSessionViewport = view === "session" && (sessionActive || sessionComplete);
+    document.documentElement.classList.toggle("lg-session-active", lockSessionViewport);
+    document.body.classList.toggle("lg-session-active", lockSessionViewport);
+    return () => {
+      document.documentElement.classList.remove("lg-session-active");
+      document.body.classList.remove("lg-session-active");
+    };
+  }, [sessionActive, sessionComplete, view]);
+
+  useEffect(() => {
     if (!sessionComplete || sessionFromSharedLink || sessionIsTrial || !sessionRunId || !sessionChildId || !therapist) return;
     setSessionHistory((current) => {
       const historyPlan = sessionPlan.map((exercise) => ({ ...exercise, kind: exerciseKind(exercise) }));
