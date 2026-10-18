@@ -79,7 +79,13 @@
 .session-screen .answer-card.word-only > span { flex: 1; min-height: 0; padding: clamp(8px, 1vw, 18px); font-size: clamp(28px, 4.5vw, 64px); }
 .session-screen .answer-card:not(.word-only) > span { min-height: clamp(48px, 7vh, 68px); font-size: clamp(20px, 2vw, 30px); }
 .session-screen,.session-screen>.session-body,.session-screen>.article-body{overscroll-behavior:none}
+.article-session .article-card{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+.article-session .article-card.pointer-dragging{z-index:40;pointer-events:none;cursor:grabbing;transition:none;box-shadow:0 18px 42px rgba(50,42,115,.24)}
 @media (max-width: 760px) {
   .session-screen .answer-card.word-only > span { padding: 6px; font-size: clamp(25px, 7vw, 38px); }
   .session-screen .answer-card:not(.word-only) > span { min-height: clamp(40px, 6vh, 52px); font-size: clamp(17px, 4.5vw, 23px); }
+  .session-screen.article-session .article-tray.single{grid-template-columns:minmax(190px,min(76vw,300px));justify-content:center}
+  .session-screen.article-session .article-tray.single .article-art{height:clamp(118px,25vh,190px)}
+  .session-screen.article-session .article-boxes{flex:0 0 clamp(72px,13vh,100px);grid-auto-rows:minmax(0,1fr)}
+  .session-screen.article-session .article-dropbox span{font-size:clamp(28px,7vh,42px)}
 }
