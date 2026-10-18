@@ -32,6 +32,7 @@
 - [x] Modalità casuale standard per `Trova la parola`, con 3/4 distrattori, filtri per parole e categorie e modalità fissa avanzata.
 - [x] Generazione dei distrattori senza duplicati, con priorità alla stessa categoria e senza ripetizioni consecutive della parola-obiettivo.
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
+- [x] Trascinamento `IL / LA` tramite Pointer Events su desktop e mobile, con tocco alternativo; su smartphone la figura è più grande e i box articolo più compatti.
 - [x] Esercizio `Parola nella categoria` configurabile, inseribile nelle sequenze e utilizzabile con tocco o trascinamento.
 - [x] Esercizio `Mix and vary`: una foto senza testo alla volta, scelta casuale o configurata, esito corretto/errato e indicatore di aiuto registrati dall’adulto.
 - [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.

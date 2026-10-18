@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRandomRecognitionRounds, hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
@@ -1243,7 +1243,10 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [wrongArticle, setWrongArticle] = useState<Article | null>(null);
-  const [feedback, setFeedback] = useState("Tocca IL o LA. Da computer puoi anche trascinare l’immagine.");
+  const [feedback, setFeedback] = useState("Tocca IL o LA, oppure trascina l’immagine nel box.");
+  const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0, active: false });
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const pointerMoved = useRef(false);
   useEffect(() => {
     remainingIds.slice(0, 3).forEach((id) => {
       const source = library.find((item) => item.id === id)?.image;
@@ -1280,7 +1283,72 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   const completed = remainingIds.length === 0;
   const currentId = remainingIds[0];
   const currentItem = library.find((entry) => entry.id === currentId);
-  return <div className="session-screen article-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} /></div><div className="article-body"><p className="instruction">Tocca l’articolo corretto. Da computer puoi anche trascinare.</p><h1>IL O LA?</h1>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le immagini sono state abbinate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="article-tray single"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala da computer${wrongId === currentId ? ". Scelta errata" : ""}`} className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}><div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div><strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong></button></div><div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" className={`article-dropbox ${wrongArticle === article ? "wrong" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(article, event.dataTransfer.getData("text/plain")); }}><span>{article}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : null}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  const resetPointerDrag = () => {
+    pointerStart.current = null;
+    setPointerOffset({ x: 0, y: 0, active: false });
+    setDraggedId(null);
+  };
+  const startPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!currentId) return;
+    pointerMoved.current = false;
+    pointerStart.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggedId(currentId);
+  };
+  const movePointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!pointerStart.current) return;
+    const x = event.clientX - pointerStart.current.x;
+    const y = event.clientY - pointerStart.current.y;
+    if (!pointerMoved.current && Math.hypot(x, y) < 7) return;
+    pointerMoved.current = true;
+    event.preventDefault();
+    setPointerOffset({ x, y, active: true });
+  };
+  const finishPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const moved = pointerMoved.current;
+    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-article]") : null;
+    const article = target?.dataset.article;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    resetPointerDrag();
+    if (moved && (article === "IL" || article === "LA")) place(article, currentId);
+  };
+  return <div className="session-screen article-session">
+    <div className="session-header">
+      <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div>
+      <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div>
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+    </div>
+    <div className="article-body">
+      <p className="instruction">Tocca l’articolo corretto oppure trascina l’immagine nel box.</p>
+      <h1>IL O LA?</h1>
+      {completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le immagini sono state abbinate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <>
+        <div className="article-tray single">
+          <button
+            type="button"
+            draggable={false}
+            aria-pressed={selectedId === currentId}
+            aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala nel box${wrongId === currentId ? ". Scelta errata" : ""}`}
+            className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`}
+            style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
+            onClick={(event) => {
+              if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; }
+              setSelectedId((current) => current === currentId ? null : currentId);
+            }}
+            onPointerDown={startPointerDrag}
+            onPointerMove={movePointerDrag}
+            onPointerUp={finishPointerDrag}
+            onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}
+          >
+            <div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div>
+            <strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong>
+          </button>
+        </div>
+        <div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" data-article={article} className={`article-dropbox ${wrongArticle === article ? "wrong" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)}><span>{article}</span><small>Tocca qui</small></button>)}</div>
+        <p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p>
+      </> : null}
+    </div>
+    {!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}
+  </div>;
 }
 
 function WordCategorySession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
