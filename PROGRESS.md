@@ -26,6 +26,7 @@
 - [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
 - [x] Anteprima `Prova` collegata all'esercizio selezionato, esclusa dalle statistiche e con ritorno automatico alla pagina di configurazione.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
+- [x] In `Abbina la parola` la parola di riferimento può essere trascinata sull’immagine scelta con mouse, dito o penna; il tocco diretto sulle immagini resta disponibile.
 - [x] Avanzamento vocale sincronizzato: dopo una risposta corretta il turno successivo parte soltanto al termine della pronuncia, evitando sovrapposizioni audio.
 - [x] Feedback di errore temporaneo: “Riproviamo insieme”, bordo e X rossa scompaiono automaticamente senza restare davanti alle immagini.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.

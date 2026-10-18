@@ -1211,8 +1211,38 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
 
 function RecognitionSession({ previewLabel, mode, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
   const [optionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const [wordDragOffset, setWordDragOffset] = useState({ x: 0, y: 0, active: false });
+  const wordDragStart = useRef<{ x: number; y: number } | null>(null);
+  const wordDragMoved = useRef(false);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
+  const resetWordDrag = () => {
+    wordDragStart.current = null;
+    setWordDragOffset({ x: 0, y: 0, active: false });
+  };
+  const startWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (presentation !== "images" || answerState === "correct") return;
+    wordDragMoved.current = false;
+    wordDragStart.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!wordDragStart.current) return;
+    const x = event.clientX - wordDragStart.current.x;
+    const y = event.clientY - wordDragStart.current.y;
+    if (!wordDragMoved.current && Math.hypot(x, y) < 7) return;
+    wordDragMoved.current = true;
+    event.preventDefault();
+    setWordDragOffset({ x, y, active: true });
+  };
+  const finishWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const moved = wordDragMoved.current;
+    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-answer-id]") : null;
+    const answerId = target?.dataset.answerId;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    resetWordDrag();
+    if (moved && answerId) onChoose(answerId);
+  };
   useEffect(() => {
     if (answerState !== "correct") return;
     let cancelled = false;
@@ -1233,7 +1263,41 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
       if (completionTimer) window.clearTimeout(completionTimer);
     };
   }, [answerState, presentation, prompt.word, soundEffects]);
-  return <div className="session-screen"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} /></div><div className={`session-body ${presentation === "words" ? "words-session" : ""}`}><p className="instruction">{presentation === "images" ? "Scegli l’immagine corretta" : "Leggi, ascolta e scegli la parola corretta"}</p>{presentation === "images" ? <h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}<div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => { const item = library.find((entry) => entry.id === id); if (!item) return null; const isCorrect = id === exercise.promptId; const isWrong = wrongAnswerId === id; return <button key={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<AnswerLabel word={item.word} wordOnly={presentation === "words"} />{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>; })}</div>{answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}{answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}</div>{!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}</div>;
+  return <div className="session-screen recognition-session">
+    <div className="session-header">
+      <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div>
+      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+    </div>
+    <div className={`session-body ${presentation === "words" ? "words-session" : ""}`}>
+      <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Leggi, ascolta e scegli la parola corretta"}</p>
+      {presentation === "images" ? <button
+        type="button"
+        className={`draggable-word-prompt ${wordDragOffset.active ? "pointer-dragging" : ""}`}
+        style={wordDragOffset.active ? { transform: `translate3d(${wordDragOffset.x}px, ${wordDragOffset.y}px, 0)` } : undefined}
+        aria-label={`${prompt.word}. Trascina la parola sull’immagine corretta oppure tocca per ascoltarla`}
+        disabled={answerState === "correct"}
+        onClick={(event) => {
+          if (wordDragMoved.current) { wordDragMoved.current = false; event.preventDefault(); return; }
+          speakWord(prompt.word);
+        }}
+        onPointerDown={startWordDrag}
+        onPointerMove={moveWordDrag}
+        onPointerUp={finishWordDrag}
+        onPointerCancel={() => { wordDragMoved.current = false; resetWordDrag(); }}
+      ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>Trascina sulle immagini</small></button> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}
+      <div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
+        const item = library.find((entry) => entry.id === id);
+        if (!item) return null;
+        const isCorrect = id === exercise.promptId;
+        const isWrong = wrongAnswerId === id;
+        return <button key={id} data-answer-id={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<AnswerLabel word={item.word} wordOnly={presentation === "words"} />{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>;
+      })}</div>
+      {answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}
+      {answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}
+    </div>
+    {!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}
+  </div>;
 }
 
 function ArticleSortSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
