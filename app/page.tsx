@@ -450,6 +450,7 @@ export default function HomePage() {
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
   const [wrongAnswerId, setWrongAnswerId] = useState<string | null>(null);
   const spokenPromptKey = useRef("");
+  const wrongFeedbackTimer = useRef<number | null>(null);
   const handledSharedLaunch = useRef("");
   const sessionReturnView = useRef<View>("session");
 
@@ -818,13 +819,23 @@ export default function HomePage() {
   const tryExercise = (exerciseId: string) => { const exercise = visibleExercises.find((item) => item.id === exerciseId); if (exercise) beginSession([exercise], undefined, { trial: true, returnView: "exercises" }); };
   const chooseAnswer = (answerId: string) => {
     if (!currentExercise || answerState === "correct") return;
+    if (wrongFeedbackTimer.current !== null) {
+      window.clearTimeout(wrongFeedbackTimer.current);
+      wrongFeedbackTimer.current = null;
+    }
     const correct = answerId === currentExercise.promptId;
     const sessionItemId = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
     if (shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId: currentExercise.sourceExerciseId ?? currentExercise.id, wordId: currentExercise.promptId, answerId, optionIds: currentExercise.optionIds, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: sessionChildId || activeChild?.id, therapistId: therapist?.id }).events);
     setAnswerState(correct ? "correct" : "wrong");
     setWrongAnswerId(correct ? null : answerId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
-    if (!correct) window.setTimeout(() => setWrongAnswerId((current) => current === answerId ? null : current), 900);
+    if (!correct) {
+      wrongFeedbackTimer.current = window.setTimeout(() => {
+        setWrongAnswerId((current) => current === answerId ? null : current);
+        setAnswerState((current) => current === "wrong" ? "idle" : current);
+        wrongFeedbackTimer.current = null;
+      }, 900);
+    }
   };
   const addHelp = (label: string, wordId?: string) => {
     if (!shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
@@ -836,6 +847,10 @@ export default function HomePage() {
   };
   const closeActiveSession = () => {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (wrongFeedbackTimer.current !== null) {
+      window.clearTimeout(wrongFeedbackTimer.current);
+      wrongFeedbackTimer.current = null;
+    }
     const shared = sessionFromSharedLink;
     const returnView = sessionReturnView.current;
     setSessionActive(false);
@@ -850,6 +865,10 @@ export default function HomePage() {
     else setView(returnView);
   };
   const nextExercise = () => {
+    if (wrongFeedbackTimer.current !== null) {
+      window.clearTimeout(wrongFeedbackTimer.current);
+      wrongFeedbackTimer.current = null;
+    }
     if (sessionIndex >= sessionExercises.length - 1) {
       if (sessionFromSharedLink) { notify("Anteprima completata"); closeActiveSession(); return; }
       if (sessionIsTrial) { notify("Prova completata · nessun risultato registrato"); closeActiveSession(); return; }
