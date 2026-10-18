@@ -1160,24 +1160,39 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
   }, [exercise.namingCategories, exercise.namingItemIds, library]);
   const [initialIds] = useState(() => shuffled(candidates.map((item) => item.id)).slice(0, Math.max(1, exercise.rounds ?? 6)));
   const [remainingIds, setRemainingIds] = useState(initialIds);
-  const [helped, setHelped] = useState(false);
   const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
   const currentId = remainingIds[0];
   const currentItem = library.find((item) => item.id === currentId);
   const completed = remainingIds.length === 0;
-  const judge = (correct: boolean) => {
+  const judge = (correct: boolean, withHelp = false) => {
     if (!currentId || judgement) return;
-    onAttempt(currentId, helped ? (correct ? "CORRETTO_CON_AIUTO" : "ERRATO_CON_AIUTO") : correct ? "CORRETTO" : "ERRATO", correct);
-    if (helped) onHelp("Risposta aiutata", currentId);
+    onAttempt(currentId, withHelp ? "CORRETTO_CON_AIUTO" : correct ? "CORRETTO" : "ERRATO", correct);
+    if (withHelp) onHelp("Risposta aiutata", currentId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     setJudgement(correct ? "correct" : "wrong");
     window.setTimeout(() => {
       setRemainingIds((current) => current.filter((id) => id !== currentId));
-      setHelped(false);
       setJudgement(null);
     }, 650);
   };
-  return <div className="session-screen naming-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} /></div><div className="article-body naming-body"><p className="instruction">Chiedi al bambino di nominare ciò che vede, poi registra l’esito.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Attività completata</h2><p>Tutte le immagini sono state valutate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className={`naming-card ${judgement ?? ""}`} aria-label={`Immagine di ${currentItem.word}`}><Artwork item={currentItem} eager />{judgement && <i className={`choice-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`}>{judgement === "correct" ? <Check /> : <X />}</i>}</div><div className="naming-controls"><label><input type="checkbox" checked={helped} onChange={(event) => setHelped(event.target.checked)} disabled={Boolean(judgement)} />Il bambino è stato aiutato</label><div><button className="naming-wrong" type="button" onClick={() => judge(false)} disabled={Boolean(judgement)}><X />Risposta errata</button><button className="naming-correct" type="button" onClick={() => judge(true)} disabled={Boolean(judgement)}><Check />Risposta corretta</button></div></div></> : <div className="feedback wrong" role="alert">Nessuna immagine disponibile per questo esercizio.</div>}</div></div>;
+  return <div className="session-screen naming-session">
+    <div className="session-header">
+      <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div>
+      <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div>
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+    </div>
+    <div className="article-body naming-body">
+      <p className="instruction">Chiedi al bambino di nominare ciò che vede, poi registra l’esito.</p>
+      {completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Attività completata</h2><p>Tutte le immagini sono state valutate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <>
+        <div className={`naming-card ${judgement ?? ""}`} aria-label={`Immagine di ${currentItem.word}`}><Artwork item={currentItem} eager />{judgement && <i className={`choice-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`}>{judgement === "correct" ? <Check /> : <X />}</i>}</div>
+        <div className="naming-controls"><div>
+          <button className="naming-wrong" type="button" onClick={() => judge(false)} disabled={Boolean(judgement)}><X />Risposta errata</button>
+          <button className="naming-helped" type="button" onClick={() => judge(true, true)} disabled={Boolean(judgement)}><CircleHelp />Corretto con aiuti</button>
+          <button className="naming-correct" type="button" onClick={() => judge(true)} disabled={Boolean(judgement)}><Check />Risposta corretta</button>
+        </div></div>
+      </> : <div className="feedback wrong" role="alert">Nessuna immagine disponibile per questo esercizio.</div>}
+    </div>
+  </div>;
 }
 
 function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
