@@ -283,6 +283,16 @@ async function uploadRemoteImage(mediaId: string, image: string) {
   return (await response.json()) as { id: string; url: string };
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function backendStateForStorage(state: BackendState): BackendState {
   return { ...state, library: state.library.map((item) => ({ ...item, image: item.remoteImageId ? undefined : item.image?.startsWith("data:") ? undefined : item.image })) };
 }
@@ -352,29 +362,39 @@ function speakWord(word: string, onComplete?: () => void) {
   window.speechSynthesis.speak(utterance);
 }
 
-function playFeedbackTone(kind: "correct" | "wrong", enabled: boolean) {
+type FeedbackSound = "correct" | "wrong";
+
+const feedbackSoundUrls: Record<FeedbackSound, string> = {
+  correct: "/audio/correct.mp3",
+  wrong: "/audio/wrong.mp3",
+};
+const feedbackAudioPlayers: Partial<Record<FeedbackSound, HTMLAudioElement>> = {};
+
+function feedbackAudioFor(kind: FeedbackSound) {
+  if (typeof window === "undefined") return null;
+  if (!feedbackAudioPlayers[kind]) {
+    const audio = new window.Audio(feedbackSoundUrls[kind]);
+    audio.preload = "auto";
+    audio.load();
+    feedbackAudioPlayers[kind] = audio;
+  }
+  return feedbackAudioPlayers[kind] ?? null;
+}
+
+function preloadFeedbackSounds() {
+  feedbackAudioFor("correct");
+  feedbackAudioFor("wrong");
+}
+
+function playFeedbackTone(kind: FeedbackSound, enabled: boolean) {
   if (!enabled) return;
-  const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const now = context.currentTime;
-  const notes = kind === "correct" ? [659.25, 880] : [118, 126];
-  notes.forEach((frequency, index) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const start = kind === "correct" ? now + index * 0.11 : now;
-    const duration = kind === "correct" ? 0.16 : 0.27;
-    const volume = kind === "correct" ? 0.12 : 0.1;
-    oscillator.type = kind === "correct" ? "sine" : "sawtooth";
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + 0.01);
+  const audio = feedbackAudioFor(kind);
+  if (!audio) return;
+  Object.values(feedbackAudioPlayers).forEach((player) => {
+    player?.pause();
+    if (player) player.currentTime = 0;
   });
-  window.setTimeout(() => context.close().catch(() => undefined), 650);
+  void audio.play().catch(() => undefined);
 }
 
 function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[]) {
@@ -456,6 +476,7 @@ export default function HomePage() {
   const sessionReturnView = useRef<View>("session");
 
   useEffect(() => {
+    preloadFeedbackSounds();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
@@ -558,8 +579,25 @@ export default function HomePage() {
     backendStarted.current = true;
     let cancelled = false;
     const initializeBackend = async () => {
-      const response = await fetch("/api/state", { cache: "no-store" });
-      if (response.status === 401) { if (!cancelled) setBackendStatus("local"); return; }
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          response = await fetchWithTimeout("/api/state", { cache: "no-store" });
+          break;
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "AbortError") || attempt === 1) throw error;
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+      }
+      if (!response) throw new Error("backend_load_timeout");
+      if (response.status === 401) {
+        if (!cancelled) {
+          sessionStorage.removeItem("lg-therapist-session");
+          setLoggedInTherapistId(null);
+          setBackendStatus("local");
+        }
+        return;
+      }
       if (!response.ok) throw new Error("backend_load_failed");
       const result = await response.json() as { state: BackendState | null };
       if (cancelled) return;
@@ -600,7 +638,16 @@ export default function HomePage() {
       setBackendInitialized(true);
       setBackendStatus("ready");
     };
-    initializeBackend().catch(() => { if (!cancelled) setBackendStatus("error"); });
+    initializeBackend().catch((error) => {
+      if (cancelled) return;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        sessionStorage.removeItem("lg-therapist-session");
+        setLoggedInTherapistId(null);
+        setBackendStatus("local");
+        return;
+      }
+      setBackendStatus("error");
+    });
     return () => { cancelled = true; };
   }, [allLocalDataLoaded, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, setTherapists, setChildren, setActiveChildId, setActiveSequenceId, setLibrary, setExercises, setSequences, setAttempts, setHelps, setSessionHistory]);
 
