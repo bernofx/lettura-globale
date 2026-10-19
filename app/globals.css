@@ -95,7 +95,8 @@
   .naming-controls>div{grid-template-columns:1fr 1fr}.naming-controls .naming-helped{grid-column:1/-1;grid-row:1}
 }
 
-.exercise-copy small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.pronunciation-option{align-items:center!important;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:#faf9ff}.pronunciation-option>span{display:flex;flex-direction:column;gap:2px}.pronunciation-option strong{color:var(--ink);font-size:11px}.pronunciation-option small{color:var(--muted);font-size:10px}
+.exercise-copy small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.pronunciation-option{align-items:center!important;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:#faf9ff}.pronunciation-option>span{display:flex;flex-direction:column;gap:2px}.pronunciation-option strong{color:var(--ink);font-size:11px}.pronunciation-option small{color:var(--muted);font-size:10px}.builder-search{display:flex!important;width:100%;max-width:none;margin:0 0 12px}.builder-search input{height:auto;border:0;padding:0;background:transparent}
+.filter-chip.selected{border-color:#bcb4f2;background:var(--lavender);color:var(--violet)}.library-copy .syllables{margin:0 0 5px;color:#5f568d;font-size:10px;font-weight:800}.library-copy .syllables.needs-review{color:#9a6711}.syllable-review{margin:-3px 0 12px;padding:10px 12px;border:1px solid #ead9a9;border-radius:12px;background:#fff8e8;color:#805a13;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700}.syllable-review svg{width:17px;flex:0 0 auto}.syllable-review button{margin-left:auto;border:0;background:transparent;color:#6f55b3;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 
 /* During an activity the exercise owns the viewport, leaving more room for complete images. */
 body.lg-session-active .topbar{display:none}
