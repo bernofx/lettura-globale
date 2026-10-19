@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRandomRecognitionRounds, hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
@@ -283,6 +283,16 @@ async function uploadRemoteImage(mediaId: string, image: string) {
   return (await response.json()) as { id: string; url: string };
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function backendStateForStorage(state: BackendState): BackendState {
   return { ...state, library: state.library.map((item) => ({ ...item, image: item.remoteImageId ? undefined : item.image?.startsWith("data:") ? undefined : item.image })) };
 }
@@ -352,29 +362,39 @@ function speakWord(word: string, onComplete?: () => void) {
   window.speechSynthesis.speak(utterance);
 }
 
-function playFeedbackTone(kind: "correct" | "wrong", enabled: boolean) {
+type FeedbackSound = "correct" | "wrong";
+
+const feedbackSoundUrls: Record<FeedbackSound, string> = {
+  correct: "/audio/correct.mp3",
+  wrong: "/audio/wrong.mp3",
+};
+const feedbackAudioPlayers: Partial<Record<FeedbackSound, HTMLAudioElement>> = {};
+
+function feedbackAudioFor(kind: FeedbackSound) {
+  if (typeof window === "undefined") return null;
+  if (!feedbackAudioPlayers[kind]) {
+    const audio = new window.Audio(feedbackSoundUrls[kind]);
+    audio.preload = "auto";
+    audio.load();
+    feedbackAudioPlayers[kind] = audio;
+  }
+  return feedbackAudioPlayers[kind] ?? null;
+}
+
+function preloadFeedbackSounds() {
+  feedbackAudioFor("correct");
+  feedbackAudioFor("wrong");
+}
+
+function playFeedbackTone(kind: FeedbackSound, enabled: boolean) {
   if (!enabled) return;
-  const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const now = context.currentTime;
-  const notes = kind === "correct" ? [659.25, 880] : [118, 126];
-  notes.forEach((frequency, index) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const start = kind === "correct" ? now + index * 0.11 : now;
-    const duration = kind === "correct" ? 0.16 : 0.27;
-    const volume = kind === "correct" ? 0.12 : 0.1;
-    oscillator.type = kind === "correct" ? "sine" : "sawtooth";
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + 0.01);
+  const audio = feedbackAudioFor(kind);
+  if (!audio) return;
+  Object.values(feedbackAudioPlayers).forEach((player) => {
+    player?.pause();
+    if (player) player.currentTime = 0;
   });
-  window.setTimeout(() => context.close().catch(() => undefined), 650);
+  void audio.play().catch(() => undefined);
 }
 
 function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[]) {
@@ -433,6 +453,7 @@ export default function HomePage() {
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
   const [sessionIndex, setSessionIndex] = useState(0);
+  const [sessionFurthestIndex, setSessionFurthestIndex] = useState(0);
   const [sessionPlan, setSessionPlan] = useState<Exercise[]>([]);
   const [sessionRunId, setSessionRunId] = useState("");
   const [sessionChildId, setSessionChildId] = useState("");
@@ -456,6 +477,7 @@ export default function HomePage() {
   const sessionReturnView = useRef<View>("session");
 
   useEffect(() => {
+    preloadFeedbackSounds();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
@@ -488,6 +510,7 @@ export default function HomePage() {
         setSessionRunId(crypto.randomUUID());
         setSessionChildId("");
         setSessionIndex(0);
+        setSessionFurthestIndex(0);
         setSessionMode("test");
         setSessionPresentation("images");
         setAnswerState("idle");
@@ -558,8 +581,25 @@ export default function HomePage() {
     backendStarted.current = true;
     let cancelled = false;
     const initializeBackend = async () => {
-      const response = await fetch("/api/state", { cache: "no-store" });
-      if (response.status === 401) { if (!cancelled) setBackendStatus("local"); return; }
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          response = await fetchWithTimeout("/api/state", { cache: "no-store" });
+          break;
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "AbortError") || attempt === 1) throw error;
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+      }
+      if (!response) throw new Error("backend_load_timeout");
+      if (response.status === 401) {
+        if (!cancelled) {
+          sessionStorage.removeItem("lg-therapist-session");
+          setLoggedInTherapistId(null);
+          setBackendStatus("local");
+        }
+        return;
+      }
       if (!response.ok) throw new Error("backend_load_failed");
       const result = await response.json() as { state: BackendState | null };
       if (cancelled) return;
@@ -600,7 +640,16 @@ export default function HomePage() {
       setBackendInitialized(true);
       setBackendStatus("ready");
     };
-    initializeBackend().catch(() => { if (!cancelled) setBackendStatus("error"); });
+    initializeBackend().catch((error) => {
+      if (cancelled) return;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        sessionStorage.removeItem("lg-therapist-session");
+        setLoggedInTherapistId(null);
+        setBackendStatus("local");
+        return;
+      }
+      setBackendStatus("error");
+    });
     return () => { cancelled = true; };
   }, [allLocalDataLoaded, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, setTherapists, setChildren, setActiveChildId, setActiveSequenceId, setLibrary, setExercises, setSequences, setAttempts, setHelps, setSessionHistory]);
 
@@ -706,6 +755,7 @@ export default function HomePage() {
       setSessionRunId(crypto.randomUUID());
       setSessionChildId(activeChild.id);
       setSessionIndex(0);
+      setSessionFurthestIndex(0);
       setAnswerState("idle");
       setWrongAnswerId(null);
       setSessionFromSharedLink(true);
@@ -793,7 +843,7 @@ export default function HomePage() {
   };
   const navigate = (next: View) => { if (next !== view) window.history.pushState({ lgView: next }, "", window.location.pathname); setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const compileSession = (selectedExercises: Exercise[]) => compileExercises(selectedExercises, visibleLibrary);
-  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
+  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
   const startSequenceById = (sequenceId: string) => {
     const sequence = visibleSequences.find((item) => item.id === sequenceId);
     if (!sequence) return;
@@ -882,7 +932,21 @@ export default function HomePage() {
       if (sessionIsTrial) { notify("Prova completata · nessun risultato registrato"); closeActiveSession(); return; }
       setSessionActive(false); setSessionComplete(true); setAnswerState("idle"); setWrongAnswerId(null); notify("Sessione completata e salvata"); return;
     }
-    setSessionIndex((index) => index + 1); setAnswerState("idle"); setWrongAnswerId(null);
+    const nextIndex = sessionIndex + 1;
+    setSessionFurthestIndex((current) => Math.max(current, nextIndex));
+    setSessionIndex(nextIndex); setAnswerState("idle"); setWrongAnswerId(null);
+  };
+  const navigateReachedExercise = (direction: -1 | 1) => {
+    const nextIndex = sessionIndex + direction;
+    if (nextIndex < 0 || nextIndex > sessionFurthestIndex) return;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (wrongFeedbackTimer.current !== null) {
+      window.clearTimeout(wrongFeedbackTimer.current);
+      wrongFeedbackTimer.current = null;
+    }
+    setSessionIndex(nextIndex);
+    setAnswerState("idle");
+    setWrongAnswerId(null);
   };
   const recordClassificationAttempt = (itemId: string, answer: string, correct: boolean) => {
     if (!currentExercise || !shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
@@ -991,7 +1055,7 @@ export default function HomePage() {
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
-    return <main className="public-preview-shell"><SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
+    return <main className="public-preview-shell"><SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
   }
   if (!allLocalDataLoaded || backendStatus === "loading" || backendStatus === "migrating") return <div className="auth-loading"><Sparkles /><span>{backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Caricamento dati…"}</span></div>;
   if (backendStatus === "error" && !backendInitialized) return <BackendErrorScreen />;
@@ -1006,7 +1070,7 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
+        {view === "session" && <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -1116,9 +1180,10 @@ function ExercisesView({ exercises, sequences, activeSequence, therapists, showS
   </div>;
 }
 
-type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string) => void; onStartQuick: (config: QuickStartConfig) => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void };
+type SessionNavigationProps = { canPrevious: boolean; canForward: boolean; onPrevious: () => void; onForward: () => void };
+type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string) => void; onStartQuick: (config: QuickStartConfig) => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
 
-function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
+function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
   const [step, setStep] = useState<"choose" | "quick" | "review" | "ready">("choose");
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
@@ -1139,28 +1204,29 @@ function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode,
   const chooseSequence = (id: string) => { setSource("sequence"); setReviewSequenceId(id); setStep("review"); };
   const beginReviewed = () => { if (source === "quick") onStartQuick(quick); else if (reviewSequenceId) onStartSequence(reviewSequenceId); };
   const previewLabel = fromSharedLink ? "Anteprima" : isTrial ? "Prova" : undefined;
+  const navigationProps = { canPrevious, canForward, onPrevious, onForward };
 
   if (!active && complete) return <div className="page session-setup session-complete-screen"><span className="complete-check"><Check /></span><span className="eyebrow">SESSIONE COMPLETATA</span><h1>Attività salvata</h1><p>Risposte, errori e aiuti sono disponibili nello storico di {activeChild.firstName}.</p><label className="completion-comment">Valutazione della sessione<textarea rows={4} value={completionDraft} onChange={(event) => setCompletionDraft(event.target.value)} placeholder="Annota partecipazione, attenzione, difficoltà o progressi osservati…" /></label><button className="ghost-button" type="button" onClick={() => onSaveCompletionComment(completionDraft)}><Save />Salva valutazione</button>{quickCanBeSaved && <button className="ghost-button" type="button" onClick={onSaveQuick}><Save />Salva l’avvio rapido come sequenza</button>}<button className="primary-button large" type="button" onClick={onCloseComplete}><BarChart3 />Apri storico e progressi</button></div>;
   if (!active && step === "choose") return <div className="page session-wizard"><div className="wizard-heading"><span className="session-big-icon"><Play /></span><div><span className="eyebrow">NUOVA SESSIONE</span><h1>Cosa facciamo oggi?</h1><p>Scegli una sequenza già configurata oppure avvia un’attività veloce.</p></div><button className="sound-toggle setup" type="button" onClick={onToggleSound} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}{soundEffects ? "Suoni attivi" : "Suoni disattivati"}</button></div><section className="wizard-panel"><span className="choice-label">1 · Bambino</span><div className="wizard-child-list">{childProfiles.map((child) => <button type="button" key={child.id} className={activeChild.id === child.id ? "selected" : ""} onClick={() => onSelectChild(child.id)}><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><strong>{child.firstName} {child.lastName}</strong>{activeChild.id === child.id && <Check />}</button>)}</div></section><section className="wizard-panel"><div className="section-heading"><div><span className="choice-label">2 · Sequenze preparate</span><h2>Scegli una nuvoletta</h2></div><span>{sequences.length} disponibili</span></div>{sortedSequences.length ? <div className="sequence-cloud-grid">{sortedSequences.map((sequence) => <button type="button" className="sequence-cloud" key={sequence.id} disabled={!sequence.exerciseIds.length} onClick={() => chooseSequence(sequence.id)}><Cloud /><strong>{sequence.title}</strong><small>{sequence.exerciseIds.length} esercizi{showSequenceOwners ? ` · ${therapistName(sequence.therapistId)}` : ""}</small><ChevronRight /></button>)}</div> : <div className="empty-mini"><Cloud /><p>Nessuna sequenza disponibile.</p><small>Puoi crearne una nella sezione Configurazione oppure usare l’avvio rapido.</small></div>}</section><section className="wizard-paths single-path"><button type="button" onClick={() => setStep("quick")}><span><Sparkles /></span><strong>Avvio rapido</strong><small>Scegli attività e parole senza salvarle</small><ChevronRight /></button></section></div>;
   if (!active && step === "quick") return <div className="page session-wizard"><WizardBack onClick={() => setStep("choose")} /><div className="wizard-heading compact"><div><span className="eyebrow">AVVIO RAPIDO</span><h1>Configura l’attività</h1><p>Questa configurazione non verrà salvata automaticamente.</p></div></div><section className="wizard-panel"><span className="choice-label">Tipologia</span><div className="mode-picker activity-picker wizard-activity-picker"><button className={quick.activity === "recognition" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "recognition", itemIds: [] }))}><BookOpenCheck /><strong>Trova la parola</strong><small>Parola e distrattori casuali</small></button><button className={quick.activity === "articles" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "articles", itemIds: [] }))}><Library /><strong>Articolo IL / LA</strong><small>Classifica una foto alla volta</small></button><button className={quick.activity === "word-categories" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "word-categories", selection: "categories", itemIds: [] }))}><FolderHeart /><strong>Parola nella categoria</strong><small>Scegli la categoria corretta</small></button><button className={quick.activity === "naming" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "naming", itemIds: [] }))}><MousePointer2 /><strong>Mix and vary</strong><small>Nomina una foto alla volta</small></button></div></section><section className="wizard-panel"><span className="choice-label">Parole e immagini</span><div className="selection-tabs">{(["all", "categories", "items"] as QuickSelection[]).map((selection) => <button key={selection} type="button" className={quick.selection === selection ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, selection, itemIds: selection === "items" ? current.itemIds : [] }))}>{selection === "all" ? "Tutta la libreria" : selection === "categories" ? "Per categoria" : "Scelta manuale"}</button>)}</div>{(quick.selection === "categories" || quick.activity === "word-categories") && <><div className="builder-label">Categorie <span>{quick.categoryNames.length} scelte{quick.activity === "word-categories" ? " · minimo 2, massimo 4" : ""}</span></div><div className="filter-chips">{categoryNames.map((category) => <button type="button" key={category} className={quick.categoryNames.includes(category) ? "selected" : ""} onClick={() => toggleQuickCategory(category)}>{category}</button>)}</div></>}{quick.selection === "items" && <><div className="builder-label">Elementi <span>{quick.itemIds.length} scelti</span></div><div className="builder-grid compact-words quick-item-grid">{quickSelectable.map((item) => <button type="button" key={item.id} className={quick.itemIds.includes(item.id) ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, itemIds: current.itemIds.includes(item.id) ? current.itemIds.filter((id) => id !== item.id) : [...current.itemIds, item.id] }))}><strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong><span>{item.category}{quick.activity === "articles" ? ` · ${articleFor(item)}` : ""}</span>{quick.itemIds.includes(item.id) && <i><Check /></i>}</button>)}</div></>}</section><section className="wizard-panel wizard-settings"><label>Numero di turni<input type="number" min={1} max={50} value={quick.rounds} onChange={(event) => setQuick((current) => ({ ...current, rounds: Math.max(1, Number(event.target.value)) }))} /></label>{quick.activity === "recognition" && <><label>Distrattori<select value={quick.distractorCount} onChange={(event) => setQuick((current) => ({ ...current, distractorCount: Number(event.target.value) as 1 | 2 | 3 | 4 }))}><option value={1}>1 distrattore</option><option value={2}>2 distrattori</option><option value={3}>3 distrattori</option><option value={4}>4 distrattori</option></select></label><label>Origine distrattori<select value={quick.distractorSource} onChange={(event) => setQuick((current) => ({ ...current, distractorSource: event.target.value as DistractorSource }))}><option value="mixed">Tutte le parole selezionate</option><option value="same-category">Solo stessa categoria</option></select></label><label>Presentazione<select value={quick.presentation} onChange={(event) => { const next = event.target.value as Presentation; setQuick((current) => ({ ...current, presentation: next })); setPresentation(next); }}><option value="images">Foto + parole</option><option value="words">Solo parole con voce</option></select></label></>}</section>{!quickValid && <p className="wizard-error">Scegli abbastanza elementi e categorie per avviare questa attività.</p>}<div className="wizard-footer"><button className="ghost-button" onClick={() => setStep("choose")}>Annulla</button><button className="primary-button" disabled={!quickValid} onClick={() => { setSource("quick"); setStep("review"); }}><ChevronRight />Continua</button></div></div>;
   if (!active && step === "review") return <div className="page session-wizard review-step"><WizardBack onClick={() => setStep(source === "quick" ? "quick" : "choose")} /><span className="eyebrow">RIEPILOGO</span><h1>{reviewTitle}</h1><div className="review-card"><div><span>Bambino</span><strong>{activeChild.firstName} {activeChild.lastName}</strong></div><div><span>Contenuto</span><strong>{source === "quick" ? `${reviewCount} turni` : `${reviewCount} esercizi`}</strong></div><div><span>Origine</span><strong>{source === "quick" ? "Avvio rapido" : "Sequenza salvata"}</strong></div></div><section className="wizard-panel"><span className="choice-label">Modalità della sessione</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Valutazione</strong><small>Misura il primo tentativo</small></button></div></section><div className="wizard-footer"><button className="ghost-button" onClick={() => setStep(source === "quick" ? "quick" : "choose")}>Indietro</button><button className="primary-button large" disabled={!reviewCount} onClick={() => setStep("ready")}><ChevronRight />Continua</button></div></div>;
   if (!active && step === "ready") return <div className="page ready-screen"><span className="ready-cloud"><Cloud /></span><span className="eyebrow">{activeChild.firstName.toLocaleUpperCase("it-IT")}</span><h1>PRONTI?</h1><p>{reviewTitle} · {mode === "test" ? "Valutazione" : "Insegnamento"}</p><div><button className="ghost-button" onClick={() => setStep("review")}>Indietro</button><button className="primary-button large" onClick={beginReviewed}><Play fill="currentColor" />Inizia</button></div></div>;
-  if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} />;
-  if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} />;
-  if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} />;
+  if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (!exercise || !prompt) return null;
-  return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} />;
+  return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
 }
 
 function WizardBack({ onClick }: { onClick: () => void }) {
   return <button className="wizard-back" type="button" onClick={onClick}>← Indietro</button>;
 }
 
-function SessionTools({ soundEffects, onToggleSound, onExit }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void }) {
-  return <div className="session-tools"><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><button className="ghost-button" onClick={onExit}>Termina</button></div>;
+function SessionTools({ soundEffects, onToggleSound, onExit, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void } & SessionNavigationProps) {
+  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra gli esercizi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Esercizio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Esercizio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><button className="ghost-button" onClick={onExit}>Termina</button></div>;
 }
 
-function NamingSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
+function NamingSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const candidates = useMemo(() => {
     const allowedIds = exercise.namingItemIds?.length ? new Set(exercise.namingItemIds) : null;
     const categories = exercise.namingCategories?.length ? new Set(exercise.namingCategories) : null;
@@ -1199,7 +1265,7 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div>
       <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div>
-      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body naming-body">
       <p className="instruction">Chiedi al bambino di nominare ciò che vede, poi registra l’esito.</p>
@@ -1244,7 +1310,7 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
   return <span ref={labelRef}>{word.toLocaleUpperCase("it-IT")}</span>;
 }
 
-function RecognitionSession({ previewLabel, mode, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
+function RecognitionSession({ previewLabel, mode, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
   const [wordDragOffset, setWordDragOffset] = useState({ x: 0, y: 0, active: false });
   const wordDragStart = useRef<{ x: number; y: number } | null>(null);
@@ -1302,7 +1368,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div>
       <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
-      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className={`session-body ${presentation === "words" ? "words-session" : ""}`}>
       <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Leggi, ascolta e scegli la parola corretta"}</p>
@@ -1335,7 +1401,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
   </div>;
 }
 
-function ArticleSortSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
+function ArticleSortSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [initialIds] = useState(() => shuffled((exercise.articleItemIds ?? []).filter((id) => library.some((item) => item.id === id && articleFor(item)))).slice(0, Math.max(1, exercise.rounds ?? 6)));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -1415,7 +1481,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div>
       <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div>
-      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} />
+      <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body">
       <p className="instruction">Tocca l’articolo corretto oppure trascina l’immagine nel box.</p>
@@ -1450,7 +1516,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   </div>;
 }
 
-function WordCategorySession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void }) {
+function WordCategorySession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const categories = useMemo(() => exercise.categoryNames ?? [], [exercise.categoryNames]);
   const candidates = useMemo(() => library.filter((item) => categories.includes(item.category)), [library, categories]);
   const [initialIds] = useState(() => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
@@ -1480,7 +1546,7 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
       window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongCategory((current) => current === category ? null : current); }, 900);
     }
   };
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · parola {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}>{currentItem.word.toLocaleUpperCase("it-IT")}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(category, event.dataTransfer.getData("text/plain")); }}><span>{category.toLocaleUpperCase("it-IT")}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · parola {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}>{currentItem.word.toLocaleUpperCase("it-IT")}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(category, event.dataTransfer.getData("text/plain")); }}><span>{category.toLocaleUpperCase("it-IT")}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
