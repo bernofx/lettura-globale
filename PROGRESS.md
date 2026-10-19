@@ -60,6 +60,7 @@
 - [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Blocco del trascinamento oltre il bordo durante gli esercizi mobili, per evitare il pull-to-refresh accidentale e la perdita dello stato della sessione.
 - [x] Pull-to-refresh disponibile nelle pagine di gestione per caricare gli aggiornamenti dopo un deploy; il blocco resta attivo durante gli esercizi.
+- [x] Navigazione avanti/indietro per singolo turno in tutti gli esercizi, feedback verde uniforme per IL/LA e categorie, trascinamento touch anche nelle attività con sole parole.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 

@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createRandomRecognitionRounds, hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
+import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
@@ -13,17 +13,17 @@ import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access
 import { analyzeItalianSyllables, countSyllables, hydrateSyllables, matchesSyllableFilter, type SyllableFilter, type SyllableStatus } from "./domain/syllabification";
 import { wordOnlyCatalog } from "./domain/word-catalog";
 import { availableForRecognition, hasArtwork } from "./domain/library-availability";
+import { compileSessionPlan, type SessionActivity, type SessionExercise } from "./domain/session-compilation";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
 type Mode = SessionMode;
 type Presentation = "images" | "words";
-type SessionActivity = "recognition" | "articles" | "word-categories" | "naming";
 type Article = "IL" | "LA";
 type QuickSelection = "all" | "categories" | "items";
 type DistractorSource = "mixed" | "same-category";
 type QuickStartConfig = { activity: SessionActivity; selection: QuickSelection; categoryNames: string[]; itemIds: string[]; rounds: number; distractorCount: 1 | 2 | 3 | 4; distractorSource: DistractorSource; presentation: Presentation };
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; remoteImageId?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; syllabification?: string; syllableCount?: number; syllableStatus?: SyllableStatus; privateUpload?: boolean; deleted?: boolean };
-type Exercise = { id: string; title: string; kind?: SessionActivity; promptId?: string; optionIds: string[]; articleItemIds?: string[]; categoryItemIds?: string[]; categoryNames?: string[]; recognitionMode?: "fixed" | "random"; recognitionItemIds?: string[]; recognitionCategories?: string[]; recognitionSyllables?: SyllableFilter; namingItemIds?: string[]; namingCategories?: string[]; distractorCount?: 1 | 2 | 3 | 4; distractorSource?: DistractorSource; presentation?: Presentation; autoPronounce?: boolean; rounds?: number; sourceExerciseId?: string; updatedAt: string; deleted?: boolean };
+type Exercise = SessionExercise;
 type Sequence = { id: string; title: string; exerciseIds: string[]; therapistId: string; updatedAt?: string; lastUsedAt?: string; deleted?: boolean };
 type Attempt = AttemptEvent;
 type HelpEvent = HelpEventRecord;
@@ -351,13 +351,13 @@ function shuffled<T>(items: T[]) {
 function speakWord(word: string, onComplete?: () => void) {
   if (!("speechSynthesis" in window)) { onComplete?.(); return; }
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(`${word}.`);
+  const utterance = new SpeechSynthesisUtterance(`${word}!`);
   utterance.lang = "it-IT";
   const italianVoices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("it"));
   const preferredVoice = italianVoices.find((voice) => /elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices.find((voice) => voice.localService) ?? italianVoices[0];
   if (preferredVoice) utterance.voice = preferredVoice;
-  utterance.rate = 0.7;
-  utterance.pitch = 0.96;
+  utterance.rate = 0.72;
+  utterance.pitch = 1;
   utterance.volume = 1;
   if (onComplete) {
     let completed = false;
@@ -465,18 +465,7 @@ function playFeedbackTone(kind: FeedbackSound, enabled: boolean) {
 }
 
 function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[]) {
-  return selectedExercises.flatMap((exercise) => {
-    if (exerciseKind(exercise) !== "recognition" || recognitionModeFor(exercise) !== "random") return [exercise];
-    const eligibleLibrary = availableForRecognition(sourceLibrary, exercise.presentation);
-    return createRandomRecognitionRounds(eligibleLibrary, {
-      rounds: exercise.rounds ?? 6,
-      distractorCount: exercise.distractorCount ?? 3,
-      distractorSource: exercise.distractorSource ?? "mixed",
-      allowedIds: exercise.recognitionItemIds,
-      categories: exercise.recognitionCategories,
-      syllables: exercise.recognitionSyllables,
-    }).map((round, index) => ({ ...exercise, id: `${exercise.id}:round:${index}:${crypto.randomUUID()}`, sourceExerciseId: exercise.id, recognitionMode: "fixed" as const, promptId: round.promptId, optionIds: round.optionIds }));
-  });
+  return compileSessionPlan(selectedExercises, sourceLibrary, { articleFor });
 }
 
 export default function HomePage() {
@@ -855,18 +844,7 @@ export default function HomePage() {
         return;
       }
       if (selectedSequence) setActiveSequenceId(selectedSequence.id);
-      const plan = selectedExercises.flatMap((exercise) => {
-        if (exerciseKind(exercise) !== "recognition" || recognitionModeFor(exercise) !== "random") return [exercise];
-        const eligibleLibrary = availableForRecognition(visibleLibrary, exercise.presentation);
-        return createRandomRecognitionRounds(eligibleLibrary, {
-          rounds: exercise.rounds ?? 6,
-          distractorCount: exercise.distractorCount ?? 3,
-          distractorSource: exercise.distractorSource ?? "mixed",
-          allowedIds: exercise.recognitionItemIds,
-          categories: exercise.recognitionCategories,
-          syllables: exercise.recognitionSyllables,
-        }).map((round, index) => ({ ...exercise, id: `${exercise.id}:round:${index}:${crypto.randomUUID()}`, sourceExerciseId: exercise.id, recognitionMode: "fixed" as const, promptId: round.promptId, optionIds: round.optionIds }));
-      });
+      const plan = compileExercises(selectedExercises, visibleLibrary);
       if (!plan.length) return;
       setSessionPlan(plan);
       setSessionRunId(crypto.randomUUID());
@@ -1350,7 +1328,7 @@ function WizardBack({ onClick }: { onClick: () => void }) {
 }
 
 function SessionTools({ soundEffects, onToggleSound, onExit, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void } & SessionNavigationProps) {
-  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra gli esercizi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Esercizio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Esercizio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><button className="ghost-button" onClick={onExit}>Termina</button></div>;
+  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><button className="ghost-button" onClick={onExit}>Termina</button></div>;
 }
 
 function NamingSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
@@ -1362,7 +1340,9 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
   const [initialIds] = useState(() => shuffled(candidates.map((item) => item.id)).slice(0, Math.max(1, exercise.rounds ?? 6)));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
+  const advanceTimer = useRef<number | null>(null);
   const preloadedImages = useRef(new Map<string, HTMLImageElement>());
+  useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   useEffect(() => {
     remainingIds.slice(0, 5).forEach((id) => {
       const source = library.find((item) => item.id === id)?.image;
@@ -1383,15 +1363,18 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
     if (withHelp) onHelp("Risposta aiutata", currentId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     setJudgement(correct ? "correct" : "wrong");
-    window.setTimeout(() => {
-      setRemainingIds((current) => current.filter((id) => id !== currentId));
-      setJudgement(null);
+    advanceTimer.current = window.setTimeout(() => {
+      if (remainingIds.length <= 1) onComplete();
+      else {
+        setRemainingIds((current) => current.filter((id) => id !== currentId));
+        setJudgement(null);
+      }
     }, 650);
   };
   return <div className="session-screen naming-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div>
-      <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div>
+      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body naming-body">
@@ -1449,7 +1432,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
     setWordDragOffset({ x: 0, y: 0, active: false });
   };
   const startWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (presentation !== "images" || answerState === "correct") return;
+    if (answerState === "correct") return;
     wordDragMoved.current = false;
     wordDragStart.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1498,12 +1481,12 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className={`session-body ${presentation === "words" ? "words-session" : ""}`}>
-      <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Leggi, ascolta e scegli la parola corretta"}</p>
-      {presentation === "images" ? <button
+      <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Tocca la parola corretta oppure trascina la parola nel box."}</p>
+      <button
         type="button"
         className={`draggable-word-prompt ${wordDragOffset.active ? "pointer-dragging" : ""}`}
         style={wordDragOffset.active ? { transform: `translate3d(${wordDragOffset.x}px, ${wordDragOffset.y}px, 0)` } : undefined}
-        aria-label={`${prompt.word}. Trascina la parola sull’immagine corretta oppure tocca per ascoltarla`}
+        aria-label={`${prompt.word}. Trascina la parola sul box corretto oppure tocca per ascoltarla`}
         disabled={answerState === "correct"}
         onClick={(event) => {
           if (wordDragMoved.current) { wordDragMoved.current = false; event.preventDefault(); return; }
@@ -1513,7 +1496,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
         onPointerMove={moveWordDrag}
         onPointerUp={finishWordDrag}
         onPointerCancel={() => { wordDragMoved.current = false; resetWordDrag(); }}
-      ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>Trascina sulle immagini</small></button> : <div className="word-prompt"><h1>{prompt.word.toLocaleUpperCase("it-IT")}</h1><button className="listen-button" type="button" onClick={() => speakWord(prompt.word)}><Volume2 /><span><strong>Riascolta la parola</strong><small>Premi per sentirla di nuovo</small></span></button></div>}
+      ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>{presentation === "images" ? "Trascina sulle immagini" : "Trascina sulle parole · tocca per ascoltare"}</small></button>
       <div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
         const item = library.find((entry) => entry.id === id);
         if (!item) return null;
@@ -1535,10 +1518,14 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [wrongArticle, setWrongArticle] = useState<Article | null>(null);
+  const [correctId, setCorrectId] = useState<string | null>(null);
+  const [correctArticle, setCorrectArticle] = useState<Article | null>(null);
   const [feedback, setFeedback] = useState("Tocca IL o LA, oppure trascina l’immagine nel box.");
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0, active: false });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const pointerMoved = useRef(false);
+  const advanceTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   useEffect(() => {
     remainingIds.slice(0, 3).forEach((id) => {
       const source = library.find((item) => item.id === id)?.image;
@@ -1548,8 +1535,8 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
       preload.src = source;
     });
   }, [remainingIds, library]);
-  const initialTotal = initialIds.length;
   const place = (article: Article, explicitId?: string) => {
+    if (correctId) return;
     const itemId = explicitId ?? draggedId ?? selectedId ?? currentId;
     if (!itemId) return;
     const item = library.find((entry) => entry.id === itemId);
@@ -1557,12 +1544,17 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
     onAttempt(itemId, article, correct);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (correct) {
-      setRemainingIds((current) => current.filter((id) => id !== itemId));
       setSelectedId(null);
       setDraggedId(null);
       setWrongId(null);
       setWrongArticle(null);
+      setCorrectId(itemId);
+      setCorrectArticle(article);
       setFeedback("Giusto! L’immagine è stata abbinata.");
+      advanceTimer.current = window.setTimeout(() => {
+        if (remainingIds.length <= 1) onComplete();
+        else setRemainingIds((current) => current.filter((id) => id !== itemId));
+      }, 750);
     } else {
       setWrongId(itemId);
       setWrongArticle(article);
@@ -1581,7 +1573,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
     setDraggedId(null);
   };
   const startPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!currentId) return;
+    if (!currentId || correctId) return;
     pointerMoved.current = false;
     pointerStart.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1607,7 +1599,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   return <div className="session-screen article-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div>
-      <div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · immagine {initialTotal - remainingIds.length + (completed ? 0 : 1)} di {initialTotal}</span><div><i style={{ width: `${initialTotal ? ((initialTotal - remainingIds.length) / initialTotal) * 100 : 100}%` }} /></div></div>
+      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body">
@@ -1620,7 +1612,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
             draggable={false}
             aria-pressed={selectedId === currentId}
             aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala nel box${wrongId === currentId ? ". Scelta errata" : ""}`}
-            className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`}
+            className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`}
             style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
             onClick={(event) => {
               if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; }
@@ -1633,10 +1625,11 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
           >
             <div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div>
             <strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong>
+            {correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}
           </button>
         </div>
-        <div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" data-article={article} className={`article-dropbox ${wrongArticle === article ? "wrong" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)}><span>{article}</span><small>Tocca qui</small></button>)}</div>
-        <p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p>
+        <div className="article-boxes">{(["IL", "LA"] as Article[]).map((article) => <button type="button" data-article={article} className={`article-dropbox ${wrongArticle === article ? "wrong" : ""} ${correctArticle === article ? "correct" : ""}`} key={article} aria-label={`Assegna ${currentItem.word} a ${article}${wrongArticle === article ? ". Scelta errata" : ""}`} onClick={() => place(article)}><span>{article}</span><small>{correctArticle === article ? "Corretto" : "Tocca qui"}</small></button>)}</div>
+        <p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p>
       </> : null}
     </div>
     {!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}
@@ -1652,11 +1645,19 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [wrongCategory, setWrongCategory] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState("Tocca la categoria corretta. Da computer puoi anche trascinare la parola.");
+  const [correctId, setCorrectId] = useState<string | null>(null);
+  const [correctCategory, setCorrectCategory] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("Tocca la categoria corretta oppure trascina la parola nel box.");
+  const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0, active: false });
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const pointerMoved = useRef(false);
+  const advanceTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   const currentId = remainingIds[0];
   const currentItem = candidates.find((item) => item.id === currentId);
   const completed = remainingIds.length === 0;
   const place = (category: string, explicitId?: string) => {
+    if (correctId) return;
     const itemId = explicitId ?? draggedId ?? selectedId ?? currentId;
     if (!itemId) return;
     const item = candidates.find((candidate) => candidate.id === itemId);
@@ -1664,16 +1665,49 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
     onAttempt(itemId, category, correct);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (correct) {
-      setRemainingIds((current) => current.filter((id) => id !== itemId));
       setSelectedId(null); setDraggedId(null); setWrongId(null); setWrongCategory(null);
+      setCorrectId(itemId); setCorrectCategory(category);
       setFeedback("Giusto! La parola è nella categoria corretta.");
+      advanceTimer.current = window.setTimeout(() => {
+        if (remainingIds.length <= 1) onComplete();
+        else setRemainingIds((current) => current.filter((id) => id !== itemId));
+      }, 750);
     } else {
       setSelectedId(null); setDraggedId(null); setWrongId(itemId); setWrongCategory(category);
       setFeedback("Questa non è la categoria giusta. Riprova.");
       window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongCategory((current) => current === category ? null : current); }, 900);
     }
   };
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>Esercizio {currentIndex + 1} di {total} · parola {initialIds.length - remainingIds.length + (completed ? 0 : 1)} di {initialIds.length}</span><div><i style={{ width: `${initialIds.length ? ((initialIds.length - remainingIds.length) / initialIds.length) * 100 : 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""}`} onClick={() => setSelectedId((current) => current === currentId ? null : currentId)} onDragStart={(event) => { event.dataTransfer.setData("text/plain", currentId); event.dataTransfer.effectAllowed = "move"; setDraggedId(currentId); }} onDragEnd={() => setDraggedId(null)}>{currentItem.word.toLocaleUpperCase("it-IT")}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); place(category, event.dataTransfer.getData("text/plain")); }}><span>{category.toLocaleUpperCase("it-IT")}</span><small>Tocca qui</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  const resetPointerDrag = () => {
+    pointerStart.current = null;
+    setPointerOffset({ x: 0, y: 0, active: false });
+    setDraggedId(null);
+  };
+  const startPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!currentId || correctId) return;
+    pointerMoved.current = false;
+    pointerStart.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggedId(currentId);
+  };
+  const movePointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!pointerStart.current) return;
+    const x = event.clientX - pointerStart.current.x;
+    const y = event.clientY - pointerStart.current.y;
+    if (!pointerMoved.current && Math.hypot(x, y) < 7) return;
+    pointerMoved.current = true;
+    event.preventDefault();
+    setPointerOffset({ x, y, active: true });
+  };
+  const finishPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const moved = pointerMoved.current;
+    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-category]") : null;
+    const category = target?.dataset.category;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    resetPointerDrag();
+    if (moved && category) place(category, currentId);
+  };
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`} style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined} onClick={(event) => { if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={finishPointerDrag} onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}>{currentItem.word.toLocaleUpperCase("it-IT")}{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}><span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
