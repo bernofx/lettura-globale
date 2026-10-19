@@ -1,0 +1,34 @@
+image: node:24-bookworm-slim
+
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+stages:
+  - verify
+  - security
+
+variables:
+  PNPM_STORE_DIR: .pnpm-store
+  SECRET_DETECTION_ENABLED: "true"
+
+cache:
+  key:
+    files:
+      - pnpm-lock.yaml
+  paths:
+    - .pnpm-store
+
+verify:
+  stage: verify
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.25.0 --activate
+    - pnpm config set store-dir $PNPM_STORE_DIR
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm lint
+    - pnpm typecheck
+    - pnpm build
+
+secret_detection:
+  stage: security
