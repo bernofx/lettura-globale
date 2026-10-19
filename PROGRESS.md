@@ -26,6 +26,7 @@
 - [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
 - [x] Anteprima `Prova` collegata all'esercizio selezionato, esclusa dalle statistiche e con ritorno automatico alla pagina di configurazione.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
+- [x] Pronuncia automatica configurabile per ogni esercizio `Trova la parola`, indipendentemente dalla presentazione con immagini o sole parole.
 - [x] In `Abbina la parola` la parola di riferimento può essere trascinata sull’immagine scelta con mouse, dito o penna; il tocco diretto sulle immagini resta disponibile.
 - [x] Avanzamento vocale sincronizzato: dopo una risposta corretta il turno successivo parte soltanto al termine della pronuncia, evitando sovrapposizioni audio.
 - [x] Feedback di errore temporaneo: “Riproviamo insieme”, bordo e X rossa scompaiono automaticamente senza restare davanti alle immagini.
@@ -49,6 +50,7 @@
 - [x] L’amministratore può creare, associare, cambiare ruolo ed eliminare i profili adulti non amministrativi.
 - [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
 - [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
+- [x] Con una modale aperta, il tasto Indietro chiude la modale senza cambiare la pagina sottostante.
 - [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
 - [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Blocco del trascinamento oltre il bordo durante gli esercizi mobili, per evitare il pull-to-refresh accidentale e la perdita dello stato della sessione.
@@ -90,6 +92,7 @@
 - Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
 - Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
+- Ogni esercizio `Trova la parola` salva anche la scelta di pronunciare automaticamente il prompt; gli esercizi esistenti conservano il comportamento precedente.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
 - `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima, accesso alle sequenze per ruolo/proprietario e rimozione del silenzio iniziale dagli effetti sonori.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.

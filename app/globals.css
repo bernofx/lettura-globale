@@ -95,6 +95,8 @@
   .naming-controls>div{grid-template-columns:1fr 1fr}.naming-controls .naming-helped{grid-column:1/-1;grid-row:1}
 }
 
+.exercise-copy small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.pronunciation-option{align-items:center!important;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:#faf9ff}.pronunciation-option>span{display:flex;flex-direction:column;gap:2px}.pronunciation-option strong{color:var(--ink);font-size:11px}.pronunciation-option small{color:var(--muted);font-size:10px}
+
 /* During an activity the exercise owns the viewport, leaving more room for complete images. */
 body.lg-session-active .topbar{display:none}
 body.lg-session-active .session-screen{height:100dvh}
