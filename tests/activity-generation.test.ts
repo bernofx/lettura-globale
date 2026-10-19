@@ -66,6 +66,17 @@ test("rispetta i filtri per categoria della libreria", () => {
   assert.ok(rounds.every((round) => round.optionIds.every((id) => ["gatto", "cane"].includes(id))));
 });
 
+test("rispetta i filtri per numero di sillabe", () => {
+  const syllableCandidates = [
+    { id: "sole", word: "Sole", category: "Natura", syllableCount: 2 },
+    { id: "carota", word: "Carota", category: "Cibi", syllableCount: 3 },
+    { id: "telefono", word: "Telefono", category: "Oggetti", syllableCount: 4 },
+  ];
+  const rounds = createRandomRecognitionRounds(syllableCandidates, { rounds: 2, distractorCount: 1, syllables: "2-3" }, deterministic);
+  assert.equal(rounds.length, 2);
+  assert.ok(rounds.every((round) => round.promptId !== "telefono" && !round.optionIds.includes("telefono")));
+});
+
 test("la classificazione non ripete parole nello stesso ciclo", () => {
   const ids = pickCategoryRoundIds(candidates, undefined, 5, deterministic);
   assert.equal(ids.length, 5);

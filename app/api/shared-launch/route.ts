@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sharedLaunches, userStates } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
 
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
@@ -15,11 +16,12 @@ type SharedExercise = Record<string, unknown> & {
   recognitionMode?: "fixed" | "random";
   recognitionItemIds?: string[];
   recognitionCategories?: string[];
+  recognitionSyllables?: SyllableFilter;
   namingItemIds?: string[];
   namingCategories?: string[];
 };
 type StoredState = {
-  library?: Array<Record<string, unknown> & { id?: string; category?: string; deleted?: boolean }>;
+  library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; deleted?: boolean }>;
   exercises?: SharedExercise[];
   sequences?: Array<{ id?: string; title?: string; exerciseIds?: string[]; deleted?: boolean }>;
 };
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     }
     else if (exercise.recognitionMode === "random") {
       if (exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => !exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+      else availableLibrary.filter((item) => (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     } else {
       if (exercise.promptId) referencedIds.add(exercise.promptId);
       exercise.optionIds?.forEach((id) => referencedIds.add(id));

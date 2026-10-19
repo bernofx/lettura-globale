@@ -23,6 +23,7 @@
 - [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
 - [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
 - [x] Configurazione separata dall'avvio: creazione, selezione, rinomina, riordino e cancellazione logica di esercizi e sequenze in un solo pannello.
+- [x] Ricerca per parola o categoria in tutte le griglie di selezione degli elementi, inclusi configuratori e avvio rapido.
 - [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
 - [x] Anteprima `Prova` collegata all'esercizio selezionato, esclusa dalle statistiche e con ritorno automatico alla pagina di configurazione.
 - [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
@@ -32,6 +33,8 @@
 - [x] Feedback di errore temporaneo: “Riproviamo insieme”, bordo e X rossa scompaiono automaticamente senza restare davanti alle immagini.
 - [x] Ordine casuale e stabile delle risposte durante la singola prova.
 - [x] Modalità casuale standard per `Trova la parola`, con 3/4 distrattori, filtri per parole e categorie e modalità fissa avanzata.
+- [x] Filtro sillabico per `Trova la parola` casuale (`2`, `3`, `2 o 3`, `4 o più`), applicato dinamicamente alla libreria anche dopo la creazione dell’esercizio.
+- [x] Sillabazione automatica dei nuovi elementi con correzione persistente, segnalazione dei casi dubbi e migrazione verificata dei 97 elementi del catalogo iniziale.
 - [x] Generazione dei distrattori senza duplicati, con priorità alla stessa categoria e senza ripetizioni consecutive della parola-obiettivo.
 - [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
 - [x] Trascinamento `IL / LA` tramite Pointer Events su desktop e mobile, con tocco alternativo; su smartphone la figura è più grande e i box articolo più compatti.
@@ -93,8 +96,10 @@
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
 - Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
 - Ogni esercizio `Trova la parola` salva anche la scelta di pronunciare automaticamente il prompt; gli esercizi esistenti conservano il comportamento precedente.
+- Gli esercizi precedenti senza filtro sillabico continuano a usare tutta la libreria; i link pubblici già creati restano snapshot immutabili e compatibili con i campi mancanti.
+- La libreria propone e salva sillabazione e numero di sillabe. Le grafie potenzialmente ambigue compaiono nel filtro `Da verificare`, mentre le correzioni confermate non vengono sovrascritte.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
-- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima, accesso alle sequenze per ruolo/proprietario e rimozione del silenzio iniziale dagli effetti sonori.
+- `pnpm test`: 38 test; copre anche sillabazione, casi da verificare, correzioni persistenti e filtro sillabico nella generazione casuale.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
