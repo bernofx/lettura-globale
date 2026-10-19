@@ -6,6 +6,7 @@ import { createRandomRecognitionRounds, hasSameCategoryDistractors, normalizeLea
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
+import { feedbackStartOffset } from "./domain/feedback-audio";
 import { buildSessionHistoryItems, type HistoryImageSnapshot, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
 import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access";
@@ -369,6 +370,17 @@ const feedbackSoundUrls: Record<FeedbackSound, string> = {
   wrong: "/audio/wrong.mp3",
 };
 const feedbackAudioPlayers: Partial<Record<FeedbackSound, HTMLAudioElement>> = {};
+type PreparedFeedbackSound = { buffer: AudioBuffer; startOffset: number };
+const preparedFeedbackSounds: Partial<Record<FeedbackSound, PreparedFeedbackSound>> = {};
+const feedbackSoundPreparation: Partial<Record<FeedbackSound, Promise<void>>> = {};
+let feedbackAudioContext: AudioContext | null = null;
+let activeFeedbackSource: AudioBufferSourceNode | null = null;
+
+function feedbackContext() {
+  if (typeof window === "undefined" || !("AudioContext" in window)) return null;
+  if (!feedbackAudioContext) feedbackAudioContext = new AudioContext({ latencyHint: "interactive" });
+  return feedbackAudioContext;
+}
 
 function feedbackAudioFor(kind: FeedbackSound) {
   if (typeof window === "undefined") return null;
@@ -384,16 +396,59 @@ function feedbackAudioFor(kind: FeedbackSound) {
 function preloadFeedbackSounds() {
   feedbackAudioFor("correct");
   feedbackAudioFor("wrong");
+  prepareFeedbackSound("correct");
+  prepareFeedbackSound("wrong");
+}
+
+function prepareFeedbackSound(kind: FeedbackSound) {
+  if (preparedFeedbackSounds[kind] || feedbackSoundPreparation[kind]) return;
+  const context = feedbackContext();
+  if (!context) return;
+  feedbackSoundPreparation[kind] = fetch(feedbackSoundUrls[kind], { cache: "force-cache" })
+    .then((response) => {
+      if (!response.ok) throw new Error("feedback_audio_load_failed");
+      return response.arrayBuffer();
+    })
+    .then((data) => context.decodeAudioData(data))
+    .then((buffer) => {
+      const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index));
+      preparedFeedbackSounds[kind] = { buffer, startOffset: feedbackStartOffset(channels, buffer.sampleRate) };
+      const fallback = feedbackAudioPlayers[kind];
+      if (fallback) fallback.currentTime = preparedFeedbackSounds[kind]?.startOffset ?? 0;
+    })
+    .catch(() => undefined)
+    .finally(() => { delete feedbackSoundPreparation[kind]; });
+}
+
+function primeFeedbackSounds() {
+  preloadFeedbackSounds();
+  const context = feedbackContext();
+  if (context?.state === "suspended") void context.resume().catch(() => undefined);
 }
 
 function playFeedbackTone(kind: FeedbackSound, enabled: boolean) {
   if (!enabled) return;
+  const context = feedbackContext();
+  const prepared = preparedFeedbackSounds[kind];
+  if (context?.state === "running" && prepared) {
+    activeFeedbackSource?.stop();
+    const source = context.createBufferSource();
+    source.buffer = prepared.buffer;
+    source.connect(context.destination);
+    source.onended = () => { if (activeFeedbackSource === source) activeFeedbackSource = null; };
+    activeFeedbackSource = source;
+    source.start(0, prepared.startOffset);
+    return;
+  }
+  if (context?.state === "suspended") void context.resume().catch(() => undefined);
+  prepareFeedbackSound(kind);
   const audio = feedbackAudioFor(kind);
   if (!audio) return;
   Object.values(feedbackAudioPlayers).forEach((player) => {
     player?.pause();
     if (player) player.currentTime = 0;
   });
+  audio.currentTime = prepared?.startOffset ?? 0;
   void audio.play().catch(() => undefined);
 }
 
@@ -478,6 +533,9 @@ export default function HomePage() {
 
   useEffect(() => {
     preloadFeedbackSounds();
+    const prime = () => primeFeedbackSounds();
+    window.addEventListener("pointerdown", prime, { capture: true, once: true });
+    window.addEventListener("keydown", prime, { capture: true, once: true });
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
@@ -490,7 +548,11 @@ export default function HomePage() {
       if (!legacyLaunch && !publicPreview) window.history.replaceState({ lgView: "home" }, "", window.location.href);
       setSessionChecked(true);
     }, 0);
-    return () => window.clearTimeout(authTimer);
+    return () => {
+      window.clearTimeout(authTimer);
+      window.removeEventListener("pointerdown", prime, true);
+      window.removeEventListener("keydown", prime, true);
+    };
   }, []);
 
   useEffect(() => {

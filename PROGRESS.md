@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 17 ottobre 2026
+**Aggiornato:** 19 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -38,6 +38,7 @@
 - [x] Esercizio `Mix and vary`: una foto senza testo alla volta, scelta casuale o configurata, esito corretto/errato e indicatore di aiuto registrati dall’adulto.
 - [x] `Mix and vary` offre tre esiti diretti: errato, corretto con aiuti e corretto; l’esito aiutato registra automaticamente l’aiuto senza checkbox separata.
 - [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.
+- [x] Effetti sonori di conferma ed errore precaricati e riprodotti dal primo campione udibile, eliminando automaticamente l'eventuale silenzio iniziale degli MP3.
 - [x] `Trova la parola` avanza automaticamente dopo la risposta corretta, con spunta verde temporanea; l'errore mostra una X rossa temporanea e mantiene il turno corrente.
 - [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
 - [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
@@ -90,7 +91,7 @@
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
 - Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
-- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
+- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima, accesso alle sequenze per ruolo/proprietario e rimozione del silenzio iniziale dagli effetti sonori.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
