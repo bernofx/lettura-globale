@@ -3,6 +3,8 @@ node_modules/
 dist/
 .wrangler/
 .sites-runtime/
+.sites-package/
+site-build.tar.gz
 .env
 .env.*
 !.env.example

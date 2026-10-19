@@ -1,48 +1,98 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 15 ottobre 2026  
-**Fase:** prototipo funzionale  
-**Milestone:** M0 completata in parte; avvio M3/M4 in modalità demo
+**Aggiornato:** 17 ottobre 2026
+
+**Fase:** prototipo cloud funzionale pubblico
+
+**Target:** Cloudflare Workers + D1 + R2, distribuito tramite ChatGPT Sites
 
 ## Completato
 
-- [x] Repository e piano operativo predisposti.
-- [x] Repository GitLab privato creato in `bernofx-group/lettura-globale`.
-- [x] Sorgente MVP e pipeline completa pubblicati su GitLab `main`.
-- [x] Versione PWA privata pubblicata su ChatGPT Sites.
-- [x] Progetto React/TypeScript strict basato su starter Sites.
-- [x] UI responsive adulto per desktop e touch.
-- [x] Manifest e service worker PWA con cache dell'app shell.
-- [x] Libreria demo con ricerca, metadati e upload privato locale.
-- [x] Creazione esercizio parola→immagine e aggiornamento sequenza.
-- [x] Modalità insegnamento e verifica.
-- [x] Primo tentativo separato dalle correzioni.
-- [x] Tracciamento manuale degli aiuti.
-- [x] Statistiche descrittive ed export CSV.
-- [x] Persistenza locale per il prototipo.
-- [x] Typecheck e build completati.
+- [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
+- [x] Landing pubblica separata dal pannello adulto autenticato.
+- [x] Sessione applicativa server-side e accesso ai profili adulti con email e PIN.
+- [x] Profili `Amministratore`, `Genitore`, `Supervisore` e `Terapista`; creazione e associazione molti-a-molti fra adulti e bambini.
+- [x] Stato sincronizzato per account in Cloudflare D1; copia locale usata per reattività e migrazione.
+- [x] Immagini private ottimizzate nel browser, caricate in Cloudflare R2 e servite da endpoint autenticato.
+- [x] Cancellazione logica e versionamento delle immagini: una scheda archiviata non compare nei nuovi esercizi, mentre il file resta disponibile agli storici che lo referenziano.
+- [x] Selezione e modifica dei profili terapista/bambino; tentativi, aiuti e statistiche associati al bambino attivo.
+- [x] Libreria con ricerca, metadati, upload, sostituzione, eliminazione e assegnazione `IL / LA` persistenti.
+- [x] Catalogo ampliato con 50 parole bisillabiche, dieci per ciascuna delle categorie `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, predisposte per la sostituzione dell'emoji con una fotografia.
+- [x] Migrazione trasparente dei nomi storici delle categorie negli elementi e negli esercizi già salvati.
+- [x] Migrazione automatica dei doppioni: una foto privata caricata prevale sul placeholder omonimo, che viene disattivato, e i riferimenti degli esercizi vengono riallineati.
+- [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
+- [x] Creazione e modifica degli esercizi parola→immagine, duplicazione e cancellazione logica con storico preservato.
+- [x] Configurazione separata dall'avvio: creazione, selezione, rinomina, riordino e cancellazione logica di esercizi e sequenze in un solo pannello.
+- [x] Sequenze associate al terapista proprietario; supervisori e amministratori vedono tutte le sequenze con il nome del proprietario.
+- [x] Anteprima `Prova` collegata all'esercizio selezionato, esclusa dalle statistiche e con ritorno automatico alla pagina di configurazione.
+- [x] Modalità foto + parole e solo parole con parola visibile, sintesi vocale italiana e comando per riascoltare.
+- [x] In `Abbina la parola` la parola di riferimento può essere trascinata sull’immagine scelta con mouse, dito o penna; il tocco diretto sulle immagini resta disponibile.
+- [x] Avanzamento vocale sincronizzato: dopo una risposta corretta il turno successivo parte soltanto al termine della pronuncia, evitando sovrapposizioni audio.
+- [x] Feedback di errore temporaneo: “Riproviamo insieme”, bordo e X rossa scompaiono automaticamente senza restare davanti alle immagini.
+- [x] Ordine casuale e stabile delle risposte durante la singola prova.
+- [x] Modalità casuale standard per `Trova la parola`, con 3/4 distrattori, filtri per parole e categorie e modalità fissa avanzata.
+- [x] Generazione dei distrattori senza duplicati, con priorità alla stessa categoria e senza ripetizioni consecutive della parola-obiettivo.
+- [x] Esercizio `IL / LA` con una sola immagine per volta, drag and drop e alternativa touch/tastiera.
+- [x] Trascinamento `IL / LA` tramite Pointer Events su desktop e mobile, con tocco alternativo; su smartphone la figura è più grande e i box articolo più compatti.
+- [x] Esercizio `Parola nella categoria` configurabile, inseribile nelle sequenze e utilizzabile con tocco o trascinamento.
+- [x] Esercizio `Mix and vary`: una foto senza testo alla volta, scelta casuale o configurata, esito corretto/errato e indicatore di aiuto registrati dall’adulto.
+- [x] `Mix and vary` offre tre esiti diretti: errato, corretto con aiuti e corretto; l’esito aiutato registra automaticamente l’aiuto senza checkbox separata.
+- [x] Feedback di errore con bordi rossi sull'elemento e sulla categoria selezionati; effetti sonori corretti/errati disattivabili.
+- [x] `Trova la parola` avanza automaticamente dopo la risposta corretta, con spunta verde temporanea; l'errore mostra una X rossa temporanea e mantiene il turno corrente.
+- [x] Esercizi `IL / LA` configurabili per immagini e numero di turni, inseribili e riordinabili nelle sequenze miste.
+- [x] Modalità insegnamento e verifica, primo tentativo unico, correzioni separate e aiuti registrati.
+- [x] Test di dominio per primo tentativo, doppio tap, correzione, nuovo item e registrazione aiuti.
+- [x] Statistiche descrittive per parola, parola + esercizio ed esercizio, con andamento giornaliero, export CSV e azzeramento controllato per bambino.
+- [x] Storico persistente delle sessioni per bambino con esito visivo verde/rosso al primo tentativo, sequenza completa delle risposte, aiuti, miniature e valutazione testuale modificabile dall’autore della sessione.
+- [x] Accesso allo storico per ruolo: il terapista vede le proprie sessioni, genitore e supervisore tutte le sessioni dei bambini associati, l’amministratore ha visibilità completa e può cancellare logicamente singoli storici o l’intero storico del bambino.
+- [x] L’amministratore può creare, associare, cambiare ruolo ed eliminare i profili adulti non amministrativi.
+- [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
+- [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
+- [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
+- [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
+- [x] Blocco del trascinamento oltre il bordo durante gli esercizi mobili, per evitare il pull-to-refresh accidentale e la perdita dello stato della sessione.
+- [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
+- [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
+
+## Scelte di persistenza e costo
+
+- D1 contiene per ora uno snapshot JSON versionato per account. Una singola scrittura con debounce di 500 ms riduce query e mantiene atomici i dati collegati.
+- R2 contiene soltanto i file binari privati, separati dallo stato D1. I riferimenti alle immagini sono salvati nello snapshot.
+- Esercizi e sequenze cancellati restano nello snapshot con flag `deleted`, così i risultati storici continuano a essere interpretabili senza duplicare dati.
+- Le immagini rimosse o sostituite non vengono eliminate fisicamente da R2: la libreria usa la cancellazione logica e ogni storico conserva il riferimento alla versione mostrata durante la sessione.
+- La struttura rimane compatibile con una futura migrazione verso tabelle D1 relazionali, da introdurre quando serve ricerca server-side o modifica concorrente.
 
 ## Limitazioni note
 
-- autenticazione, D1 e R2 non ancora collegati;
-- upload memorizzato nel browser, senza resize server-side;
-- catalogo immagini stock solo dimostrativo, nessuna API esterna;
-- dati e nomi presenti sono fittizi;
-- test automatici applicativi ancora da introdurre.
-- la prima pipeline automatica di GitLab era stata bloccata dalla verifica identità richiesta dall'account; la configurazione iniziale è stata sostituita con verifica applicativa e Secret Detection.
+- Il modello D1 usa ultima scrittura valida: manca ancora la risoluzione dei conflitti fra modifiche simultanee da più dispositivi.
+- L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
+- Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
+- Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
+- Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
+- Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi
 
-1. Proteggere `main` e adottare branch/Merge Request.
-2. Chiudere ADR su identità, provider stock e pipeline immagini.
-3. Introdurre test unitari per primo tentativo, correzioni e aiuti.
-4. Preparare D1/R2 e schema migrazioni in staging.
-5. Sostituire storage locale con API autenticata.
-6. Completare verifica accessibilità e test cross-device.
+1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
+3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
+4. Migrare sessioni, trial, tentativi e aiuti verso tabelle D1 relazionali e idempotenti.
+5. Aggiungere controllo di revisione allo snapshot D1 e gestione esplicita dei conflitti.
+6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
+7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
+8. Definire retention, backup e prova di ripristino D1/R2.
+9. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
-## Verifiche ultima versione
+## Verifiche della versione corrente
 
-- `pnpm lint`: superato con soli avvisi sulle immagini locali della demo.
-- `pnpm typecheck`: superato.
-- `pnpm build`: superato.
-- Browser QA: avvio sessione, errore al primo tentativo, aiuto, correzione e layout mobile verificati.
+- Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.
+- L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
+- Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
+- Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
+- `pnpm test`: copre primo tentativo, correzione, doppio tap, aiuti, esclusione di anteprime e prove dalle statistiche, snapshot dello storico con immagine/opzioni/errori, generazione casuale anche con 1 o 2 distrattori, filtri dell’avvio rapido, `Mix and vary`, deduplicazione dei placeholder, validazione dei distrattori, link pubblici di anteprima e accesso alle sequenze per ruolo/proprietario.
+- `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
+- `pnpm typecheck`: superato senza errori.
+- `pnpm build`: superato senza errori.
+- Pubblicazione Sites successiva alla verifica corrente, con binding D1/R2 invariati.
+- Browser QA automatizzata locale non disponibile su questa macchina perché il runtime Workers/Miniflare termina con `ERR_RUNTIME_FAILURE`; build e verifiche statiche sono completati.
