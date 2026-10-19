@@ -18,6 +18,8 @@
 - [x] Selezione e modifica dei profili terapista/bambino; tentativi, aiuti e statistiche associati al bambino attivo.
 - [x] Libreria con ricerca, metadati, upload, sostituzione, eliminazione e assegnazione `IL / LA` persistenti.
 - [x] Catalogo ampliato con 50 parole bisillabiche, dieci per ciascuna delle categorie `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, predisposte per la sostituzione dell'emoji con una fotografia.
+- [x] Catalogo ampliato con altri 100 elementi testuali verificati: 34 parole di 2 sillabe, 33 di 3 sillabe e 33 di 4 sillabe, inizialmente senza immagine.
+- [x] La libreria consente di aggiungere una parola senza fotografia e di completarla in seguito; gli elementi testuali sono ammessi negli esercizi con sole parole ed esclusi automaticamente dalle attività che richiedono immagini.
 - [x] Migrazione trasparente dei nomi storici delle categorie negli elementi e negli esercizi già salvati.
 - [x] Migrazione automatica dei doppioni: una foto privata caricata prevale sul placeholder omonimo, che viene disattivato, e i riferimenti degli esercizi vengono riallineati.
 - [x] Etichette in stampatello maiuscolo, fotografie realistiche disponibili nel catalogo demo e parole sotto le immagini.
@@ -99,7 +101,7 @@
 - Gli esercizi precedenti senza filtro sillabico continuano a usare tutta la libreria; i link pubblici già creati restano snapshot immutabili e compatibili con i campi mancanti.
 - La libreria propone e salva sillabazione e numero di sillabe. Le grafie potenzialmente ambigue compaiono nel filtro `Da verificare`, mentre le correzioni confermate non vengono sovrascritte.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
-- `pnpm test`: 38 test; copre anche sillabazione, casi da verificare, correzioni persistenti e filtro sillabico nella generazione casuale.
+- `pnpm test`: copre anche sillabazione, casi da verificare, correzioni persistenti, filtro sillabico, composizione del catalogo testuale e separazione tra modalità con immagini e sole parole.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.

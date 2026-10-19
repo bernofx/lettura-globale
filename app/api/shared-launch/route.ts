@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { sharedLaunches, userStates } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
+import { hasArtwork } from "../../domain/library-availability";
 
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
@@ -21,7 +22,7 @@ type SharedExercise = Record<string, unknown> & {
   namingCategories?: string[];
 };
 type StoredState = {
-  library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; deleted?: boolean }>;
+  library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; image?: unknown; emoji?: unknown; deleted?: boolean }>;
   exercises?: SharedExercise[];
   sequences?: Array<{ id?: string; title?: string; exerciseIds?: string[]; deleted?: boolean }>;
 };
@@ -54,11 +55,11 @@ export async function POST(request: Request) {
     else if (exercise.kind === "word-categories") exercise.categoryItemIds?.forEach((id) => referencedIds.add(id));
     else if (exercise.kind === "naming") {
       if (exercise.namingItemIds?.length) exercise.namingItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => !exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? "")).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+      else availableLibrary.filter((item) => hasArtwork(item) && (!exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? ""))).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     }
     else if (exercise.recognitionMode === "random") {
       if (exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+      else availableLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     } else {
       if (exercise.promptId) referencedIds.add(exercise.promptId);
       exercise.optionIds?.forEach((id) => referencedIds.add(id));
