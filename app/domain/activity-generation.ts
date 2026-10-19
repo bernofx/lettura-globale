@@ -1,7 +1,10 @@
+import { matchesSyllableFilter, type SyllableFilter } from "./syllabification.ts";
+
 export type ActivityCandidate = {
   id: string;
   word: string;
   category: string;
+  syllableCount?: number;
 };
 
 export type RandomRecognitionConfig = {
@@ -10,6 +13,7 @@ export type RandomRecognitionConfig = {
   distractorSource?: "mixed" | "same-category";
   allowedIds?: string[];
   categories?: string[];
+  syllables?: SyllableFilter;
 };
 
 export type RecognitionRound = {
@@ -61,7 +65,7 @@ function promptOrder(candidates: ActivityCandidate[], rounds: number, random: ()
 export function createRandomRecognitionRounds(candidates: ActivityCandidate[], config: RandomRecognitionConfig, random: () => number = Math.random): RecognitionRound[] {
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
-  const pool = candidates.filter((item) => (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)));
+  const pool = candidates.filter((item) => (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
   const promptPool = config.distractorSource === "same-category"
     ? pool.filter((prompt) => pool.filter((item) => item.id !== prompt.id && item.category === prompt.category).length >= config.distractorCount)
     : pool;
