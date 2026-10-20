@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deduplicateLibraryPlaceholders, remapLibraryId, remapLibraryIds, type DeduplicableLibraryItem } from "../app/domain/library-deduplication.ts";
+import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds, type DeduplicableLibraryItem } from "../app/domain/library-deduplication.ts";
 
 test("mantiene la foto caricata e disattiva il placeholder omonimo", () => {
   const result = deduplicateLibraryPlaceholders<DeduplicableLibraryItem>([
@@ -23,4 +23,16 @@ test("non elimina immagini reali o caricamenti senza doppione placeholder", () =
 
   assert.equal(result.replacements.size, 0);
   assert.equal(result.items.some((item) => item.deleted), false);
+});
+
+test("recupera gli upload arrivati allo storage ma non ancora salvati nello stato cloud", () => {
+  const remote = [{ id: "mela", word: "Mela" }];
+  const local = [
+    { id: "foto-nuova", word: "Foto", privateUpload: true, remoteImageId: "media-foto" },
+    { id: "solo-locale", word: "Locale", privateUpload: true, imageKey: "local-key" },
+    { id: "mela", word: "Mela vecchia", privateUpload: true, remoteImageId: "media-old" },
+  ];
+
+  const recovered = recoverPendingRemoteUploads(remote, local);
+  assert.deepEqual(recovered.map((item) => item.id), ["foto-nuova", "mela"]);
 });
