@@ -20,6 +20,7 @@ import { retryOperation } from "./domain/retry";
 import { buildStateChange, rebaseStateChange } from "./domain/state-changes";
 import { createPersistentTherapistSession, parsePersistentTherapistSession, THERAPIST_SESSION_STORAGE_KEY } from "./domain/therapist-session";
 import { libraryItemWasEdited } from "./domain/library-edit";
+import { parsePendingCloudSave, PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave } from "./domain/pending-cloud-save";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -45,6 +46,30 @@ function syllableFilterLabel(filter?: SyllableFilter) {
   if (filter === "2-3") return "2 o 3 sillabe";
   if (filter === "4+") return "4 o più sillabe";
   return `${filter} sillabe`;
+}
+
+function backendStatusInfo(status: BackendStatus) {
+  if (status === "loading") return { tone: "pending", label: "Connessione al cloud…", detail: "Caricamento dei dati" };
+  if (status === "migrating") return { tone: "pending", label: "Trasferimento nel cloud…", detail: "Migrazione in corso" };
+  if (status === "syncing") return { tone: "pending", label: "Salvataggio…", detail: "Modifiche in sincronizzazione" };
+  if (status === "error") return { tone: "error", label: "Non salvato nel cloud", detail: "La copia locale è al sicuro; riproverò automaticamente" };
+  if (status === "local") return { tone: "local", label: "Solo su questo dispositivo", detail: "Il cloud non è disponibile" };
+  return { tone: "ready", label: "Salvato nel cloud", detail: "Dati sincronizzati e protetti" };
+}
+
+function readPendingCloudSave() {
+  try { return parsePendingCloudSave(localStorage.getItem(PENDING_CLOUD_SAVE_STORAGE_KEY)); }
+  catch { return null; }
+}
+
+function storePendingCloudSave(change: unknown) {
+  try { localStorage.setItem(PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave(change)); }
+  catch { /* The normal cloud save must still proceed when browser storage is full or unavailable. */ }
+}
+
+function clearPendingCloudSave() {
+  try { localStorage.removeItem(PENDING_CLOUD_SAVE_STORAGE_KEY); }
+  catch { /* storage can be unavailable */ }
 }
 
 const stockItems: LibraryItem[] = [
@@ -516,6 +541,7 @@ export default function HomePage() {
   const backendSaveTimer = useRef<number | null>(null);
   const backendRevision = useRef(0);
   const lastSyncedBackendState = useRef<BackendState | null>(null);
+  const localFallbackBaseline = useRef<BackendState | null>(null);
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const granularWritesUnavailable = useRef(false);
   const localMediaRepairing = useRef(false);
@@ -844,23 +870,35 @@ export default function HomePage() {
           activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
           attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
         };
-        const recoveredLibrary = recoverPendingRemoteUploads(savedBaseline.library, localBootstrapSnapshot.current.library);
+        let restoredState = savedBaseline;
+        const pendingSave = readPendingCloudSave();
+        let recoveredPendingSave = false;
+        if (pendingSave) {
+          try {
+            restoredState = rebaseStateChange(savedBaseline, pendingSave.change, crypto.randomUUID(), result.revision).state as BackendState;
+            recoveredPendingSave = true;
+          } catch {
+            clearPendingCloudSave();
+          }
+        }
+        const recoveredLibrary = recoverPendingRemoteUploads(restoredState.library, localBootstrapSnapshot.current.library);
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
-        setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
-        setChildren(saved.children?.length ? saved.children : initialChildren);
-        setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
+        localFallbackBaseline.current = null;
+        setTherapists(mergeById(restoredState.therapists ?? [], [initialAdministrator]));
+        setChildren(restoredState.children?.length ? restoredState.children : initialChildren);
+        setActiveChildId(restoredState.activeChildId || restoredState.children?.[0]?.id || initialChildren[0].id);
         setLibrary(hydrateLibrary(recoveredLibrary).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-        setExercises(hydrateExercises(saved.exercises ?? []));
-        setSequences(hydrateSequences(saved.sequences ?? []));
-        setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
-        setAttempts(saved.attempts ?? []);
-        setHelps(saved.helps ?? []);
-        setSessionHistory(saved.sessionHistory ?? []);
-        setAppearance(hydrateAppearance(saved.appearance));
+        setExercises(hydrateExercises(restoredState.exercises ?? []));
+        setSequences(hydrateSequences(restoredState.sequences ?? []));
+        setActiveSequenceId(restoredState.activeSequenceId || restoredState.sequences?.[0]?.id || initialSequences[0].id);
+        setAttempts(restoredState.attempts ?? []);
+        setHelps(restoredState.helps ?? []);
+        setSessionHistory(restoredState.sessionHistory ?? []);
+        setAppearance(hydrateAppearance(restoredState.appearance));
         backendHydrating.current = false;
         setBackendInitialized(true);
-        setBackendStatus("ready");
+        setBackendStatus(recoveredPendingSave ? "syncing" : "ready");
         return;
       }
 
@@ -888,7 +926,8 @@ export default function HomePage() {
     };
     initializeBackend().catch(() => {
       if (cancelled) return;
-      backendHydrating.current = true;
+      localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
+      backendHydrating.current = false;
       setBackendStatus("local");
     });
     return () => { cancelled = true; };
@@ -897,7 +936,8 @@ export default function HomePage() {
   useEffect(() => {
     if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
     const watchdog = window.setTimeout(() => {
-      backendHydrating.current = true;
+      localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
+      backendHydrating.current = false;
       setBackendStatus("local");
     }, 16_000);
     return () => window.clearTimeout(watchdog);
@@ -960,15 +1000,36 @@ export default function HomePage() {
           setAppearance(hydrateAppearance(syncedSnapshot.appearance));
           backendHydrating.current = false;
         }
-        setBackendStatus("ready");
+        const currentSnapshot = backendStateForStorage(localBootstrapSnapshot.current);
+        const stillDirty = Boolean(buildStateChange(syncedSnapshot, currentSnapshot, crypto.randomUUID(), result.revision));
+        if (stillDirty) setBackendStatus("syncing");
+        else {
+          clearPendingCloudSave();
+          setBackendStatus("ready");
+        }
       });
     backendSaveQueue.current = task;
     return task;
   }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
 
   useEffect(() => {
-    if (backendHydrating.current || !backendInitialized) return;
+    if (backendHydrating.current) return;
     const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
+    if (!backendInitialized) {
+      if (!localFallbackBaseline.current) return;
+      const localChange = buildStateChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
+      if (localChange) storePendingCloudSave(localChange);
+      return;
+    }
+    const baseline = lastSyncedBackendState.current;
+    if (!baseline) return;
+    const pendingChange = buildStateChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current);
+    if (!pendingChange) {
+      clearPendingCloudSave();
+      return;
+    }
+    storePendingCloudSave(pendingChange);
+    window.setTimeout(() => setBackendStatus("syncing"), 0);
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = window.setTimeout(() => {
       backendSaveTimer.current = null;
@@ -1479,7 +1540,7 @@ export default function HomePage() {
     return <main className="public-preview-shell"><SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
-  if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => setBackendStatus("local")} />;
+  if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
   if (!therapist) return showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -1585,13 +1646,13 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
 
 function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus }) {
   const initials = `${therapist.firstName[0] ?? ""}${therapist.lastName[0] ?? ""}`;
-  const localOnly = backendStatus === "local";
-  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className="sidebar-note"><span className="status-dot" /><div><strong>{localOnly ? "Dati su questo dispositivo" : "Dati nel cloud"}</strong><small>{localOnly ? "Il cloud non è disponibile" : "Sincronizzati e protetti"}</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
+  const status = backendStatusInfo(backendStatus);
+  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className={`sidebar-note cloud-status-${status.tone}`}><span className="status-dot" /><div><strong>{status.label}</strong><small>{status.detail}</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
 }
 
 function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus }) {
-  const syncLabel = backendStatus === "syncing" ? "Sincronizzazione…" : backendStatus === "error" ? "Cloud non raggiungibile" : backendStatus === "local" ? "Solo su questo dispositivo" : "Salvato nel cloud";
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className={`private-pill ${backendStatus === "error" || backendStatus === "local" ? "sync-error" : ""}`}><Cloud size={15} />{syncLabel}</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+  const status = backendStatusInfo(backendStatus);
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className={`cloud-indicator cloud-status-${status.tone}`} role="status" aria-live="polite" aria-label={`${status.label}. ${status.detail}`} title={`${status.label} — ${status.detail}`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }
 
 function AppearanceView({ settings, onChange }: { settings: AppearanceSettings; onChange: (settings: AppearanceSettings) => void }) {

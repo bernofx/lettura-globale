@@ -137,6 +137,18 @@ body.lg-session-active .session-screen{height:100dvh}
 .session-step-navigation button:disabled{opacity:.28;cursor:default}
 .session-step-navigation svg{width:19px;height:19px}
 
+/* Cloud persistence is always visible in the page header, including mobile. */
+.cloud-indicator{padding:9px 13px;border-radius:999px;background:#f5f4f9;color:#747187;display:flex;align-items:center;gap:8px;font-size:12px}
+.cloud-indicator .status-dot{flex:0 0 auto}
+.cloud-status-ready .status-dot{background:#49b886;box-shadow:0 0 0 4px #dff5ec}
+.cloud-status-pending .status-dot{background:#d99a2b;box-shadow:0 0 0 4px #fff0ca;animation:cloud-status-pulse 1.2s ease-in-out infinite}
+.cloud-status-local .status-dot{background:#8d8999;box-shadow:0 0 0 4px #e9e7ed}
+.cloud-status-error .status-dot{background:#d9535b;box-shadow:0 0 0 4px #f9dfe2}
+.cloud-status-error{color:#a33b47;background:#fff1f2}
+.cloud-status-local{color:#686474;background:#f2f1f4}
+@keyframes cloud-status-pulse{50%{opacity:.4;transform:scale(.78)}}
+@media(max-width:760px){.cloud-indicator{width:28px;height:28px;padding:0;justify-content:center}.cloud-indicator>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+
 @media(max-width:760px){
   .session-screen>.session-header{min-height:56px;padding:5px 8px;grid-template-columns:minmax(0,1fr) minmax(80px,108px) auto;gap:6px}
   .session-screen .session-header>div:first-child{min-width:0;flex-wrap:nowrap;overflow:hidden}
