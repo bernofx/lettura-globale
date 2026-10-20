@@ -11,7 +11,7 @@ SELECT COUNT(*) AS accounts, MAX(length(payload)) AS max_payload_bytes FROM user
 SELECT COUNT(*) AS invalid_payloads FROM user_states WHERE json_valid(payload) = 0;
 ```
 
-3. Applicare `0004_relational_data.sql` prima di servire la nuova applicazione.
+3. Applicare in ordine le migrazioni da `0004_relational_data.sql` a `0007_granular_state_operations.sql` prima di servire la nuova applicazione.
 4. Verificare che le quattro tabelle precedenti e le nuove tabelle coesistano.
 
 ## Modalità shadow
@@ -50,3 +50,14 @@ Ripubblicare la versione precedente dell'applicazione. `user_states`, `therapist
 `GET /api/state` usa la ricostruzione relazionale soltanto quando revisione e checksum dello snapshot coincidono, gli identificativi di tutte le entità coincidono e non esistono anomalie bloccanti. La risposta indica `dataSource: "relational"`. In caso di errore o differenza restituisce immediatamente lo snapshot con `dataSource: "snapshot"`.
 
 Prima di ritirare lo snapshot devono comunque risultare zero proiezioni incomplete, zero violazioni di chiave esterna e parità di storico e statistiche sul dataset di prova.
+
+## Scritture incrementali
+
+Il client usa `PATCH /api/state/changes` e invia le sole entità modificate con `baseRevision` e `operationId`. Verificare dopo la pubblicazione che le operazioni vengano registrate senza contenuti applicativi:
+
+```sql
+SELECT COUNT(*) AS operations, COUNT(DISTINCT account_id) AS accounts
+FROM state_operations;
+```
+
+Una risposta `409 revision_conflict` indica una modifica concorrente e non deve essere risolta ripetendo un salvataggio completo. La UI segnala lo stato cloud in errore e conserva la copia locale. Il `PUT /api/state` resta disponibile per la prima migrazione del browser e come fallback compatibile quando l'endpoint incrementale non esiste nella versione pubblicata.

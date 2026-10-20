@@ -17,6 +17,7 @@ import { compileSessionPlan, type SessionActivity, type SessionExercise } from "
 import { appearancePresetId, appearancePresets, defaultAppearance, hydrateAppearance, type AppearanceSettings, type ControlShape, type ThemePalette } from "./domain/appearance";
 import { ACTIVE_SESSION_STORAGE_KEY, parseRecoverableSession, serializeRecoverableSession, type RecoverableSession } from "./domain/session-recovery";
 import { retryOperation } from "./domain/retry";
+import { buildStateChange } from "./domain/state-changes";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -500,6 +501,10 @@ export default function HomePage() {
   const [backendInitialized, setBackendInitialized] = useState(false);
   const backendHydrating = useRef(true);
   const backendSaveTimer = useRef<number | null>(null);
+  const backendRevision = useRef(0);
+  const lastSyncedBackendState = useRef<BackendState | null>(null);
+  const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const granularWritesUnavailable = useRef(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -748,11 +753,19 @@ export default function HomePage() {
         return;
       }
       if (!response.ok) throw new Error("backend_load_failed");
-      const result = await response.json() as { state: BackendState | null };
+      const result = await response.json() as { state: BackendState | null; revision: number };
       if (cancelled) return;
 
       if (result.state) {
         const saved = result.state;
+        const savedBaseline: BackendState = {
+          schemaVersion: 1,
+          therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
+          activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
+          attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
+        };
+        backendRevision.current = result.revision;
+        lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
         setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
         setChildren(saved.children?.length ? saved.children : initialChildren);
         setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
@@ -783,7 +796,10 @@ export default function HomePage() {
       const migrated: BackendState = { ...local, library: migratedLibrary };
       const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
       if (!saveResponse.ok) throw new Error("backend_migration_failed");
+      const saveResult = await saveResponse.json() as { revision: number };
       if (cancelled) return;
+      backendRevision.current = saveResult.revision;
+      lastSyncedBackendState.current = backendStateForStorage(migrated);
       setLibrary(migratedLibrary);
       backendHydrating.current = false;
       setBackendInitialized(true);
@@ -808,15 +824,35 @@ export default function HomePage() {
 
   useEffect(() => {
     if (backendHydrating.current || !backendInitialized) return;
-    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance };
+    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
-    backendSaveTimer.current = window.setTimeout(async () => {
-      setBackendStatus("syncing");
-      try {
-        const response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(snapshot)) }, 6500);
+    backendSaveTimer.current = window.setTimeout(() => {
+      backendSaveQueue.current = backendSaveQueue.current.catch(() => undefined).then(async () => {
+        const previous = lastSyncedBackendState.current;
+        if (!previous) throw new Error("missing_sync_baseline");
+        const operationId = crypto.randomUUID();
+        const change = buildStateChange(previous, snapshot, operationId, backendRevision.current);
+        if (!change) return;
+        setBackendStatus("syncing");
+        let response: Response;
+        if (granularWritesUnavailable.current) {
+          response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
+        } else {
+          const body = JSON.stringify(change);
+          response = await retryOperation(() => fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500), { attempts: 2, delayMs: 400 });
+          if ([404, 405, 501].includes(response.status)) {
+            granularWritesUnavailable.current = true;
+            response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
+          }
+        }
+        if (response.status === 409) throw new Error("backend_revision_conflict");
         if (!response.ok) throw new Error("backend_save_failed");
+        const result = await response.json() as { revision: number };
+        backendRevision.current = result.revision;
+        lastSyncedBackendState.current = snapshot;
         setBackendStatus("ready");
-      } catch { setBackendStatus("error"); }
+      });
+      void backendSaveQueue.current.catch(() => setBackendStatus("error"));
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); };
   }, [backendInitialized, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
