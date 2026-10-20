@@ -507,6 +507,7 @@ export default function HomePage() {
   const lastSyncedBackendState = useRef<BackendState | null>(null);
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const granularWritesUnavailable = useRef(false);
+  const localMediaRepairing = useRef(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -956,6 +957,38 @@ export default function HomePage() {
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
   }, [backendInitialized, backendSaveRetryKey, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, enqueueBackendSave]);
+
+  useEffect(() => {
+    if (!backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
+    const candidates = library.filter((item) => item.privateUpload && !item.remoteImageId && (item.image?.startsWith("data:") || item.imageKey));
+    if (!candidates.length) return;
+    let cancelled = false;
+    localMediaRepairing.current = true;
+    const repair = async () => {
+      const uploaded = new Map<string, string>();
+      for (const item of candidates) {
+        const image = item.image?.startsWith("data:") ? item.image : item.imageKey ? await readLibraryImage(item.imageKey) : undefined;
+        if (!image) continue;
+        const remote = await uploadRemoteImage(crypto.randomUUID(), image);
+        uploaded.set(item.id, remote.id);
+      }
+      if (cancelled || !uploaded.size) return;
+      const nextLibrary = localBootstrapSnapshot.current.library.map((item) => uploaded.has(item.id) ? { ...item, remoteImageId: uploaded.get(item.id) } : item);
+      setLibrary(nextLibrary);
+      await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
+      if (cancelled) return;
+      const labels = candidates.filter((item) => uploaded.has(item.id)).map((item) => item.word).join(", ");
+      setToast(`${labels}: immagini recuperate nel cloud`);
+      window.setTimeout(() => setToast(null), 3200);
+    };
+    void repair().catch(() => {
+      if (!cancelled) {
+        setToast("Le immagini locali non sono ancora state sincronizzate");
+        window.setTimeout(() => setToast(null), 3200);
+      }
+    }).finally(() => { localMediaRepairing.current = false; });
+    return () => { cancelled = true; };
+  }, [backendInitialized, backendRefreshKey, backendStatus, library, enqueueBackendSave, setLibrary]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
