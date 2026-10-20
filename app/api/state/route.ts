@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { therapistCredentials, userStates } from "../../../db/schema";
+import { persistRelationalShadow, relationalMigrationRevision } from "../../../db/relational-state";
 
 const MAX_STATE_BYTES = 4_000_000;
 
@@ -14,7 +16,16 @@ export async function GET() {
   if (!row) return Response.json({ state: null, revision: 0, user: { email: user.email, name: user.displayName } });
 
   try {
-    return Response.json({ state: JSON.parse(row.payload), revision: row.revision, user: { email: user.email, name: user.displayName } });
+    const state = JSON.parse(row.payload) as unknown;
+    let relationalStatus = "verified";
+    try {
+      if (env.DB && await relationalMigrationRevision(env.DB, user.userId) < row.revision) {
+        await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: row.email, displayName: user.displayName, rawState: row.payload, state, sourceRevision: row.revision });
+      }
+    } catch {
+      relationalStatus = "pending";
+    }
+    return Response.json({ state, revision: row.revision, relationalStatus, user: { email: user.email, name: user.displayName } });
   } catch {
     return Response.json({ error: "invalid_saved_state" }, { status: 500 });
   }
@@ -52,5 +63,11 @@ export async function PUT(request: Request) {
   await db.insert(userStates).values({ userId: user.userId, email: user.email, payload: raw, schemaVersion: 1, revision, createdAt: existing[0]?.createdAt ?? now, updatedAt: now }).onConflictDoUpdate({ target: userStates.userId, set: { email: user.email, payload: raw, schemaVersion: 1, revision, updatedAt: now } });
   await db.delete(therapistCredentials).where(eq(therapistCredentials.ownerUserId, user.userId));
   for (const credential of credentials) await db.insert(therapistCredentials).values(credential);
-  return Response.json({ ok: true, revision, updatedAt: now });
+  let relational: Awaited<ReturnType<typeof persistRelationalShadow>> | null = null;
+  try {
+    if (env.DB) relational = await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: user.email, displayName: user.displayName, rawState: raw, state, sourceRevision: revision, now });
+  } catch {
+    // The versioned snapshot remains authoritative during the shadow period.
+  }
+  return Response.json({ ok: true, revision, updatedAt: now, relationalStatus: relational ? "verified" : "pending" });
 }

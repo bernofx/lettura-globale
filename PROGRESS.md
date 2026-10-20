@@ -67,10 +67,11 @@
 - [x] Navigazione avanti/indietro per singolo turno in tutti gli esercizi, feedback verde uniforme per IL/LA e categorie, trascinamento touch anche nelle attività con sole parole.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
+- [x] Prima fase della migrazione relazionale D1: schema additivo, proiezione idempotente dello snapshot per account, revisione/checksum, tombstone per riferimenti storici e compatibilità completa con il JSON durante il periodo shadow.
 
 ## Scelte di persistenza e costo
 
-- D1 contiene per ora uno snapshot JSON versionato per account. Una singola scrittura con debounce di 500 ms riduce query e mantiene atomici i dati collegati.
+- D1 conserva ancora lo snapshot JSON versionato come fonte autorevole e rollback. Le nuove tabelle relazionali vengono popolate in modalità shadow a ogni revisione; il cambio delle letture richiede la verifica sul D1 pubblicato descritta nel runbook.
 - R2 contiene soltanto i file binari privati, separati dallo stato D1. I riferimenti alle immagini sono salvati nello snapshot.
 - Esercizi e sequenze cancellati restano nello snapshot con flag `deleted`, così i risultati storici continuano a essere interpretabili senza duplicare dati.
 - Le immagini rimosse o sostituite non vengono eliminate fisicamente da R2: la libreria usa la cancellazione logica e ogni storico conserva il riferimento alla versione mostrata durante la sessione.
@@ -91,8 +92,8 @@
 1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
 3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
-4. Migrare sessioni, trial, tentativi e aiuti verso tabelle D1 relazionali e idempotenti.
-5. Aggiungere controllo di revisione allo snapshot D1 e gestione esplicita dei conflitti.
+4. Verificare sul D1 pubblicato la proiezione shadow e attivare gradualmente le letture relazionali.
+5. Sostituire il salvataggio monolitico con API granulari, idempotenti e dotate di controllo di revisione.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
 8. Definire retention, backup e prova di ripristino D1/R2.
