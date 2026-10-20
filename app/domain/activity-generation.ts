@@ -66,8 +66,12 @@ function promptOrder(candidates: ActivityCandidate[], rounds: number, random: ()
 export function createRandomRecognitionRounds(candidates: ActivityCandidate[], config: RandomRecognitionConfig, random: () => number = Math.random): RecognitionRound[] {
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
-  const pool = candidates.filter((item) => (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
   const fixedPrompt = config.fixedPromptId ? candidates.find((item) => item.id === config.fixedPromptId) : undefined;
+  const compatiblePool = candidates.filter((item) => (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
+  // With a fixed target, selected IDs are preferred distractors rather than a
+  // hard requirement: random distractors can always be completed from the
+  // compatible library. With a random target they remain a true pool filter.
+  const pool = fixedPrompt ? compatiblePool : compatiblePool.filter((item) => !allowed || allowed.has(item.id));
   const promptPool = fixedPrompt ? [fixedPrompt] : config.distractorSource === "same-category"
     ? pool.filter((prompt) => pool.filter((item) => item.id !== prompt.id && item.category === prompt.category).length >= config.distractorCount)
     : pool;
@@ -77,7 +81,9 @@ export function createRandomRecognitionRounds(candidates: ActivityCandidate[], c
     const alternatives = pool.filter((item) => item.id !== prompt.id);
     const eligibleDistractors = config.distractorSource === "same-category" ? alternatives.filter((item) => item.category === prompt.category) : alternatives;
     if (fixedPrompt && eligibleDistractors.length < config.distractorCount) return null;
-    const distractors = shuffledWith(eligibleDistractors, random).slice(0, Math.min(config.distractorCount, eligibleDistractors.length));
+    const preferredDistractors = allowed ? eligibleDistractors.filter((item) => allowed.has(item.id)) : [];
+    const fallbackDistractors = allowed ? eligibleDistractors.filter((item) => !allowed.has(item.id)) : eligibleDistractors;
+    const distractors = [...shuffledWith(preferredDistractors, random), ...shuffledWith(fallbackDistractors, random)].slice(0, Math.min(config.distractorCount, eligibleDistractors.length));
     return { promptId: prompt.id, optionIds: shuffledWith([prompt, ...distractors].map((item) => item.id), random) };
   }).filter((round): round is RecognitionRound => Boolean(round));
 }

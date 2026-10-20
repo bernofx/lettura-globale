@@ -41,6 +41,13 @@ test("mantiene una parola bersaglio fissa e sceglie solo i distrattori a caso", 
   assert.ok(rounds.every((round) => round.optionIds.length === 3 && round.optionIds.includes("mela")));
 });
 
+test("completa automaticamente i distrattori fissi quando le preferenze non bastano", () => {
+  const rounds = createRandomRecognitionRounds(candidates, { rounds: 2, distractorCount: 3, fixedPromptId: "mela", allowedIds: ["pera"] }, deterministic);
+  assert.equal(rounds.length, 2);
+  assert.ok(rounds.every((round) => round.optionIds.length === 4));
+  assert.ok(rounds.every((round) => round.optionIds.includes("mela") && round.optionIds.includes("pera")));
+});
+
 test("rifiuta un bersaglio fisso se non ha abbastanza distrattori compatibili", () => {
   const rounds = createRandomRecognitionRounds(candidates, { rounds: 2, distractorCount: 3, fixedPromptId: "gatto", distractorSource: "same-category" }, deterministic);
   assert.deepEqual(rounds, []);
