@@ -60,7 +60,7 @@ export async function hashText(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createCloudSession(user: ChatGPTUser): Promise<string> {
+export async function createCloudSession(user: ChatGPTUser, adultProfileId?: string): Promise<string> {
   const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
   const token = Array.from(tokenBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   const now = Date.now();
@@ -71,6 +71,7 @@ export async function createCloudSession(user: ChatGPTUser): Promise<string> {
     displayName: user.displayName,
     expiresAt: now + CHATGPT_SESSION_DURATION_SECONDS * 1000,
     createdAt: now,
+    adultProfileId,
   });
   return token;
 }

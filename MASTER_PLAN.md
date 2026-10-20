@@ -142,4 +142,4 @@ Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, 
 9. modello della sessione e protocollo idempotente degli eventi;
 10. trasporto realtime e topologia di deploy;
 11. identità, ruoli, autorizzazioni e pairing QR;
-12. migrazione progressiva dello storico dallo snapshot JSON alle tabelle D1.
+12. completare il cambio delle letture e delle scritture dopo la prima fase shadow della migrazione relazionale, definita nell'ADR 0008.
