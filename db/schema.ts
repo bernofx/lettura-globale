@@ -64,15 +64,15 @@ export const categories = sqliteTable("categories", {
 }, (table) => [primaryKey({ columns: [table.accountId, table.name] })]);
 
 export const mediaAssets = sqliteTable("media_assets", {
-  accountId: text("account_id").notNull(), id: text("id").notNull(), r2ObjectId: text("r2_object_id"), localPath: text("local_path"), emoji: text("emoji"), sourceName: text("source_name").notNull(), sourceUrl: text("source_url"), licenseName: text("license_name").notNull(), licenseUrl: text("license_url"), author: text("author").notNull(), isPrivateUpload: integer("is_private_upload", { mode: "boolean" }).notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(),
+  accountId: text("account_id").notNull(), id: text("id").notNull(), r2ObjectId: text("r2_object_id"), localPath: text("local_path"), imagePath: text("image_path"), imageKey: text("image_key"), emoji: text("emoji"), sourceName: text("source_name").notNull(), sourceUrl: text("source_url"), licenseName: text("license_name").notNull(), licenseUrl: text("license_url"), author: text("author").notNull(), isPrivateUpload: integer("is_private_upload", { mode: "boolean" }).notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
 export const libraryItems = sqliteTable("library_items", {
-  accountId: text("account_id").notNull(), id: text("id").notNull(), word: text("word").notNull(), normalizedWord: text("normalized_word").notNull(), categoryName: text("category_name").notNull(), article: text("article"), syllabification: text("syllabification"), syllableCount: integer("syllable_count"), syllableStatus: text("syllable_status"), mediaAssetId: text("media_asset_id"), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+  accountId: text("account_id").notNull(), id: text("id").notNull(), word: text("word").notNull(), normalizedWord: text("normalized_word").notNull(), categoryName: text("category_name").notNull(), article: text("article"), syllabification: text("syllabification"), syllableCount: integer("syllable_count"), syllableStatus: text("syllable_status"), mediaAssetId: text("media_asset_id"), sourceName: text("source_name").notNull(), sourceUrl: text("source_url"), licenseName: text("license_name").notNull(), licenseUrl: text("license_url"), author: text("author").notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
 export const exercises = sqliteTable("exercises", {
-  accountId: text("account_id").notNull(), id: text("id").notNull(), ownerAdultId: text("owner_adult_id"), title: text("title").notNull(), kind: text("kind").notNull(), recognitionMode: text("recognition_mode"), presentation: text("presentation"), autoPronounce: integer("auto_pronounce", { mode: "boolean" }).notNull(), rounds: integer("rounds"), distractorCount: integer("distractor_count"), distractorSource: text("distractor_source"), syllableFilter: text("syllable_filter"), version: integer("version").notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+  accountId: text("account_id").notNull(), id: text("id").notNull(), ownerAdultId: text("owner_adult_id"), title: text("title").notNull(), kind: text("kind").notNull(), recognitionMode: text("recognition_mode"), presentation: text("presentation"), autoPronounce: integer("auto_pronounce", { mode: "boolean" }).notNull(), rounds: integer("rounds"), distractorCount: integer("distractor_count"), distractorSource: text("distractor_source"), syllableFilter: text("syllable_filter"), sourceExerciseId: text("source_exercise_id"), version: integer("version").notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
 export const exerciseItems = sqliteTable("exercise_items", {
@@ -100,7 +100,7 @@ export const sessionItems = sqliteTable("session_items", {
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
 export const sessionItemContent = sqliteTable("session_item_content", {
-  accountId: text("account_id").notNull(), sessionItemId: text("session_item_id").notNull(), role: text("role").notNull(), position: integer("position").notNull(), libraryItemId: text("library_item_id"), wordSnapshot: text("word_snapshot").notNull(), categorySnapshot: text("category_snapshot").notNull(), emojiSnapshot: text("emoji_snapshot"), imagePathSnapshot: text("image_path_snapshot"), remoteImageId: text("remote_image_id"),
+  accountId: text("account_id").notNull(), sessionItemId: text("session_item_id").notNull(), role: text("role").notNull(), position: integer("position").notNull(), libraryItemId: text("library_item_id"), wordSnapshot: text("word_snapshot").notNull(), categorySnapshot: text("category_snapshot").notNull(), emojiSnapshot: text("emoji_snapshot"), imagePathSnapshot: text("image_path_snapshot"), imageKeySnapshot: text("image_key_snapshot"), remoteImageId: text("remote_image_id"),
 }, (table) => [primaryKey({ columns: [table.accountId, table.sessionItemId, table.role, table.position] })]);
 
 export const attempts = sqliteTable("attempts", {
@@ -118,3 +118,15 @@ export const dataMigrations = sqliteTable("data_migrations", {
 export const auditEvents = sqliteTable("audit_events", {
   id: text("id").primaryKey(), accountId: text("account_id").notNull(), adultId: text("adult_id"), action: text("action").notNull(), entityType: text("entity_type").notNull(), entityId: text("entity_id"), createdAt: integer("created_at").notNull(),
 });
+
+export const attemptOptions = sqliteTable("attempt_options", {
+  accountId: text("account_id").notNull(), attemptId: text("attempt_id").notNull(), position: integer("position").notNull(), libraryItemId: text("library_item_id").notNull(),
+}, (table) => [primaryKey({ columns: [table.accountId, table.attemptId, table.position] })]);
+
+export const sessionItemResponses = sqliteTable("session_item_responses", {
+  accountId: text("account_id").notNull(), sessionItemId: text("session_item_id").notNull(), position: integer("position").notNull(), answerId: text("answer_id").notNull(), labelSnapshot: text("label_snapshot").notNull(), correct: integer("correct", { mode: "boolean" }).notNull(), firstAttempt: integer("first_attempt", { mode: "boolean" }).notNull(), createdAt: integer("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.accountId, table.sessionItemId, table.position] })]);
+
+export const sessionItemHelpLabels = sqliteTable("session_item_help_labels", {
+  accountId: text("account_id").notNull(), sessionItemId: text("session_item_id").notNull(), position: integer("position").notNull(), labelSnapshot: text("label_snapshot").notNull(),
+}, (table) => [primaryKey({ columns: [table.accountId, table.sessionItemId, table.position] })]);

@@ -2,7 +2,7 @@
 
 ## Stato
 
-Accettato, prima fase implementata in modalità shadow.
+Accettato. Prima fase shadow implementata; ricostruzione relazionale e diagnostica di parità implementate senza attivare il cambio delle letture.
 
 ## Contesto
 
@@ -42,3 +42,5 @@ I profili adulto o bambino già rimossi ma ancora referenziati dallo storico div
 - statistiche e storico equivalenti su un dataset noto;
 - login, link pubblici e immagini R2 verificati;
 - backup e rollback provati in staging.
+
+La diagnostica autenticata `/api/state/relational-status` espone soltanto stato, revisioni, conteggi, aree non allineate e numero di anomalie. Non restituisce contenuti, nomi o altri dati personali.

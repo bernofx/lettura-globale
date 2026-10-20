@@ -1,10 +1,10 @@
 import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
-import { RELATIONAL_MIGRATION_KEY, projectLegacyState, projectionCounts } from "../app/domain/relational-state";
+import { RELATIONAL_MIGRATION_KEY, projectLegacyState, projectionCounts, rebuildLegacyState, type RelationalProjection } from "../app/domain/relational-state";
 
 const INSERT_ORDER = [
   "adult_profiles", "children", "adult_child_access", "account_preferences", "categories", "media_assets", "library_items",
   "exercises", "exercise_items", "exercise_categories", "sequences", "sequence_exercises", "sessions", "session_items",
-  "session_item_content", "attempts", "help_events",
+  "session_item_content", "session_item_responses", "session_item_help_labels", "attempts", "attempt_options", "help_events",
 ] as const;
 
 const DELETE_ORDER = [...INSERT_ORDER].reverse();
@@ -47,4 +47,22 @@ export async function persistRelationalShadow(options: {
   statements.push(options.database.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) VALUES (?, ?, ?, ?, 'verified', ?, ?, ?) ON CONFLICT(account_id, migration_key) DO UPDATE SET source_revision = excluded.source_revision, source_checksum = excluded.source_checksum, status = excluded.status, details = excluded.details, started_at = excluded.started_at, completed_at = excluded.completed_at").bind(options.accountId, RELATIONAL_MIGRATION_KEY, options.sourceRevision, sourceChecksum, JSON.stringify({ counts: projectionCounts(projection), warnings: projection.warnings }), now, now));
   await options.database.batch(statements);
   return { counts: projectionCounts(projection), warnings: projection.warnings };
+}
+
+export async function loadRelationalProjection(database: D1Database, accountId: string): Promise<RelationalProjection> {
+  const entries = await Promise.all(INSERT_ORDER.map(async (table) => {
+    const result = await database.prepare(`SELECT * FROM \`${table}\` WHERE account_id = ?`).bind(accountId).all<Record<string, string | number | null>>();
+    return [table, result.results] as const;
+  }));
+  const migration = await database.prepare("SELECT details FROM data_migrations WHERE account_id = ? AND migration_key = ?").bind(accountId, RELATIONAL_MIGRATION_KEY).first<{ details: string | null }>();
+  let warnings: string[] = [];
+  try {
+    const details = JSON.parse(migration?.details ?? "{}") as { warnings?: unknown };
+    if (Array.isArray(details.warnings)) warnings = details.warnings.filter((item): item is string => typeof item === "string");
+  } catch { /* invalid diagnostics do not affect persisted data */ }
+  return { tables: Object.fromEntries(entries) as RelationalProjection["tables"], warnings };
+}
+
+export async function loadRelationalState(database: D1Database, accountId: string) {
+  return rebuildLegacyState(await loadRelationalProjection(database, accountId));
 }
