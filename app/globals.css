@@ -140,6 +140,13 @@ body.lg-session-active .session-screen{height:100dvh}
 /* Cloud persistence is always visible in the page header, including mobile. */
 .cloud-indicator{padding:9px 13px;border-radius:999px;background:#f5f4f9;color:#747187;display:flex;align-items:center;gap:8px;font-size:12px}
 .cloud-indicator .status-dot{flex:0 0 auto}
+.cloud-indicator{border:0;cursor:pointer;font-family:inherit}
+.cloud-indicator:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+.save-journal-list{max-height:40vh;overflow:auto;display:grid;gap:7px;margin:14px 0;padding:2px}
+.save-journal-list>div{padding:9px 11px;border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:1fr auto;gap:3px 9px;font-size:11px}
+.save-journal-list time{color:var(--muted)}
+.save-journal-list strong{font-size:11px}
+.save-journal-list small{grid-column:1/-1;color:var(--muted);overflow-wrap:anywhere}
 .cloud-status-ready .status-dot{background:#49b886;box-shadow:0 0 0 4px #dff5ec}
 .cloud-status-pending .status-dot{background:#d99a2b;box-shadow:0 0 0 4px #fff0ca;animation:cloud-status-pulse 1.2s ease-in-out infinite}
 .cloud-status-local .status-dot{background:#8d8999;box-shadow:0 0 0 4px #e9e7ed}

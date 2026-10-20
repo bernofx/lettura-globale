@@ -21,6 +21,7 @@ import { buildStateChange, rebaseStateChange } from "./domain/state-changes";
 import { createPersistentTherapistSession, parsePersistentTherapistSession, THERAPIST_SESSION_STORAGE_KEY } from "./domain/therapist-session";
 import { libraryItemWasEdited } from "./domain/library-edit";
 import { parsePendingCloudSave, PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave } from "./domain/pending-cloud-save";
+import { appendSaveJournal, readSaveJournal } from "./domain/save-journal";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -338,11 +339,21 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
 
 async function backendResponseError(response: Response, fallback: string) {
   let code = fallback;
+  let diagnosticId = "";
   try {
-    const body = await response.clone().json() as { error?: unknown };
+    const body = await response.clone().json() as { error?: unknown; diagnosticId?: unknown };
     if (typeof body.error === "string" && body.error) code = body.error;
+    if (typeof body.diagnosticId === "string") diagnosticId = body.diagnosticId;
   } catch { /* response senza JSON */ }
-  return new Error(`${code} (${response.status})`);
+  return Object.assign(new Error(`${code} (${response.status})`), { status: response.status, code, diagnosticId });
+}
+
+function saveErrorDetails(error: unknown) {
+  if (error && typeof error === "object") {
+    const candidate = error as { status?: unknown; code?: unknown; name?: unknown; diagnosticId?: unknown };
+    return { httpStatus: typeof candidate.status === "number" ? candidate.status : undefined, errorCode: typeof candidate.code === "string" ? candidate.code : candidate.name === "AbortError" ? "timeout" : "network_error", diagnosticId: typeof candidate.diagnosticId === "string" ? candidate.diagnosticId : undefined };
+  }
+  return { errorCode: "unknown_error" };
 }
 
 function backendStateForStorage(state: BackendState): BackendState {
@@ -533,6 +544,7 @@ export default function HomePage() {
   const [toast, setToast] = useState<string | null>(null);
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
+  const [saveJournalOpen, setSaveJournalOpen] = useState(false);
   const [backendRetryKey, setBackendRetryKey] = useState(0);
   const [backendRefreshKey, setBackendRefreshKey] = useState(0);
   const [backendSaveRetryKey, setBackendSaveRetryKey] = useState(0);
@@ -590,7 +602,7 @@ export default function HomePage() {
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
   const ignoreNextModalPop = useRef(false);
-  const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete) || exitPinOpen || Boolean(recoveryCandidate);
+  const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete) || exitPinOpen || Boolean(recoveryCandidate) || saveJournalOpen;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -719,6 +731,7 @@ export default function HomePage() {
         setShowBuilder(false);
         setEditingExercise(null);
         setEditingSequence(null);
+        setSaveJournalOpen(false);
         setPendingExerciseDelete(null);
         setPendingSequenceDelete(null);
         setEditingItem(null);
@@ -884,6 +897,7 @@ export default function HomePage() {
         const recoveredLibrary = recoverPendingRemoteUploads(restoredState.library, localBootstrapSnapshot.current.library);
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
+        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_loaded", revision: result.revision, sequenceCount: restoredState.sequences.length });
         localFallbackBaseline.current = null;
         setTherapists(mergeById(restoredState.therapists ?? [], [initialAdministrator]));
         setChildren(restoredState.children?.length ? restoredState.children : initialChildren);
@@ -944,12 +958,15 @@ export default function HomePage() {
   }, [backendInitialized, backendStatus, backendRetryKey]);
 
   const enqueueBackendSave = useCallback((snapshot: BackendState) => {
+    let attemptedOperationId = "";
     const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
         const previous = lastSyncedBackendState.current;
         if (!previous) throw new Error("missing_sync_baseline");
         const operationId = crypto.randomUUID();
+        attemptedOperationId = operationId;
         const change = buildStateChange(previous, snapshot, operationId, backendRevision.current);
         if (!change) return;
+        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_started", operationId, revision: backendRevision.current, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: snapshot.sequences.length });
         setBackendStatus("syncing");
         let response: Response;
         if (granularWritesUnavailable.current) {
@@ -973,6 +990,7 @@ export default function HomePage() {
           const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
           if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
           const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
+          appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_rebased", operationId, revision: latest.revision, changedSequences: change.collections.sequences?.upserts.length ?? 0 });
           syncedSnapshot = rebased.state as BackendState;
           response = await retryOperation(async () => {
             const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(rebased.change) }, 6500);
@@ -985,6 +1003,7 @@ export default function HomePage() {
         lastBackendSaveError.current = "";
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = syncedSnapshot;
+        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_succeeded", operationId, revision: result.revision, httpStatus: response.status, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: syncedSnapshot.sequences.length });
         if (syncedSnapshot !== snapshot) {
           backendHydrating.current = true;
           setTherapists(mergeById(syncedSnapshot.therapists ?? [], [initialAdministrator]));
@@ -1007,6 +1026,9 @@ export default function HomePage() {
           clearPendingCloudSave();
           setBackendStatus("ready");
         }
+      }).catch((error) => {
+        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_failed", operationId: attemptedOperationId, ...saveErrorDetails(error) });
+        throw error;
       });
     backendSaveQueue.current = task;
     return task;
@@ -1480,6 +1502,7 @@ export default function HomePage() {
     const exists = sequences.some((item) => item.id === sequence.id);
     const ownedSequence = { ...sequence, therapistId: sequence.therapistId || therapist?.id || initialAdministrator.id };
     setSequences((current) => exists ? current.map((item) => item.id === ownedSequence.id ? ownedSequence : item) : [...current, ownedSequence]);
+    appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "sequence_changed", revision: backendRevision.current, changedSequences: 1, sequenceCount: exists ? sequences.length : sequences.length + 1 });
     setActiveSequenceId(ownedSequence.id);
     setEditingSequence(null);
     notify(exists ? "Sequenza rinominata" : "Nuova sequenza creata");
@@ -1548,7 +1571,7 @@ export default function HomePage() {
     <div className="app-shell">
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content">
-        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} />
+        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
@@ -1562,6 +1585,7 @@ export default function HomePage() {
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
       {showBuilder && <ExerciseBuilder kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
+      {saveJournalOpen && <SaveJournalDialog onClose={() => setSaveJournalOpen(false)} />}
       {pendingExerciseDelete && <ContentDeleteDialog title={`Eliminare “${pendingExerciseDelete.title}”?`} detail="L’esercizio sarà rimosso dalle sequenze. I risultati già registrati resteranno nello storico." onCancel={() => setPendingExerciseDelete(null)} onConfirm={deleteExercise} />}
       {pendingSequenceDelete && <ContentDeleteDialog title={`Eliminare la sequenza “${pendingSequenceDelete.title}”?`} detail="Gli esercizi e i risultati già registrati resteranno disponibili." onCancel={() => setPendingSequenceDelete(null)} onConfirm={deleteSequence} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
@@ -1650,9 +1674,15 @@ function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backend
   return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navItems.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "nav-item active" : "nav-item"} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav><div className={`sidebar-note cloud-status-${status.tone}`}><span className="status-dot" /><div><strong>{status.label}</strong><small>{status.detail}</small></div></div><div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
 }
 
-function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus }) {
+function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus, onOpenSaveJournal }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus; onOpenSaveJournal: () => void }) {
   const status = backendStatusInfo(backendStatus);
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className={`cloud-indicator cloud-status-${status.tone}`} role="status" aria-live="polite" aria-label={`${status.label}. ${status.detail}`} title={`${status.label} — ${status.detail}`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><button type="button" className={`cloud-indicator cloud-status-${status.tone}`} onClick={onOpenSaveJournal} aria-label={`${status.label}. Apri diagnosi salvataggi`} title={`${status.label} — Apri diagnosi salvataggi`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></button><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+}
+
+function SaveJournalDialog({ onClose }: { onClose: () => void }) {
+  const entries = readSaveJournal(localStorage);
+  const copy = async () => { await navigator.clipboard.writeText(JSON.stringify(entries, null, 2)); };
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="save-journal-title"><div className="modal"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">DIAGNOSTICA</span><h2 id="save-journal-title">Journal salvataggi</h2><p>Le ultime operazioni tecniche di questo dispositivo. Non contiene nomi, parole o immagini.</p><div className="save-journal-list">{entries.length ? entries.slice().reverse().map((entry, index) => <div key={`${entry.at}-${index}`}><time>{entry.at}</time><strong>{entry.event}</strong><small>{[entry.errorCode, entry.httpStatus, entry.revision === undefined ? undefined : `rev ${entry.revision}`, entry.changedSequences === undefined ? undefined : `sequenze ${entry.changedSequences}`, entry.diagnosticId ? `diagnosi ${entry.diagnosticId}` : undefined].filter(Boolean).join(" · ")}</small></div>) : <p>Nessuna operazione registrata.</p>}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Chiudi</button><button className="primary-button" type="button" onClick={() => void copy()}>Copia journal</button></div></div></div>;
 }
 
 function AppearanceView({ settings, onChange }: { settings: AppearanceSettings; onChange: (settings: AppearanceSettings) => void }) {
