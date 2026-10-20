@@ -100,11 +100,15 @@ test("salva lo storico di Numero quantità senza violare il vincolo sui tipi del
     therapists: [{ id: "adult-1", firstName: "Ada", lastName: "Rossi", email: "ada@example.test", role: "Terapista", childIds: ["child-1"] }],
     children: [{ id: "child-1", firstName: "Luca", lastName: "Rossi" }],
     library: [], exercises: [], sequences: [], attempts: [], helps: [],
-    sessionHistory: [{ id: "session-q", childId: "child-1", therapistId: "adult-1", title: "Conta", source: "quick", mode: "test", presentation: "images", startedAt: "2026-10-20T10:00:00Z", completedAt: "2026-10-20T10:01:00Z", items: [{ id: "turn-q", exerciseId: "quantity", exerciseTitle: "Conta", kind: "number-quantity", options: [], responses: [{ answerId: "quantity:5:5:adult", label: "Richiesti 5 · selezionati 5 · conferma adulta", correct: true, firstAttempt: true, createdAt: "2026-10-20T10:00:30Z" }], helpLabels: [], firstCorrect: true }] }],
+    sessionHistory: [{ id: "session-q", childId: "child-1", therapistId: "adult-1", title: "Conta", source: "quick", mode: "teaching", presentation: "images", startedAt: "2026-10-20T10:00:00Z", completedAt: "2026-10-20T10:01:00Z", items: [{ id: "turn-q", exerciseId: "quantity", exerciseTitle: "Conta", kind: "number-quantity", options: [], responses: [{ answerId: "quantity:5:4:idle-wrong:1", label: "Richiesti 5 · selezionati 4 · errore dopo inattività", correct: false, firstAttempt: true, createdAt: "2026-10-20T10:00:20Z" }, { answerId: "quantity:5:5:idle-teaching:2", label: "Richiesti 5 · selezionati 5 · completamento dopo inattività", correct: true, firstAttempt: false, createdAt: "2026-10-20T10:00:30Z" }], helpLabels: [], firstCorrect: false }] }],
   };
   const projection = projectLegacyState(state, "account-1", now);
   assert.equal(projection.tables.session_items[0].kind, "recognition");
-  assert.equal(rebuildLegacyState(projection).sessionHistory[0].items[0].kind, "number-quantity");
+  const rebuilt = rebuildLegacyState(projection).sessionHistory[0].items[0];
+  assert.equal(rebuilt.kind, "number-quantity");
+  assert.ok(Array.isArray(rebuilt.responses));
+  assert.equal(rebuilt.responses.length, 2);
+  assert.equal(rebuilt.firstCorrect, false);
 });
 
 test("blocks relational reads when entity identities or revisions differ", () => {

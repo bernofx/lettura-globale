@@ -360,7 +360,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
       const content = rowsFor(tables.session_item_content, "session_item_id", item.id);
       const responses = rowsFor(tables.session_item_responses, "session_item_id", item.id).map((response) => ({ answerId: response.answer_id, label: response.label_snapshot, correct: Boolean(response.correct), firstAttempt: Boolean(response.first_attempt), createdAt: iso(response.created_at) }));
       return definedEntries([
-        ["id", item.id], ["exerciseId", item.exercise_id ?? ""], ["exerciseTitle", item.exercise_title], ["kind", responses.some((response) => /^quantity:\d+:\d+:(adult|idle-teaching)$/.test(String(response.answerId))) ? "number-quantity" : item.kind], ["presentation", item.presentation],
+        ["id", item.id], ["exerciseId", item.exercise_id ?? ""], ["exerciseTitle", item.exercise_title], ["kind", responses.some((response) => /^quantity:\d+:\d+:(adult|idle-teaching|idle-wrong)(?::[a-zA-Z0-9-]+)?$/.test(String(response.answerId))) ? "number-quantity" : item.kind], ["presentation", item.presentation],
         ["target", content.find((entry) => entry.role === "target") ? snapshot(content.find((entry) => entry.role === "target")!) : undefined], ["options", content.filter((entry) => entry.role === "option").map(snapshot)],
         ["responses", responses], ["helpLabels", rowsFor(tables.session_item_help_labels, "session_item_id", item.id).map((entry) => entry.label_snapshot)], ["firstCorrect", Boolean(responses.find((response) => response.firstAttempt)?.correct)],
       ]);

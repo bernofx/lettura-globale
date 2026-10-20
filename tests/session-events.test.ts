@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord } from "../app/domain/session-events.ts";
+import { quantityAnswerId } from "../app/domain/quantity-exercise.ts";
 
 const baseAttempt = {
   sessionId: "session-1",
@@ -26,6 +27,14 @@ test("ignora un doppio tap sulla stessa risposta", () => {
 
   assert.equal(duplicate.added, null);
   assert.equal(duplicate.events.length, 1);
+});
+
+test("Numero quantità conserva anche due esiti uguali nello stesso turno", () => {
+  const first = appendAttempt([], { ...baseAttempt, mode: "teaching", id: "q1", answerId: quantityAnswerId(4, 2, "idle-wrong", 1), correct: false, createdAt: "2026-10-16T10:00:00.000Z" });
+  const second = appendAttempt(first.events, { ...baseAttempt, mode: "teaching", id: "q2", answerId: quantityAnswerId(4, 2, "idle-wrong", 2), correct: false, createdAt: "2026-10-16T10:00:10.000Z" });
+  const success = appendAttempt(second.events, { ...baseAttempt, mode: "teaching", id: "q3", answerId: quantityAnswerId(4, 4, "idle-teaching", 3), correct: true, createdAt: "2026-10-16T10:00:20.000Z" });
+  assert.equal(success.events.length, 3);
+  assert.deepEqual(success.events.map((event) => event.firstAttempt), [true, false, false]);
 });
 
 test("un nuovo item riceve un nuovo primo tentativo", () => {

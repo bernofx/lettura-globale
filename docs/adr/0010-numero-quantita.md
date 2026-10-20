@@ -7,10 +7,10 @@ Gli esercizi esistenti registrano risposte riferite soprattutto a elementi della
 ## Decisione
 
 - Ogni turno mostra dieci oggetti vettoriali e sorteggia un bersaglio nell’intervallo configurato. Gli oggetti selezionati possono essere deselezionati.
-- In valutazione l’inattività produce soltanto un suggerimento: l’adulto registra sempre `Numero corretto` o `Numero errato`.
-- In insegnamento il completamento automatico è opzionale e avviene soltanto quando il conteggio coincide con il bersaglio per l’intera durata configurata. Ogni nuovo tocco annulla e riavvia il timer.
+- In valutazione non ci sono timer: l’adulto registra sempre `Numero corretto` o `Numero errato` e passa subito al turno seguente.
+- In insegnamento, se abilitato, il timer riconosce il conteggio corretto dopo l’intervallo configurato; la spunta resta visibile e solo l’adulto avanza con `Continua`. Se è stato selezionato un numero errato, cinque secondi senza clic o tocchi producono suono di errore, X rossa e azzeramento del turno. Qualsiasi interazione sullo schermo o da tastiera riavvia il timer. Il link condiviso usa sempre i timer dell’insegnamento, senza salvare risultati.
 - La configurazione viene persistita in colonne dedicate della tabella `exercises`.
-- L’esito usa un identificatore discriminato e versionabile nel formato `quantity:<target>:<selected>:<method>`. Un parser di dominio produce l’etichetta italiana salvata nello storico relazionale. Gli identificatori degli oggetti toccati non vengono conservati perché sono equivalenti e rigenerati a ogni turno; vengono conservati bersaglio, conteggio finale, esito, metodo, modalità, adulto, bambino e timestamp.
+- L’esito usa un identificatore discriminato e versionabile nel formato `quantity:<target>:<selected>:<method>[:<attemptKey>]`. La chiave univoca permette di conservare più esiti identici nello stesso turno senza indebolire la protezione generale dai doppi tap; un blocco sincrono evita il doppio invio dello stesso gesto. Un parser di dominio produce l’etichetta italiana salvata nello storico relazionale. Gli identificatori degli oggetti toccati non vengono conservati perché sono equivalenti e rigenerati a ogni turno; vengono conservati bersaglio, conteggio finale, esito, metodo, modalità, adulto, bambino e timestamp.
 - Le quantità non entrano nella matrice “parole × attività”. Restano incluse nell’accuratezza generale, nello storico sessione e nei raggruppamenti per esercizio.
 
 ## Conseguenze
@@ -21,4 +21,4 @@ Lo schema D1 storico di `session_items.kind` non include `number-quantity`. Per 
 
 ## Verifica
 
-I test devono coprire generazione entro i limiti, oggetti misti, compilazione in turni, round-trip relazionale, etichette dello storico e assenza di immagini nel riepilogo. La prova manuale deve verificare timer annullato dai tocchi, selezione reversibile e conferma adulta obbligatoria in valutazione.
+I test devono coprire generazione entro i limiti, oggetti misti, compilazione in turni, round-trip relazionale, etichette dello storico, tentativi ripetuti e assenza di immagini nel riepilogo. La prova manuale deve verificare timer riavviato da clic e tocchi ovunque, selezione reversibile, `Continua` solo dopo esito positivo e conferma adulta obbligatoria in valutazione.

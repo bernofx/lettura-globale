@@ -28,12 +28,21 @@ export function quantityObjectLabel(object: QuantityObject, count: number) {
   return count === 1 ? "sassolino" : "sassolini";
 }
 
-export function quantityAnswerId(target: number, selected: number, method: "adult" | "idle-teaching") {
-  return `quantity:${target}:${selected}:${method}`;
+export type QuantityAnswerMethod = "adult" | "idle-teaching" | "idle-wrong";
+
+export function quantityAnswerId(target: number, selected: number, method: QuantityAnswerMethod, attemptKey?: string | number) {
+  return `quantity:${target}:${selected}:${method}${attemptKey === undefined ? "" : `:${attemptKey}`}`;
 }
 
 export function quantityAnswerLabel(answerId: string) {
-  const match = /^quantity:(\d+):(\d+):(adult|idle-teaching)$/.exec(answerId);
+  const match = /^quantity:(\d+):(\d+):(adult|idle-teaching|idle-wrong)(?::[a-zA-Z0-9-]+)?$/.exec(answerId);
   if (!match) return null;
-  return `Richiesti ${match[1]} · selezionati ${match[2]}${match[3] === "idle-teaching" ? " · completamento automatico" : " · conferma adulta"}`;
+  const method = match[3] === "idle-teaching" ? "completamento dopo inattività" : match[3] === "idle-wrong" ? "errore dopo inattività" : "conferma adulta";
+  return `Richiesti ${match[1]} · selezionati ${match[2]} · ${method}`;
+}
+
+export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, successSeconds = 3) {
+  if ((mode !== "teaching" && !sharedPreview) || selected === 0) return null;
+  if (selected !== target) return { correct: false, delayMs: 5000, method: "idle-wrong" as const };
+  return autoComplete || sharedPreview ? { correct: true, delayMs: Math.min(10, Math.max(1, successSeconds)) * 1000, method: "idle-teaching" as const } : null;
 }
