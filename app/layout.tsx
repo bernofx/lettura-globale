@@ -5,10 +5,14 @@ export const metadata: Metadata = {
   title: "Lettura Globale",
   description: "Esercizi di lettura globale guidati da terapisti e genitori.",
   applicationName: "Lettura Globale",
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  icons: {
+    icon: "/lettura-globale-icon-v2.png",
+    shortcut: "/lettura-globale-icon-v2.png",
+    apple: "/lettura-globale-icon-v2.png",
+  },
 };
 
-export const viewport: Viewport = { themeColor: "#6659d9", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#f5b900", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="it"><body>{children}</body></html>;
