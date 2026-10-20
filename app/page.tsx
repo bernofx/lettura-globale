@@ -309,6 +309,15 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   }
 }
 
+async function backendResponseError(response: Response, fallback: string) {
+  let code = fallback;
+  try {
+    const body = await response.clone().json() as { error?: unknown };
+    if (typeof body.error === "string" && body.error) code = body.error;
+  } catch { /* response senza JSON */ }
+  return new Error(`${code} (${response.status})`);
+}
+
 function backendStateForStorage(state: BackendState): BackendState {
   return { ...state, library: state.library.map((item) => ({ ...item, image: item.remoteImageId ? undefined : item.image?.startsWith("data:") ? undefined : item.image })) };
 }
@@ -508,6 +517,7 @@ export default function HomePage() {
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const granularWritesUnavailable = useRef(false);
   const localMediaRepairing = useRef(false);
+  const lastBackendSaveError = useRef("");
   const [showUpload, setShowUpload] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -899,7 +909,7 @@ export default function HomePage() {
           const body = JSON.stringify(change);
           response = await retryOperation(async () => {
             const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500);
-            if (result.status >= 500) throw new Error(`backend_save_http_${result.status}`);
+            if (result.status >= 500) throw await backendResponseError(result, "backend_save_failed");
             return result;
           }, { attempts: 2, delayMs: 400 });
           if ([404, 405, 501].includes(response.status)) {
@@ -914,16 +924,16 @@ export default function HomePage() {
           const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
           if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
           const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
+          syncedSnapshot = rebased.state as BackendState;
           response = await retryOperation(async () => {
             const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(rebased.change) }, 6500);
-            if (result.status >= 500) throw new Error(`backend_conflict_http_${result.status}`);
+            if (result.status >= 500) throw await backendResponseError(result, "backend_conflict_failed");
             return result;
           }, { attempts: 2, delayMs: 400 });
-          if (!response.ok) throw new Error("backend_conflict_retry_failed");
-          syncedSnapshot = rebased.state as BackendState;
         }
-        if (!response.ok) throw new Error("backend_save_failed");
+        if (!response.ok) throw await backendResponseError(response, "backend_save_failed");
         const result = await response.json() as { revision: number };
+        lastBackendSaveError.current = "";
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = syncedSnapshot;
         if (syncedSnapshot !== snapshot) {
@@ -1173,7 +1183,8 @@ export default function HomePage() {
     try {
       await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
       return "cloud" as const;
-    } catch {
+    } catch (error) {
+      lastBackendSaveError.current = error instanceof Error ? error.message : "errore sconosciuto";
       setBackendStatus("error");
       return "pending" as const;
     }
@@ -1476,8 +1487,8 @@ export default function HomePage() {
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
-      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await persistLibraryImmediately([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(false); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : "Elemento locale · sincronizzazione cloud non riuscita"); } catch { notify("Impossibile salvare l’elemento"); } }} />}
-      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await persistLibraryImmediately(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : "Modifica locale · sincronizzazione cloud non riuscita"); } catch { notify("Impossibile salvare le modifiche"); } }} />}
+      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await persistLibraryImmediately([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(false); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Elemento locale · errore cloud: ${lastBackendSaveError.current}`); } catch { notify("Impossibile salvare l’elemento"); } }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await persistLibraryImmediately(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Modifica locale · errore cloud: ${lastBackendSaveError.current}`); } catch { notify("Impossibile salvare le modifiche"); } }} />}
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
       {showBuilder && <ExerciseBuilder kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
