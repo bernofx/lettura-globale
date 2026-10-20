@@ -8,6 +8,10 @@
 
 ## Completato
 
+- [x] L’amministratore può modificare nome, cognome, email, PIN, ruolo e bambini associati dei profili adulti non amministrativi.
+- [x] `Trova la parola` supporta un bersaglio fisso con distrattori casuali; il configuratore spiega in modo puntuale quando i filtri non producono abbastanza alternative.
+- [x] Chiusura deterministica delle prove con ritorno alla pagina di configurazione e nuvolette delle sequenze più compatte nella pagina sessione.
+- [x] Analisi tecnica della nuova tipologia `Numero quantità`, inclusi comportamento del timer, modello dei risultati, persistenza e piano di implementazione.
 - [x] Riparazione dello shadow relazionale incompleto: controllo delle identità di tutte le tabelle prima delle scritture granulari, fallback atomico allo snapshot per non perdere sequenze e reintegro non distruttivo a batch limitati al successivo caricamento. Migrazione `0008` per circoscrivere l'unicità email dei profili adulti all'account, con test D1 di due account sovrapposti.
 - [x] Journal locale e copiabile dei salvataggi cloud, privo di contenuti personali, con codice di errore e revisione; l'API segnala esplicitamente la migrazione `state_operations` mancante e associa agli errori inattesi una fase tecnica e un identificatore diagnostico.
 

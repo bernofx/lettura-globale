@@ -34,6 +34,18 @@ test("supporta sessioni semplificate con uno o due distrattori", () => {
   }
 });
 
+test("mantiene una parola bersaglio fissa e sceglie solo i distrattori a caso", () => {
+  const rounds = createRandomRecognitionRounds(candidates, { rounds: 4, distractorCount: 2, fixedPromptId: "mela" }, deterministic);
+  assert.equal(rounds.length, 4);
+  assert.ok(rounds.every((round) => round.promptId === "mela"));
+  assert.ok(rounds.every((round) => round.optionIds.length === 3 && round.optionIds.includes("mela")));
+});
+
+test("rifiuta un bersaglio fisso se non ha abbastanza distrattori compatibili", () => {
+  const rounds = createRandomRecognitionRounds(candidates, { rounds: 2, distractorCount: 3, fixedPromptId: "gatto", distractorSource: "same-category" }, deterministic);
+  assert.deepEqual(rounds, []);
+});
+
 test("usa tutta la selezione per impostazione predefinita", () => {
   const rounds = createRandomRecognitionRounds(candidates, { rounds: 6, distractorCount: 2 }, deterministic);
   assert.ok(rounds.some((round) => {

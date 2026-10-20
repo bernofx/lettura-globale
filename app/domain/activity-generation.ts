@@ -10,6 +10,7 @@ export type ActivityCandidate = {
 export type RandomRecognitionConfig = {
   rounds: number;
   distractorCount: 1 | 2 | 3 | 4;
+  fixedPromptId?: string;
   distractorSource?: "mixed" | "same-category";
   allowedIds?: string[];
   categories?: string[];
@@ -66,17 +67,19 @@ export function createRandomRecognitionRounds(candidates: ActivityCandidate[], c
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
   const pool = candidates.filter((item) => (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
-  const promptPool = config.distractorSource === "same-category"
+  const fixedPrompt = config.fixedPromptId ? candidates.find((item) => item.id === config.fixedPromptId) : undefined;
+  const promptPool = fixedPrompt ? [fixedPrompt] : config.distractorSource === "same-category"
     ? pool.filter((prompt) => pool.filter((item) => item.id !== prompt.id && item.category === prompt.category).length >= config.distractorCount)
     : pool;
-  if (promptPool.length < 1 || pool.length < 2) return [];
+  if (promptPool.length < 1) return [];
 
   return promptOrder(promptPool, Math.max(1, config.rounds), random).map((prompt) => {
     const alternatives = pool.filter((item) => item.id !== prompt.id);
     const eligibleDistractors = config.distractorSource === "same-category" ? alternatives.filter((item) => item.category === prompt.category) : alternatives;
+    if (fixedPrompt && eligibleDistractors.length < config.distractorCount) return null;
     const distractors = shuffledWith(eligibleDistractors, random).slice(0, Math.min(config.distractorCount, eligibleDistractors.length));
     return { promptId: prompt.id, optionIds: shuffledWith([prompt, ...distractors].map((item) => item.id), random) };
-  });
+  }).filter((round): round is RecognitionRound => Boolean(round));
 }
 
 export function pickCategoryRoundIds(candidates: ActivityCandidate[], allowedIds: string[] | undefined, rounds: number, random: () => number = Math.random) {

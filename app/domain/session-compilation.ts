@@ -71,6 +71,7 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
       return createRandomRecognitionRounds(availableForRecognition(library, exercise.presentation), {
         rounds: exercise.rounds ?? 6,
         distractorCount: exercise.distractorCount ?? 3,
+        fixedPromptId: exercise.promptId || undefined,
         distractorSource: exercise.distractorSource ?? "mixed",
         allowedIds: exercise.recognitionItemIds,
         categories: exercise.recognitionCategories,
