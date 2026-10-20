@@ -2,7 +2,7 @@
 
 ## Stato
 
-Accettato. Proiezione shadow, ricostruzione e diagnostica implementate. Il cambio delle letture è automatico soltanto quando revisione, checksum dello snapshot, identità delle entità e anomalie bloccanti risultano allineati; in ogni altro caso resta attivo lo snapshot.
+Accettato. Proiezione shadow, ricostruzione, diagnostica e protocollo incrementale di scrittura implementati. Il cambio delle letture è automatico soltanto quando revisione, checksum dello snapshot, identità delle entità e anomalie bloccanti risultano allineati; in ogni altro caso resta attivo lo snapshot.
 
 ## Contesto
 
@@ -25,8 +25,14 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 1. Tabelle additive e proiezione shadow, senza cambio delle letture.
 2. Confronto sul D1 pubblicato di revisioni, conteggi, riferimenti e statistiche.
 3. Lettura relazionale condizionata dalla verifica di parità, con fallback allo snapshot.
-4. API granulari con versionamento ottimistico e operazioni idempotenti.
+4. API granulari con versionamento ottimistico e operazioni idempotenti. Il client invia soltanto entità modificate, rimosse o riordinate; il server applica l'operazione alla copia compatibile e rigenera temporaneamente la proiezione relazionale.
 5. Arresto delle scritture dello snapshot dopo backup e prova di ripristino.
+
+## Protocollo di scrittura incrementale
+
+`PATCH /api/state/changes` riceve un identificatore univoco dell'operazione, la revisione di partenza e le sole raccolte o preferenze cambiate. L'aggiornamento della revisione e la registrazione in `state_operations` avvengono nello stesso batch D1. Un retry con lo stesso contenuto restituisce la revisione già assegnata; il riuso dell'identificatore con contenuto diverso o una revisione superata produce `409` senza sovrascrivere lo stato più recente.
+
+Durante questa fase il server aggiorna ancora `user_states.payload` come copia di rollback e ricostruisce le tabelle relazionali. Il passaggio successivo porterà gli upsert direttamente sulle tabelle di dominio, mantenendo lo snapshot finché backup e ripristino non saranno provati.
 
 ## Compatibilità e rollback
 
