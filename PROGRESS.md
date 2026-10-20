@@ -72,6 +72,7 @@
 - [x] Cutover controllato delle letture D1: ordine delle raccolte persistito, confronto per revisione e identificativi, uso automatico delle tabelle quando allineate e fallback trasparente allo snapshot in caso di errore o differenza.
 - [x] Prima fase delle scritture granulari: il browser invia solo entità e preferenze cambiate, con coda seriale, controllo ottimistico della revisione e retry idempotente registrato in D1; lo snapshot resta copia di rollback e alimenta ancora la proiezione relazionale.
 - [x] Cutover delle scritture relazionali: ogni operazione aggiorna direttamente e atomicamente le sole tabelle di dominio coinvolte, insieme a revisione, idempotenza e credenziali; il JSON resta un mirror di rollback e prima inizializzazione.
+- [x] Sincronizzazione della libreria tra dispositivi: salvataggio cloud immediato, recupero degli upload R2 rimasti locali e scritture dell’ordine suddivise entro il limite di parametri D1 anche con oltre 100 parole.
 
 ## Scelte di persistenza e costo
 
@@ -83,7 +84,7 @@
 
 ## Limitazioni note
 
-- Le modifiche simultanee da più dispositivi non si sovrascrivono più: la seconda riceve un conflitto di revisione. Manca ancora un flusso UI per ricaricare e riconciliare automaticamente le due copie.
+- Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
 - Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
@@ -113,7 +114,7 @@
 - Gli esercizi precedenti senza filtro sillabico continuano a usare tutta la libreria; i link pubblici già creati restano snapshot immutabili e compatibili con i campi mancanti.
 - La libreria propone e salva sillabazione e numero di sillabe. Le grafie potenzialmente ambigue compaiono nel filtro `Da verificare`, mentre le correzioni confermate non vengono sovrascritte.
 - Su desktop, due, tre, quattro o cinque alternative occupano una sola riga quando lo spazio lo consente, così le foto conservano un’area verticale ampia e restano interamente visibili.
-- `pnpm test`: copre anche sillabazione, casi da verificare, correzioni persistenti, filtro sillabico, composizione del catalogo testuale e separazione tra modalità con immagini e sole parole.
+- `pnpm test`: copre anche sillabazione, casi da verificare, correzioni persistenti, filtro sillabico, composizione del catalogo testuale, separazione tra modalità con immagini e sole parole e scritture ordinate oltre 100 elementi entro i limiti D1.
 - `pnpm lint`: superato con i soli tre avvisi già noti sugli elementi `<img>` usati per anteprime e file dinamici.
 - `pnpm typecheck`: superato senza errori.
 - `pnpm build`: superato senza errori.
