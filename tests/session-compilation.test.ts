@@ -54,3 +54,11 @@ test("un esercizio trova la parola fisso resta un singolo step", () => {
   const plan = compileSessionPlan([fixed], library, { articleFor: (item) => item.article });
   assert.deepEqual(plan, [fixed]);
 });
+
+test("un bersaglio fisso con distrattori casuali resta uguale in tutti i turni", () => {
+  let id = 0;
+  const exercise: SessionExercise = { ...base, id: "fixed-target", title: "Trova mela", kind: "recognition", recognitionMode: "random", promptId: "mela", distractorCount: 2 };
+  const plan = compileSessionPlan([exercise], library, { articleFor: (item) => item.article, random: () => 0.42, createId: () => `id-${id++}` });
+  assert.equal(plan.length, 2);
+  assert.ok(plan.every((item) => item.promptId === "mela" && item.optionIds.length === 3));
+});
