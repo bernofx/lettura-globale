@@ -1,5 +1,28 @@
-const CACHE_NAME = "lettura-globale-v14";
+const CACHE_NAME = "lettura-globale-v15";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
+
+async function fetchWithTimeout(request, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(request, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function networkFirst(request, fallbackUrl) {
+  try {
+    const response = await fetchWithTimeout(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(fallbackUrl ?? request, response.clone());
+    }
+    return response;
+  } catch {
+    return (await caches.match(request)) ?? (fallbackUrl ? caches.match(fallbackUrl) : undefined) ?? Response.error();
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -20,15 +43,12 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/") || url.pathname === "/signin-with-chatgpt") return;
 
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
-          return response;
-        })
-        .catch(() => caches.match("/")),
-    );
+    event.respondWith(networkFirst(request, "/"));
+    return;
+  }
+
+  if (["script", "style", "worker"].includes(request.destination)) {
+    event.respondWith(networkFirst(request));
     return;
   }
 

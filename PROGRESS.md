@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 19 ottobre 2026
+**Aggiornato:** 20 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -54,12 +54,16 @@
 - [x] Accesso allo storico per ruolo: il terapista vede le proprie sessioni, genitore e supervisore tutte le sessioni dei bambini associati, l’amministratore ha visibilità completa e può cancellare logicamente singoli storici o l’intero storico del bambino.
 - [x] L’amministratore può creare, associare, cambiare ruolo ed eliminare i profili adulti non amministrativi.
 - [x] Link pubblici di anteprima per singoli esercizi e sequenze: nessun login, nessuna statistica registrata e ritorno alla Home al termine.
-- [x] Navigazione interna integrata con la cronologia del browser: il tasto Indietro torna alla schermata precedente e interrompe in modo pulito l'attività in corso.
+- [x] Navigazione interna integrata con la cronologia del browser; durante un esercizio il tasto Indietro mantiene la sessione protetta, mentre fuori dagli esercizi torna alla schermata precedente.
 - [x] Con una modale aperta, il tasto Indietro chiude la modale senza cambiare la pagina sottostante.
 - [x] Procedura guidata per la nuova sessione con scelta del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`.
 - [x] Schermata degli esercizi adattiva all'altezza del dispositivo, con prompt e tutte le opzioni visibili senza scroll e riallineamento automatico a inizio turno.
 - [x] Blocco del trascinamento oltre il bordo durante gli esercizi mobili, per evitare il pull-to-refresh accidentale e la perdita dello stato della sessione.
 - [x] Pull-to-refresh disponibile nelle pagine di gestione per caricare gli aggiornamenti dopo un deploy; il blocco resta attivo durante gli esercizi.
+- [x] Uscita protetta durante gli esercizi con pressione continua di quattro secondi, verifica del PIN adulto e pannello di gestione nascosto; i comandi di sistema di Chrome/PWA restano sotto il controllo del dispositivo.
+- [x] Salvataggio locale della sessione attiva e proposta di ripristino alla riapertura per lo stesso adulto e bambino, con scadenza automatica dopo 24 ore.
+- [x] Configuratore `Aspetto` con quattro temi predefiniti, palette e forme dei controlli combinabili, anteprima dal vivo e persistenza locale/cloud.
+- [x] Bootstrap dati con timeout, retry, fallback alla copia locale e retry al resume/ritorno online; service worker network-first per pagina e asset applicativi aggiornabili.
 - [x] Navigazione avanti/indietro per singolo turno in tutti gli esercizi, feedback verde uniforme per IL/LA e categorie, trascinamento touch anche nelle attività con sole parole.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
@@ -79,6 +83,7 @@
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
 - Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
 - Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
+- La modalità protetta è un controllo dell'interfaccia web: Chrome/PWA non può impedire la chiusura dell'app, i gesti del sistema operativo o altri comandi del dispositivo.
 - Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi
