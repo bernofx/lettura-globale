@@ -29,6 +29,13 @@
       "when": 1792256400000,
       "tag": "0003_shared_launches",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792490400000,
+      "tag": "0004_relational_data",
+      "breakpoints": true
     }
   ]
 }

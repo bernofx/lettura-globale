@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   if (!credential || credential.pinHash !== submittedHash) return Response.json({ error: "invalid_credentials" }, { status: 401 });
-  const token = await createCloudSession({ userId: credential.ownerUserId, email: loginEmail, displayName: credential.displayName, fullName: credential.displayName });
+  const token = await createCloudSession({ userId: credential.ownerUserId, email: loginEmail, displayName: credential.displayName, fullName: credential.displayName }, credential.therapistId);
   const response = Response.json({ ok: true, therapistId: credential.therapistId });
   response.headers.append("set-cookie", `${CHATGPT_SESSION_COOKIE}=${token}; Path=/; Max-Age=${CHATGPT_SESSION_DURATION_SECONDS}; HttpOnly; Secure; SameSite=Lax`);
   return response;
