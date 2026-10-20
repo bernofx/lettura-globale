@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { therapistCredentials, userStates } from "../../../db/schema";
-import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, stateChecksum } from "../../../db/relational-state";
+import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
 import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
 
 const MAX_STATE_BYTES = 4_000_000;
@@ -23,21 +23,28 @@ export async function GET() {
     let dataSource = "snapshot";
     try {
       let relationalRevision = env.DB ? await relationalMigrationRevision(env.DB, user.userId) : 0;
-      if (env.DB && relationalRevision < row.revision) {
-        await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: row.email, displayName: user.displayName, rawState: row.payload, state, sourceRevision: row.revision });
-        relationalRevision = row.revision;
-      }
       if (env.DB) {
-        const projection = await loadRelationalProjection(env.DB, user.userId);
-        const migration = await relationalMigrationInfo(env.DB, user.userId);
-        const parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+        let projection = await loadRelationalProjection(env.DB, user.userId);
+        let migration = await relationalMigrationInfo(env.DB, user.userId);
+        let parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+        // A previous partial direct write can leave a current migration marker
+        // while whole collections are absent. Repair that case as well as stale revisions.
+        if (relationalRevision < row.revision || !parity.sourceChecksumMatches || !relationalShadowMatches(state, projection, user.userId)) {
+          await repairRelationalShadow({ database: env.DB, accountId: user.userId, email: row.email, displayName: user.displayName, rawState: row.payload, state, sourceRevision: row.revision });
+          projection = await loadRelationalProjection(env.DB, user.userId);
+          migration = await relationalMigrationInfo(env.DB, user.userId);
+          relationalRevision = migration?.source_revision ?? 0;
+          parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+        }
         relationalStatus = parity.ready ? "ready" : "pending";
         if (parity.ready) {
           responseState = rebuildLegacyState(projection);
           dataSource = "relational";
         }
       }
-    } catch {
+    } catch (error) {
+      const sqliteCode = error instanceof Error ? error.message.match(/SQLITE_[A-Z_]+/)?.[0] : undefined;
+      console.error("relational_shadow_repair_failed", { revision: row.revision, sqliteCode: sqliteCode ?? "unknown" });
       relationalStatus = "pending";
     }
     return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } });
@@ -81,8 +88,10 @@ export async function PUT(request: Request) {
   let relational: Awaited<ReturnType<typeof persistRelationalShadow>> | null = null;
   try {
     if (env.DB) relational = await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: user.email, displayName: user.displayName, rawState: raw, state, sourceRevision: revision, now });
-  } catch {
+  } catch (error) {
     // The versioned snapshot remains authoritative during the shadow period.
+    const sqliteCode = error instanceof Error ? error.message.match(/SQLITE_[A-Z_]+/)?.[0] : undefined;
+    console.error("relational_shadow_initialization_failed", { revision, sqliteCode: sqliteCode ?? "unknown" });
   }
   return Response.json({ ok: true, revision, updatedAt: now, relationalStatus: relational ? "verified" : "pending" });
 }

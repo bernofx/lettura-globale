@@ -11,14 +11,16 @@ SELECT COUNT(*) AS accounts, MAX(length(payload)) AS max_payload_bytes FROM user
 SELECT COUNT(*) AS invalid_payloads FROM user_states WHERE json_valid(payload) = 0;
 ```
 
-3. Applicare in ordine le migrazioni da `0004_relational_data.sql` a `0007_granular_state_operations.sql` prima di servire la nuova applicazione.
+3. Applicare in ordine le migrazioni da `0004_relational_data.sql` a `0008_account_scoped_adult_email.sql` prima di servire la nuova applicazione. La `0008` rende l'email del profilo adulto univoca per account, non globalmente; il login globale continua a usare `therapist_credentials`.
 4. Verificare che le quattro tabelle precedenti e le nuove tabelle coesistano.
 
 ## Modalità shadow
 
-`GET /api/state` confronta la revisione dello snapshot con `data_migrations`. Se la proiezione manca o è precedente, rigenera le righe dell'account. `PUT /api/state` salva prima lo snapshot compatibile e poi aggiorna la proiezione. Un errore della proiezione lascia quindi disponibile la fonte precedente e restituisce `relationalStatus: pending`.
+`GET /api/state` confronta revisione, checksum e identità delle righe di **tutte** le tabelle shadow con lo snapshot. Un record `data_migrations` marcato `verified` non basta: versioni precedenti potevano avanzarlo dopo una scrittura parziale. Se mancano righe, il GET tenta un reintegro non distruttivo in batch di massimo 100 istruzioni. Il registro viene aggiornato solo dopo la verifica delle identità e della revisione sorgente. Le righe estranee non vengono cancellate automaticamente: in quel caso la proiezione resta `pending` e richiede analisi manuale.
 
-La proiezione di un account usa un batch D1: cancellazione delle sole righe shadow di quell'account, reinserimento ordinato e marcatura `verified`. Non vengono letti o spostati i file R2.
+`PUT /api/state` salva prima lo snapshot compatibile e poi aggiorna la proiezione. Un errore della proiezione lascia quindi disponibile la fonte precedente e restituisce `relationalStatus: pending`.
+
+La proiezione completa del `PUT` usa un batch D1 atomico: cancellazione delle sole righe shadow di quell'account, reinserimento ordinato e marcatura `verified`. Il reintegro del `GET` aggiunge o aggiorna invece le righe attese, senza cancellazioni. Non vengono letti o spostati i file R2.
 
 ## Verifica dopo la pubblicazione
 
@@ -54,6 +56,8 @@ Prima di ritirare lo snapshot devono comunque risultare zero proiezioni incomple
 ## Scritture incrementali
 
 Il client usa `PATCH /api/state/changes` e invia le sole entità modificate con `baseRevision` e `operationId`. L'endpoint aggiorna direttamente le tabelle coinvolte nello stesso batch che registra l'operazione e il mirror JSON. Per esempio, una modifica della libreria non riscrive sessioni, tentativi o aiuti.
+
+Prima della scrittura relazionale, `PATCH` verifica che lo shadow corrisponda allo snapshot su tutte le identità delle righe. Se è incompleto, salva comunque in modo atomico snapshot, revisione e idempotenza, risponde con `relationalStatus: "pending"` e `writeMode: "snapshot"`, e lascia al successivo `GET` il reintegro. Questo evita errori di chiave esterna, ad esempio quando si salva una sequenza e gli esercizi parent non sono ancora nello shadow.
 
 Verificare dopo la pubblicazione che `/api/state/relational-status` restituisca anche `writeMode: "direct"` dopo una modifica e che le operazioni vengano registrate senza contenuti applicativi:
 

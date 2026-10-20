@@ -28,6 +28,16 @@ const PRIMARY_KEYS: Record<RelationalTable, string[]> = {
   session_item_help_labels: ["account_id", "session_item_id", "position"], attempts: ["account_id", "id"], attempt_options: ["account_id", "attempt_id", "position"], help_events: ["account_id", "id"],
 };
 
+export function relationalShadowMatches(state: unknown, actual: RelationalProjection, accountId: string) {
+  const expected = projectLegacyState(state, accountId);
+  return INSERT_ORDER.every((table) => {
+    const identity = (row: RelationalRow) => JSON.stringify(PRIMARY_KEYS[table].map((key) => row[key]));
+    const wanted = expected.tables[table].map(identity).sort();
+    const found = actual.tables[table].map(identity).sort();
+    return wanted.length === found.length && wanted.every((key, index) => key === found[index]);
+  });
+}
+
 function guardedUpsert(database: D1Database, table: RelationalTable, row: RelationalRow, accountId: string, operationId: string) {
   const columns = Object.keys(row);
   const updates = columns.filter((column) => !PRIMARY_KEYS[table].includes(column) && column !== "created_at");
@@ -239,6 +249,37 @@ export async function persistRelationalShadow(options: {
   for (const table of INSERT_ORDER) for (const row of projection.tables[table]) statements.push(insertStatement(options.database, table, row));
   statements.push(options.database.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) VALUES (?, ?, ?, ?, 'verified', ?, ?, ?) ON CONFLICT(account_id, migration_key) DO UPDATE SET source_revision = excluded.source_revision, source_checksum = excluded.source_checksum, status = excluded.status, details = excluded.details, started_at = excluded.started_at, completed_at = excluded.completed_at").bind(options.accountId, RELATIONAL_MIGRATION_KEY, options.sourceRevision, sourceChecksum, JSON.stringify({ counts: projectionCounts(projection), warnings: projection.warnings }), now, now));
   await options.database.batch(statements);
+  return { counts: projectionCounts(projection), warnings: projection.warnings };
+}
+
+/** Fills missing shadow rows without deleting user data; the snapshot stays authoritative until every identity is present. */
+export async function repairRelationalShadow(options: Parameters<typeof persistRelationalShadow>[0]) {
+  const now = options.now ?? Date.now();
+  const projection = projectLegacyState(options.state, options.accountId, now);
+  const sourceChecksum = await stateChecksum(options.rawState);
+  const statements: D1PreparedStatement[] = [
+    options.database.prepare("INSERT INTO accounts (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, display_name = excluded.display_name, updated_at = excluded.updated_at").bind(options.accountId, options.email, options.displayName, now, now),
+  ];
+  for (const table of INSERT_ORDER) for (const row of projection.tables[table]) {
+    const columns = Object.keys(row);
+    const updates = columns.filter((column) => !PRIMARY_KEYS[table].includes(column) && column !== "created_at");
+    const sql = `INSERT INTO \`${table}\` (${columns.map((column) => `\`${column}\``).join(", ")}) SELECT ${columns.map(() => "?").join(", ")} WHERE true ON CONFLICT (${PRIMARY_KEYS[table].map((column) => `\`${column}\``).join(", ")}) DO UPDATE SET ${updates.map((column) => `\`${column}\` = excluded.\`${column}\``).join(", ")}`;
+    statements.push(options.database.prepare(sql).bind(...columns.map((column) => row[column])));
+  }
+  for (let start = 0; start < statements.length; start += 100) {
+    try {
+      await options.database.batch(statements.slice(start, start + 100));
+    } catch (error) {
+      console.error("relational_shadow_batch_failed", { batchIndex: Math.floor(start / 100), sqliteCode: error instanceof Error ? error.message.match(/SQLITE_[A-Z_]+/)?.[0] ?? "unknown" : "unknown" });
+      throw error;
+    }
+  }
+  const persisted = await loadRelationalProjection(options.database, options.accountId);
+  if (!relationalShadowMatches(options.state, persisted, options.accountId)) throw new Error("relational_shadow_identity_mismatch");
+  await options.database.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) SELECT ?, ?, ?, ?, 'verified', ?, ?, ? WHERE EXISTS (SELECT 1 FROM user_states WHERE user_id = ? AND revision = ? AND payload = ?) ON CONFLICT(account_id, migration_key) DO UPDATE SET source_revision = excluded.source_revision, source_checksum = excluded.source_checksum, status = excluded.status, details = excluded.details, started_at = excluded.started_at, completed_at = excluded.completed_at")
+    .bind(options.accountId, RELATIONAL_MIGRATION_KEY, options.sourceRevision, sourceChecksum, JSON.stringify({ counts: projectionCounts(projection), warnings: projection.warnings, writeMode: "repair" }), now, now, options.accountId, options.sourceRevision, options.rawState).run();
+  const marker = await relationalMigrationInfo(options.database, options.accountId);
+  if (marker?.source_revision !== options.sourceRevision || marker.source_checksum !== sourceChecksum) throw new Error("relational_shadow_source_changed");
   return { counts: projectionCounts(projection), warnings: projection.warnings };
 }
 

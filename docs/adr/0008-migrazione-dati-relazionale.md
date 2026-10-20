@@ -12,6 +12,7 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 
 - Introdurre tabelle relazionali separate per identità, libreria, configurazione e risultati.
 - Usare chiavi composte `account_id + id`, perché gli identificativi dimostrativi non sono globalmente univoci.
+- Vincolare l'email normalizzata del profilo adulto all'interno dello stesso account; `therapist_credentials` resta la fonte dell'unicità globale del login. La migrazione `0008` corregge l'indice inizialmente globale, che impediva il reintegro di account distinti con un profilo omonimo.
 - Conservare file e immagini in R2; D1 contiene riferimenti e metadati.
 - Trattare tentativi e aiuti come eventi append-only e ricostruire lo storico dalle sessioni.
 - Conservare nelle sessioni una fotografia relazionale dei contenuti mostrati.
@@ -35,6 +36,8 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 L'aggiornamento della revisione, il registro dell'operazione, le credenziali e le modifiche relazionali avvengono nello stesso batch D1. Ogni istruzione relazionale è subordinata alla presenza dell'operazione accettata, quindi un conflitto non produce modifiche parziali. `user_states.payload` viene aggiornato nello stesso batch come mirror di rollback; non viene più usato per rigenerare tutte le tabelle a ogni modifica.
 
 La diagnostica restituisce `writeMode: "direct"` dopo la prima operazione eseguita con il cutover. `GET /api/state` e il `PUT` di prima inizializzazione conservano la capacità di ricostruire la proiezione dal mirror in caso di rollback o migrazione incompleta.
+
+Un registro `verified` non è sufficiente da solo: un'operazione diretta precedente può averlo aggiornato anche se altre tabelle non erano state inizializzate. Prima del `PATCH` confrontiamo le identità attese di tutte le righe shadow con lo snapshot. Se mancano, il batch salva comunque snapshot, revisione, credenziali e idempotenza, ma non esegue le scritture relazionali e segnala `writeMode: "snapshot"`. Al successivo `GET` un reintegro non distruttivo aggiunge o aggiorna le righe attese in batch limitati e aggiorna il registro solo dopo la verifica. Righe estranee o errori di vincolo lasciano lo stato `pending` e richiedono analisi, senza cancellazione automatica.
 
 ## Compatibilità e rollback
 
