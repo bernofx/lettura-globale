@@ -18,8 +18,14 @@ export async function GET() {
     const projection = await loadRelationalProjection(env.DB, user.userId);
     const migration = await relationalMigrationInfo(env.DB, user.userId);
     const report = relationalParityReport(state, projection, snapshot.revision, migration?.source_revision ?? 0, migration?.source_checksum === await stateChecksum(snapshot.payload));
+    let writeMode = "shadow";
+    try {
+      const details = JSON.parse(migration?.details ?? "{}") as { writeMode?: unknown };
+      if (details.writeMode === "direct") writeMode = "direct";
+    } catch { /* diagnostics remain available when legacy details are malformed */ }
     return Response.json({
       status: report.ready ? "ready" : "pending",
+      writeMode,
       ...report,
     }, { headers: { "cache-control": "private, no-store" } });
   } catch {
