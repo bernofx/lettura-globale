@@ -108,3 +108,34 @@ export function applyStateChange(stateValue: unknown, requestValue: unknown) {
   }
   return next;
 }
+
+export function rebaseStateChange(latestStateValue: unknown, requestValue: unknown, operationId: string, baseRevision: number) {
+  const latestState = document(latestStateValue);
+  const request = parseStateChangeRequest(requestValue);
+  const collections: StateChangeRequest["collections"] = {};
+
+  for (const key of STATE_COLLECTIONS) {
+    const change = request.collections[key];
+    if (!change) continue;
+    const latest = entities(latestState[key] ?? []);
+    const removed = new Set(change.removedIds);
+    const byId = new Map(latest.filter((item) => !removed.has(item.id)).map((item) => [item.id, item]));
+    for (const item of change.upserts) byId.set(item.id, item);
+
+    const localOrder = change.order.filter((id) => byId.has(id));
+    const localIds = new Set(localOrder);
+    const concurrentIds = latest.map((item) => item.id).filter((id) => byId.has(id) && !localIds.has(id));
+    const order = [...localOrder, ...concurrentIds];
+    for (const id of byId.keys()) if (!order.includes(id)) order.push(id);
+    collections[key] = { ...change, order };
+  }
+
+  const rebased: StateChangeRequest = {
+    schemaVersion: 1,
+    operationId,
+    baseRevision,
+    collections,
+    values: request.values,
+  };
+  return { change: rebased, state: applyStateChange(latestState, rebased) };
+}
