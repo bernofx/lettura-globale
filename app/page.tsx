@@ -18,6 +18,7 @@ import { appearancePresetId, appearancePresets, defaultAppearance, hydrateAppear
 import { ACTIVE_SESSION_STORAGE_KEY, parseRecoverableSession, serializeRecoverableSession, type RecoverableSession } from "./domain/session-recovery";
 import { retryOperation } from "./domain/retry";
 import { buildStateChange, rebaseStateChange } from "./domain/state-changes";
+import { createPersistentTherapistSession, parsePersistentTherapistSession, THERAPIST_SESSION_STORAGE_KEY } from "./domain/therapist-session";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -584,7 +585,13 @@ export default function HomePage() {
       const publicPreview = parseSharedPreview(window.location.search);
       setPendingSharedLaunch(legacyLaunch);
       setPendingSharedPreviewToken(publicPreview?.token ?? null);
-      setLoggedInTherapistId(sessionStorage.getItem("lg-therapist-session"));
+      const persistentTherapistId = parsePersistentTherapistSession(localStorage.getItem(THERAPIST_SESSION_STORAGE_KEY));
+      const legacyTherapistId = sessionStorage.getItem(THERAPIST_SESSION_STORAGE_KEY);
+      const restoredTherapistId = persistentTherapistId ?? legacyTherapistId;
+      if (legacyTherapistId && !persistentTherapistId) localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(legacyTherapistId));
+      sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+      if (!restoredTherapistId) localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+      setLoggedInTherapistId(restoredTherapistId);
       if (!legacyLaunch && !publicPreview) window.history.replaceState({ lgView: "home" }, "", window.location.href);
       setSessionChecked(true);
     }, 0);
@@ -817,7 +824,8 @@ export default function HomePage() {
       }, { attempts: 3, delayMs: 400 });
       if (response.status === 401) {
         if (!cancelled) {
-          sessionStorage.removeItem("lg-therapist-session");
+          localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
           setLoggedInTherapistId(null);
           setBackendStatus("local");
         }
@@ -1435,12 +1443,12 @@ export default function HomePage() {
   };
 
   const login = (therapistId: string) => {
-    sessionStorage.setItem("lg-therapist-session", therapistId);
+    localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(therapistId));
     setLoggedInTherapistId(therapistId);
     const nextTherapist = therapists.find((item) => item.id === therapistId);
     if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
   };
-  const logout = () => { sessionStorage.removeItem("lg-therapist-session"); setLoggedInTherapistId(null); setShowTherapistLogin(false); setView("home"); };
+  const logout = () => { localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY); sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY); setLoggedInTherapistId(null); setShowTherapistLogin(false); setView("home"); };
   const confirmDelete = () => {
     if (!pendingDelete) return;
     if (pendingDelete.kind === "therapist") {
@@ -1548,7 +1556,7 @@ function TherapistLogin({ therapists, backendStatus, onLogin, onBack }: { therap
         if (response.status === 401) { setError("Email o PIN non corretti."); return; }
         if (!response.ok) { setError("Il cloud non è raggiungibile. Riprova tra poco."); return; }
         const result = await response.json() as { therapistId: string };
-        sessionStorage.setItem("lg-therapist-session", result.therapistId);
+        localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(result.therapistId));
         window.location.reload();
         return;
       }
