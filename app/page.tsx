@@ -1,11 +1,11 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
-import { ChangeEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
-import { deduplicateLibraryPlaceholders, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
+import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
 import { feedbackStartOffset } from "./domain/feedback-audio";
 import { buildSessionHistoryItems, type HistoryImageSnapshot, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
@@ -17,7 +17,7 @@ import { compileSessionPlan, type SessionActivity, type SessionExercise } from "
 import { appearancePresetId, appearancePresets, defaultAppearance, hydrateAppearance, type AppearanceSettings, type ControlShape, type ThemePalette } from "./domain/appearance";
 import { ACTIVE_SESSION_STORAGE_KEY, parseRecoverableSession, serializeRecoverableSession, type RecoverableSession } from "./domain/session-recovery";
 import { retryOperation } from "./domain/retry";
-import { buildStateChange } from "./domain/state-changes";
+import { buildStateChange, rebaseStateChange } from "./domain/state-changes";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -498,6 +498,8 @@ export default function HomePage() {
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [backendRetryKey, setBackendRetryKey] = useState(0);
+  const [backendRefreshKey, setBackendRefreshKey] = useState(0);
+  const [backendSaveRetryKey, setBackendSaveRetryKey] = useState(0);
   const [backendInitialized, setBackendInitialized] = useState(false);
   const backendHydrating = useRef(true);
   const backendSaveTimer = useRef<number | null>(null);
@@ -591,6 +593,10 @@ export default function HomePage() {
         lastResumeCheck.current = now;
         setBackendStatus("loading");
         setBackendRetryKey((current) => current + 1);
+      } else if (backendInitialized && (backendStatus === "ready" || backendStatus === "error") && navigator.onLine && now - lastResumeCheck.current > 15_000) {
+        lastResumeCheck.current = now;
+        if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
+        else setBackendRefreshKey((current) => current + 1);
       }
     };
     const onVisibilityChange = () => resume();
@@ -721,6 +727,60 @@ export default function HomePage() {
   }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
 
   useEffect(() => {
+    if (!backendInitialized || sessionActive || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
+    const baseline = lastSyncedBackendState.current;
+    if (!baseline) return;
+    const local = backendStateForStorage(localBootstrapSnapshot.current);
+    if (buildStateChange(baseline, local, crypto.randomUUID(), backendRevision.current)) return;
+    let cancelled = false;
+    const refresh = async () => {
+      await backendSaveQueue.current.catch(() => undefined);
+      const response = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
+      if (!response.ok) throw new Error("backend_refresh_failed");
+      const result = await response.json() as { state: BackendState | null; revision: number };
+      if (cancelled || !result.state || result.revision <= backendRevision.current) return;
+      const saved = result.state;
+      const savedBaseline: BackendState = {
+        schemaVersion: 1,
+        therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
+        activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
+        attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
+      };
+      backendHydrating.current = true;
+      backendRevision.current = result.revision;
+      lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
+      setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
+      setChildren(saved.children?.length ? saved.children : initialChildren);
+      setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
+      setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
+      setExercises(hydrateExercises(saved.exercises ?? []));
+      setSequences(hydrateSequences(saved.sequences ?? []));
+      setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
+      setAttempts(saved.attempts ?? []);
+      setHelps(saved.helps ?? []);
+      setSessionHistory(saved.sessionHistory ?? []);
+      setAppearance(hydrateAppearance(saved.appearance));
+      backendHydrating.current = false;
+      setBackendStatus("ready");
+      setToast("Dati aggiornati dal cloud");
+      window.setTimeout(() => setToast(null), 2600);
+    };
+    void refresh().catch(() => { if (!cancelled) setBackendStatus("error"); });
+    return () => { cancelled = true; };
+  }, [backendRefreshKey, backendInitialized, backendStatus, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+
+  useEffect(() => {
+    if (!backendInitialized || sessionActive) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
+        else setBackendRefreshKey((current) => current + 1);
+      }
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [backendInitialized, backendStatus, sessionActive]);
+
+  useEffect(() => {
     if (allLocalDataLoaded) return;
     const timer = window.setTimeout(() => setLocalLoadSlow(true), 6000);
     return () => window.clearTimeout(timer);
@@ -764,12 +824,13 @@ export default function HomePage() {
           activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
           attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
         };
+        const recoveredLibrary = recoverPendingRemoteUploads(savedBaseline.library, localBootstrapSnapshot.current.library);
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
         setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
         setChildren(saved.children?.length ? saved.children : initialChildren);
         setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
-        setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
+        setLibrary(hydrateLibrary(recoveredLibrary).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
         setExercises(hydrateExercises(saved.exercises ?? []));
         setSequences(hydrateSequences(saved.sequences ?? []));
         setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
@@ -822,12 +883,8 @@ export default function HomePage() {
     return () => window.clearTimeout(watchdog);
   }, [backendInitialized, backendStatus, backendRetryKey]);
 
-  useEffect(() => {
-    if (backendHydrating.current || !backendInitialized) return;
-    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
-    if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
-    backendSaveTimer.current = window.setTimeout(() => {
-      backendSaveQueue.current = backendSaveQueue.current.catch(() => undefined).then(async () => {
+  const enqueueBackendSave = useCallback((snapshot: BackendState) => {
+    const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
         const previous = lastSyncedBackendState.current;
         if (!previous) throw new Error("missing_sync_baseline");
         const operationId = crypto.randomUUID();
@@ -839,23 +896,66 @@ export default function HomePage() {
           response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
         } else {
           const body = JSON.stringify(change);
-          response = await retryOperation(() => fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500), { attempts: 2, delayMs: 400 });
+          response = await retryOperation(async () => {
+            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500);
+            if (result.status >= 500) throw new Error(`backend_save_http_${result.status}`);
+            return result;
+          }, { attempts: 2, delayMs: 400 });
           if ([404, 405, 501].includes(response.status)) {
             granularWritesUnavailable.current = true;
             response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
           }
         }
-        if (response.status === 409) throw new Error("backend_revision_conflict");
+        let syncedSnapshot = snapshot;
+        if (response.status === 409) {
+          const latestResponse = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
+          if (!latestResponse.ok) throw new Error("backend_conflict_reload_failed");
+          const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
+          if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
+          const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
+          response = await retryOperation(async () => {
+            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(rebased.change) }, 6500);
+            if (result.status >= 500) throw new Error(`backend_conflict_http_${result.status}`);
+            return result;
+          }, { attempts: 2, delayMs: 400 });
+          if (!response.ok) throw new Error("backend_conflict_retry_failed");
+          syncedSnapshot = rebased.state as BackendState;
+        }
         if (!response.ok) throw new Error("backend_save_failed");
         const result = await response.json() as { revision: number };
         backendRevision.current = result.revision;
-        lastSyncedBackendState.current = snapshot;
+        lastSyncedBackendState.current = syncedSnapshot;
+        if (syncedSnapshot !== snapshot) {
+          backendHydrating.current = true;
+          setTherapists(mergeById(syncedSnapshot.therapists ?? [], [initialAdministrator]));
+          setChildren(syncedSnapshot.children?.length ? syncedSnapshot.children : initialChildren);
+          setActiveChildId(syncedSnapshot.activeChildId || syncedSnapshot.children?.[0]?.id || initialChildren[0].id);
+          setLibrary(hydrateLibrary(syncedSnapshot.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
+          setExercises(hydrateExercises(syncedSnapshot.exercises ?? []));
+          setSequences(hydrateSequences(syncedSnapshot.sequences ?? []));
+          setActiveSequenceId(syncedSnapshot.activeSequenceId || syncedSnapshot.sequences?.[0]?.id || initialSequences[0].id);
+          setAttempts(syncedSnapshot.attempts ?? []);
+          setHelps(syncedSnapshot.helps ?? []);
+          setSessionHistory(syncedSnapshot.sessionHistory ?? []);
+          setAppearance(hydrateAppearance(syncedSnapshot.appearance));
+          backendHydrating.current = false;
+        }
         setBackendStatus("ready");
       });
-      void backendSaveQueue.current.catch(() => setBackendStatus("error"));
+    backendSaveQueue.current = task;
+    return task;
+  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+
+  useEffect(() => {
+    if (backendHydrating.current || !backendInitialized) return;
+    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
+    if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
+    backendSaveTimer.current = window.setTimeout(() => {
+      backendSaveTimer.current = null;
+      void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
     }, 500);
-    return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); };
-  }, [backendInitialized, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
+    return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
+  }, [backendInitialized, backendSaveRetryKey, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, enqueueBackendSave]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
@@ -1034,6 +1134,17 @@ export default function HomePage() {
   }, [attempts, helps, library, sessionChildId, sessionComplete, sessionDescriptor, sessionFromSharedLink, sessionIsTrial, sessionMode, sessionPlan, sessionPresentation, sessionRunId, sessionStartedAt, setSessionHistory, therapist]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
+  const persistLibraryImmediately = async (nextLibrary: LibraryItem[]) => {
+    setLibrary(nextLibrary);
+    if (!backendInitialized || backendStatus === "local") return "local" as const;
+    try {
+      await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
+      return "cloud" as const;
+    } catch {
+      setBackendStatus("error");
+      return "pending" as const;
+    }
+  };
   const shareLaunch = async (launch: SharedLaunch, title: string) => {
     let url = "";
     try {
@@ -1332,8 +1443,8 @@ export default function HomePage() {
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
-      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } setLibrary((current) => [next, ...current]); setShowUpload(false); notify(item.image ? (next.remoteImageId ? "Immagine salvata nel cloud" : "Immagine salvata su questo dispositivo") : "Parola aggiunta alla libreria"); } catch { notify("Impossibile salvare l’elemento"); } }} />}
-      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } setLibrary((current) => current.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(backendStatus === "local" ? "Elemento salvato su questo dispositivo" : "Elemento salvato nel cloud"); } catch { notify("Impossibile salvare le modifiche"); } }} />}
+      {showUpload && <UploadDialog onClose={() => setShowUpload(false)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await persistLibraryImmediately([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(false); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : "Elemento locale · sincronizzazione cloud non riuscita"); } catch { notify("Impossibile salvare l’elemento"); } }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await persistLibraryImmediately(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : "Modifica locale · sincronizzazione cloud non riuscita"); } catch { notify("Impossibile salvare le modifiche"); } }} />}
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
       {showBuilder && <ExerciseBuilder kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}

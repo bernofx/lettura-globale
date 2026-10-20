@@ -54,3 +54,9 @@ export function remapLibraryId(id: string | undefined, replacements: Map<string,
 export function remapLibraryIds(ids: string[] | undefined, replacements: Map<string, string>) {
   return ids ? Array.from(new Set(ids.map((id) => replacements.get(id) ?? id))) : ids;
 }
+
+export function recoverPendingRemoteUploads<T extends DeduplicableLibraryItem>(remoteItems: T[], localItems: T[]) {
+  const remoteIds = new Set(remoteItems.map((item) => item.id));
+  const pending = localItems.filter((item) => item.privateUpload && item.remoteImageId && !remoteIds.has(item.id));
+  return pending.length ? [...pending, ...remoteItems] : remoteItems;
+}
