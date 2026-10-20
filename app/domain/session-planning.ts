@@ -7,7 +7,7 @@ export type QuickCandidate = {
 };
 
 export type QuickFilterConfig = {
-  activity: "recognition" | "articles" | "word-categories" | "naming";
+  activity: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
   selection: "all" | "categories" | "items";
   categoryNames: string[];
   itemIds: string[];
@@ -22,6 +22,7 @@ export function filterQuickCandidates<T extends QuickCandidate>(candidates: T[],
 }
 
 export function quickStartIsValid(config: QuickFilterConfig, candidateCount: number) {
+  if (config.activity === "number-quantity") return true;
   if (config.activity === "recognition") return candidateCount >= (config.distractorCount ?? 3) + 1;
   if (config.activity === "articles") return candidateCount >= 1;
   if (config.activity === "naming") return candidateCount >= 1;

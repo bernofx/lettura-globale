@@ -56,6 +56,6 @@ Le risposte attuali sono centrate su `wordId` e `answerId`: forzare quantità nu
 5. Storico e statistiche specifiche per quantità.
 6. Test su timer, tap rapidi/doppi, sospensione dell’app, ripristino sessione e viewport mobile.
 
-## Decisione ancora necessaria
+## Decisione adottata
 
-Prima di implementare va confermato se, in modalità verifica, il timer debba soltanto suggerire la fine del turno (raccomandato) oppure possa registrare autonomamente una risposta corretta.
+In modalità verifica il timer segnala soltanto un possibile completamento e l’adulto conferma sempre l’esito. In insegnamento il completamento automatico può essere attivato nella configurazione. La decisione e il formato degli esiti sono formalizzati nell’ADR 0010.

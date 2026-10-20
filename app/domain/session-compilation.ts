@@ -1,8 +1,9 @@
 import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor } from "./activity-generation.ts";
 import { availableForRecognition, hasArtwork, type LibraryMediaItem } from "./library-availability.ts";
 import type { SyllableFilter } from "./syllabification.ts";
+import { createQuantityRounds, type QuantityObject, type QuantityObjectSet } from "./quantity-exercise.ts";
 
-export type SessionActivity = "recognition" | "articles" | "word-categories" | "naming";
+export type SessionActivity = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
 export type SessionExercise = {
   id: string;
   title: string;
@@ -18,6 +19,13 @@ export type SessionExercise = {
   recognitionSyllables?: SyllableFilter;
   namingItemIds?: string[];
   namingCategories?: string[];
+  quantityMin?: number;
+  quantityMax?: number;
+  quantityObjectSet?: QuantityObjectSet;
+  quantityAutoComplete?: boolean;
+  quantityIdleSeconds?: number;
+  quantityTarget?: number;
+  quantityObject?: QuantityObject;
   distractorCount?: 1 | 2 | 3 | 4;
   distractorSource?: "mixed" | "same-category";
   presentation?: "images" | "words";
@@ -90,6 +98,11 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
       const candidates = library.filter((item) => categories.has(item.category));
       return pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6, random)
         .map((id, index) => round(index, { categoryItemIds: [id] }));
+    }
+
+    if (kind === "number-quantity") {
+      return createQuantityRounds({ rounds: exercise.rounds, min: exercise.quantityMin, max: exercise.quantityMax, objectSet: exercise.quantityObjectSet }, random)
+        .map((item, index) => round(index, { quantityTarget: item.target, quantityObject: item.object }));
     }
 
     const allowedIds = exercise.namingItemIds?.length ? new Set(exercise.namingItemIds) : null;

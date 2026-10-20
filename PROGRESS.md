@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Nuovo esercizio `Numero quantità`: bersaglio casuale 1–10, dieci oggetti vettoriali toccabili e deselezionabili, contatore, pronuncia, conferma adulta e completamento automatico opzionale solo in insegnamento. Configurazione e risultati persistono nello shadow relazionale D1 e nello storico senza immagini.
 - [x] L’amministratore può modificare nome, cognome, email, PIN, ruolo e bambini associati dei profili adulti non amministrativi.
 - [x] `Trova la parola` supporta un bersaglio fisso con distrattori casuali; il configuratore spiega in modo puntuale quando i filtri non producono abbastanza alternative.
 - [x] Chiusura deterministica delle prove con ritorno alla pagina di configurazione e nuvolette delle sequenze più compatte nella pagina sessione.

@@ -1,4 +1,5 @@
 import type { AttemptEvent, HelpEventRecord, SessionMode } from "./session-events";
+import { quantityAnswerLabel } from "./quantity-exercise.ts";
 
 export type HistoryImageSnapshot = {
   itemId: string;
@@ -22,7 +23,7 @@ export type SessionHistoryItem = {
   id: string;
   exerciseId: string;
   exerciseTitle: string;
-  kind: "recognition" | "articles" | "word-categories" | "naming";
+  kind: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
   presentation?: "images" | "words";
   target?: HistoryImageSnapshot;
   options: HistoryImageSnapshot[];
@@ -113,7 +114,7 @@ export function buildSessionHistoryItems(
       options: optionIds.map((optionId) => snapshotImage(itemMap.get(optionId))).filter((item): item is HistoryImageSnapshot => Boolean(item)),
       responses: responses.map((attempt) => ({
         answerId: attempt.answerId,
-        label: itemMap.get(attempt.answerId)?.word ?? attempt.answerId,
+        label: itemMap.get(attempt.answerId)?.word ?? quantityAnswerLabel(attempt.answerId) ?? attempt.answerId,
         correct: attempt.correct,
         firstAttempt: attempt.firstAttempt,
         createdAt: attempt.createdAt,

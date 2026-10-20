@@ -34,6 +34,7 @@ test("repairs a verified-but-empty relational shadow in bounded D1 batches", asy
   assert.throws(() => sqlite.prepare("INSERT INTO adult_profiles (account_id, id, first_name, last_name, email_normalized, role, position, created_at, updated_at) VALUES (?, ?, '', '', ?, 'Terapista', 0, ?, ?)")
     .run(accountId, "adult-1", "adult@example.test", now, now));
   sqlite.exec(readFileSync(new URL("../drizzle/0008_account_scoped_adult_email.sql", import.meta.url), "utf8"));
+  sqlite.exec(readFileSync(new URL("../drizzle/0009_number_quantity.sql", import.meta.url), "utf8"));
   sqlite.prepare("INSERT INTO user_states (user_id, email, payload, schema_version, revision, created_at, updated_at) VALUES (?, ?, ?, 1, 4, ?, ?)")
     .run(accountId, "adult@example.test", rawState, now, now);
   sqlite.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) VALUES (?, ?, 4, ?, 'verified', '{}', ?, ?)")

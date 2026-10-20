@@ -62,3 +62,11 @@ test("un bersaglio fisso con distrattori casuali resta uguale in tutti i turni",
   assert.equal(plan.length, 2);
   assert.ok(plan.every((item) => item.promptId === "mela" && item.optionIds.length === 3));
 });
+
+test("compila Numero quantità in turni con bersaglio e oggetto risolti", () => {
+  let id = 0;
+  const exercise: SessionExercise = { ...base, id: "quantity", title: "Numero quantità", kind: "number-quantity", rounds: 3, quantityMin: 2, quantityMax: 4, quantityObjectSet: "candy" };
+  const plan = compileSessionPlan([exercise], library, { articleFor: (item) => item.article, random: () => 0.5, createId: () => `id-${id++}` });
+  assert.equal(plan.length, 3);
+  assert.ok(plan.every((item) => item.quantityTarget === 3 && item.quantityObject === "candy" && item.rounds === 1));
+});

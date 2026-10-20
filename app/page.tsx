@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronLeft, ChevronRight, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
@@ -22,6 +22,7 @@ import { createPersistentTherapistSession, parsePersistentTherapistSession, THER
 import { libraryItemWasEdited } from "./domain/library-edit";
 import { parsePendingCloudSave, PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave } from "./domain/pending-cloud-save";
 import { appendSaveJournal, readSaveJournal } from "./domain/save-journal";
+import { quantityAnswerId, quantityObjectLabel, type QuantityObject, type QuantityObjectSet } from "./domain/quantity-exercise";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -29,7 +30,7 @@ type Presentation = "images" | "words";
 type Article = "IL" | "LA";
 type QuickSelection = "all" | "categories" | "items";
 type DistractorSource = "mixed" | "same-category";
-type QuickStartConfig = { activity: SessionActivity; selection: QuickSelection; categoryNames: string[]; itemIds: string[]; rounds: number; distractorCount: 1 | 2 | 3 | 4; distractorSource: DistractorSource; presentation: Presentation; recognitionSyllables: SyllableFilter; autoPronounce: boolean };
+type QuickStartConfig = { activity: SessionActivity; selection: QuickSelection; categoryNames: string[]; itemIds: string[]; rounds: number; distractorCount: 1 | 2 | 3 | 4; distractorSource: DistractorSource; presentation: Presentation; recognitionSyllables: SyllableFilter; autoPronounce: boolean; quantityMin: number; quantityMax: number; quantityObjectSet: QuantityObjectSet; quantityAutoComplete: boolean; quantityIdleSeconds: number };
 type LibraryItem = { id: string; word: string; emoji?: string; image?: string; imageKey?: string; remoteImageId?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; syllabification?: string; syllableCount?: number; syllableStatus?: SyllableStatus; privateUpload?: boolean; deleted?: boolean };
 type Exercise = SessionExercise;
 type Sequence = { id: string; title: string; exerciseIds: string[]; therapistId: string; updatedAt?: string; lastUsedAt?: string; deleted?: boolean };
@@ -1139,6 +1140,7 @@ export default function HomePage() {
     namingItemIds: exercise.namingItemIds?.filter((id) => { const item = visibleLibrary.find((candidate) => candidate.id === id); return Boolean(item && hasArtwork(item)); }),
   })).filter((exercise) => {
     const kind = exerciseKind(exercise);
+    if (kind === "number-quantity") return true;
     if (kind === "articles") return Boolean(exercise.articleItemIds?.length);
     if (kind === "word-categories") return Boolean(exercise.categoryItemIds?.length && exercise.categoryNames?.length && exercise.categoryNames.length >= 2);
     if (kind === "naming") {
@@ -1351,6 +1353,7 @@ export default function HomePage() {
     const candidates = filterQuickCandidates(source, config);
     const id = `quick:${crypto.randomUUID()}`;
     const base = { id, sourceExerciseId: id, promptId: "", optionIds: [], rounds: config.activity === "recognition" ? Math.max(1, config.rounds) : Math.min(Math.max(1, config.rounds), Math.max(1, candidates.length)), updatedAt: new Date().toISOString(), deleted: false };
+    if (config.activity === "number-quantity") return { ...base, title: "Avvio rapido · Numero quantità", kind: "number-quantity" as const, rounds: Math.max(1, config.rounds), quantityMin: config.quantityMin, quantityMax: config.quantityMax, quantityObjectSet: config.quantityObjectSet, quantityAutoComplete: config.quantityAutoComplete, quantityIdleSeconds: config.quantityIdleSeconds };
     if (config.activity === "articles") return { ...base, title: "Avvio rapido · IL / LA", kind: "articles" as const, articleItemIds: candidates.filter((item) => articleFor(item)).map((item) => item.id) };
     if (config.activity === "word-categories") return { ...base, title: "Avvio rapido · Parola nella categoria", kind: "word-categories" as const, categoryNames: config.categoryNames, categoryItemIds: candidates.map((item) => item.id) };
     if (config.activity === "naming") return { ...base, title: "Avvio rapido · Mix and vary", kind: "naming" as const, namingItemIds: candidates.map((item) => item.id), namingCategories: [] };
@@ -1717,9 +1720,9 @@ function ExercisesView({ exercises, sequences, activeSequence, therapists, showS
     <section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Configurazione</h1><p>Crea, modifica ed elimina esercizi e sequenze. L’avvio delle attività si trova nella sezione Sessione.</p></div></section>
     {activeSequence ? <section className="sequence-banner sequence-manager"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div className="sequence-copy"><span className="soft-label">SEQUENZA</span><select value={activeSequence.id} onChange={(event) => onSelectSequence(event.target.value)} aria-label="Seleziona sequenza">{sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.title}{showSequenceOwners ? ` · ${therapistName(sequence.therapistId)}` : ""}</option>)}</select><p>{sequenceExercises.length} esercizi · {showSequenceOwners ? `terapista: ${therapistName(activeSequence.therapistId)} · ` : ""}salvata nel cloud</p><div className="sequence-actions"><button type="button" onClick={onCreateSequence}><Plus />Nuova</button><button type="button" onClick={onRenameSequence}><Pencil />Rinomina</button><button type="button" onClick={onShareSequence}><Share2 />Condividi</button><button type="button" onClick={onDeleteSequence}><Trash2 />Elimina</button></div></div></section> : <section className="sequence-banner sequence-manager empty-sequence-manager"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div className="sequence-copy"><span className="soft-label">SEQUENZE</span><h2>Nessuna sequenza disponibile</h2><p>Crea la prima sequenza per organizzare i tuoi esercizi.</p><div className="sequence-actions"><button type="button" onClick={onCreateSequence}><Plus />Nuova sequenza</button></div></div></section>}
     {activeSequence && <section className="sequence-editor"><div className="section-heading"><div><h2>Ordine della sequenza</h2><p>Usa le frecce per cambiare l’ordine di presentazione.</p></div><span>{sequenceExercises.length} elementi</span></div>{sequenceExercises.length ? <div className="sequence-order-list">{sequenceExercises.map((exercise, index) => <article key={exercise.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{exercise.title}</strong><div><button type="button" disabled={index === 0} onClick={() => onMove(exercise.id, -1)} aria-label={`Sposta ${exercise.title} su`}><ArrowUp /></button><button type="button" disabled={index === sequenceExercises.length - 1} onClick={() => onMove(exercise.id, 1)} aria-label={`Sposta ${exercise.title} giù`}><ArrowDown /></button><button type="button" onClick={() => onToggleInSequence(exercise.id)} aria-label={`Rimuovi ${exercise.title} dalla sequenza`}><X /></button></div></article>)}</div> : <div className="empty-state compact"><BookOpenCheck /><h3>Sequenza vuota</h3><p>Aggiungi almeno un esercizio dal catalogo qui sotto.</p></div>}</section>}
-    <div className="catalog-actions"><span className="soft-label">NUOVO ESERCIZIO</span><div className="new-exercise-actions"><button className="primary-button" onClick={() => onBuild("recognition")}><Plus size={19} />Trova la parola</button><button className="ghost-button" onClick={() => onBuild("articles")}><Plus size={19} />IL / LA</button><button className="ghost-button" onClick={() => onBuild("word-categories")}><Plus size={19} />Parola → categoria</button><button className="ghost-button" onClick={() => onBuild("naming")}><Plus size={19} />Mix and vary</button></div></div>
+    <div className="catalog-actions"><span className="soft-label">NUOVO ESERCIZIO</span><div className="new-exercise-actions"><button className="primary-button" onClick={() => onBuild("recognition")}><Plus size={19} />Trova la parola</button><button className="ghost-button" onClick={() => onBuild("articles")}><Plus size={19} />IL / LA</button><button className="ghost-button" onClick={() => onBuild("word-categories")}><Plus size={19} />Parola → categoria</button><button className="ghost-button" onClick={() => onBuild("naming")}><Plus size={19} />Mix and vary</button><button className="ghost-button" onClick={() => onBuild("number-quantity")}><Plus size={19} />Numero quantità</button></div></div>
     <div className="section-heading exercise-catalog-heading"><div><h2>Catalogo esercizi</h2><p>Modifica, duplica o aggiungi gli esercizi alla sequenza attiva.</p></div><span>{exercises.length} totali</span></div>
-    <div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); const included = includedIds.has(exercise.id); const kind = exerciseKind(exercise); const isArticles = kind === "articles"; const isWordCategories = kind === "word-categories"; const isNaming = kind === "naming"; const description = isArticles ? `IL / LA · ${Math.min(exercise.rounds ?? 6, exercise.articleItemIds?.length ?? 0)} turni · ${exercise.articleItemIds?.length ?? 0} immagini scelte` : isWordCategories ? `Parola → categoria · ${exercise.rounds ?? 6} turni · ${exercise.categoryNames?.length ?? 0} categorie` : isNaming ? `Nomina l’immagine · ${exercise.rounds ?? 6} turni` : exercise.recognitionMode === "random" ? `Casuale · ${exercise.rounds ?? 6} turni · ${exercise.distractorCount ?? 3} distrattori · ${exercise.distractorSource === "same-category" ? "stessa categoria" : "tutte le parole"} · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"} · ${syllableFilterLabel(exercise.recognitionSyllables)}` : `Parola → scelta · ${exercise.optionIds.length} opzioni · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"}`; return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className={`tiny-art ${isArticles || isWordCategories || isNaming ? "article-icon" : ""}`}>{isArticles ? <strong>IL<br />LA</strong> : isWordCategories ? <strong>A<br />B</strong> : isNaming ? <MousePointer2 /> : exercise.recognitionMode === "random" ? <Sparkles /> : prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>{description}</p>{kind === "recognition" && <small>Pronuncia {(exercise.autoPronounce ?? exercise.presentation === "words") ? "automatica" : "manuale"}</small>}</div><button disabled={!activeSequence} title={activeSequence ? undefined : "Crea prima una sequenza"} className={`sequence-toggle ${included ? "included" : ""}`} onClick={() => onToggleInSequence(exercise.id)}>{included ? <><Check />Nella sequenza</> : <><Plus />Aggiungi</>}</button><div className="exercise-actions"><button onClick={() => onTry(exercise.id)}>Prova</button><button onClick={() => onShareExercise(exercise)} aria-label={`Condividi ${exercise.title}`} title="Condividi"><Share2 /></button><button onClick={() => onEdit(exercise)} aria-label={`Modifica ${exercise.title}`} title="Modifica"><Pencil /></button><button onClick={() => onDuplicate(exercise)} aria-label={`Duplica ${exercise.title}`} title="Duplica"><Copy /></button><button className="delete" onClick={() => onDelete(exercise)} aria-label={`Elimina ${exercise.title}`} title="Elimina"><Trash2 /></button></div></article>; })}</div>
+    <div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); const included = includedIds.has(exercise.id); const kind = exerciseKind(exercise); const isArticles = kind === "articles"; const isWordCategories = kind === "word-categories"; const isNaming = kind === "naming"; const isQuantity = kind === "number-quantity"; const description = isArticles ? `IL / LA · ${Math.min(exercise.rounds ?? 6, exercise.articleItemIds?.length ?? 0)} turni · ${exercise.articleItemIds?.length ?? 0} immagini scelte` : isWordCategories ? `Parola → categoria · ${exercise.rounds ?? 6} turni · ${exercise.categoryNames?.length ?? 0} categorie` : isNaming ? `Nomina l’immagine · ${exercise.rounds ?? 6} turni` : isQuantity ? `${exercise.rounds ?? 6} turni · quantità ${exercise.quantityMin ?? 1}–${exercise.quantityMax ?? 10} · ${exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "oggetti casuali" : quantityObjectLabel(exercise.quantityObjectSet, 2)} · ${exercise.quantityAutoComplete ? `auto dopo ${exercise.quantityIdleSeconds ?? 3}s in insegnamento` : "conferma adulta"}` : exercise.recognitionMode === "random" ? `Casuale · ${exercise.rounds ?? 6} turni · ${exercise.distractorCount ?? 3} distrattori · ${exercise.distractorSource === "same-category" ? "stessa categoria" : "tutte le parole"} · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"} · ${syllableFilterLabel(exercise.recognitionSyllables)}` : `Parola → scelta · ${exercise.optionIds.length} opzioni · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"}`; return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className={`tiny-art ${isArticles || isWordCategories || isNaming || isQuantity ? "article-icon" : ""}`}>{isArticles ? <strong>IL<br />LA</strong> : isWordCategories ? <strong>A<br />B</strong> : isNaming ? <MousePointer2 /> : isQuantity ? <strong>1<br />2</strong> : exercise.recognitionMode === "random" ? <Sparkles /> : prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>{description}</p>{kind === "recognition" && <small>Pronuncia {(exercise.autoPronounce ?? exercise.presentation === "words") ? "automatica" : "manuale"}</small>}</div><button disabled={!activeSequence} title={activeSequence ? undefined : "Crea prima una sequenza"} className={`sequence-toggle ${included ? "included" : ""}`} onClick={() => onToggleInSequence(exercise.id)}>{included ? <><Check />Nella sequenza</> : <><Plus />Aggiungi</>}</button><div className="exercise-actions"><button onClick={() => onTry(exercise.id)}>Prova</button><button onClick={() => onShareExercise(exercise)} aria-label={`Condividi ${exercise.title}`} title="Condividi"><Share2 /></button><button onClick={() => onEdit(exercise)} aria-label={`Modifica ${exercise.title}`} title="Modifica"><Pencil /></button><button onClick={() => onDuplicate(exercise)} aria-label={`Duplica ${exercise.title}`} title="Duplica"><Copy /></button><button className="delete" onClick={() => onDelete(exercise)} aria-label={`Elimina ${exercise.title}`} title="Elimina"><Trash2 /></button></div></article>; })}</div>
   </div>;
 }
 
@@ -1731,7 +1734,7 @@ function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode,
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
   const categoryNames = useMemo(() => Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
-  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words" }));
+  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantityIdleSeconds: 3 }));
   const [quickSearch, setQuickSearch] = useState("");
   const [completionDraft, setCompletionDraft] = useState(completionComment);
   const sortedSequences = useMemo(() => [...sequences].sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.title.localeCompare(b.title, "it")), [sequences]);
@@ -1762,6 +1765,7 @@ function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode,
   if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "number-quantity") return <NumberQuantitySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (!exercise || !prompt) return null;
   return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
 }
@@ -1863,6 +1867,56 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
       </> : <div className="feedback wrong" role="alert">Nessuna immagine disponibile per questo esercizio.</div>}
     </div>
   </div>;
+}
+
+function QuantityObjectIcon({ object }: { object: QuantityObject }) {
+  if (object === "candy") return <Candy />;
+  if (object === "ladybug") return <Bug />;
+  return <Circle fill="currentColor" />;
+}
+
+function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+  const target = exercise.quantityTarget ?? exercise.quantityMin ?? 1;
+  const object = exercise.quantityObject ?? (exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "candy" : exercise.quantityObjectSet);
+  const itemId = `quantity:${exercise.id}:${target}`;
+  const prompt = `Tocca ${target} ${quantityObjectLabel(object, target)}`;
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
+  const [possibleDone, setPossibleDone] = useState(false);
+  const idleTimer = useRef<number | null>(null);
+  const advanceTimer = useRef<number | null>(null);
+  const speakPrompt = useCallback(() => speakWord(prompt), [prompt]);
+  const completeRound = useCallback((correct: boolean, method: "adult" | "idle-teaching") => {
+    if (judgement) return;
+    onAttempt(itemId, quantityAnswerId(target, selected.size, method), correct);
+    playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
+    setJudgement(correct ? "correct" : "wrong");
+    advanceTimer.current = window.setTimeout(onComplete, 700);
+  }, [itemId, judgement, onAttempt, onComplete, selected.size, soundEffects, target]);
+  useEffect(() => { speakPrompt(); }, [speakPrompt]);
+  useEffect(() => {
+    if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
+    if (judgement || selected.size !== target) return;
+    idleTimer.current = window.setTimeout(() => {
+      idleTimer.current = null;
+      if (mode === "teaching" && exercise.quantityAutoComplete) completeRound(true, "idle-teaching");
+      else setPossibleDone(true);
+    }, Math.min(10, Math.max(1, exercise.quantityIdleSeconds ?? 3)) * 1000);
+    return () => { if (idleTimer.current !== null) window.clearTimeout(idleTimer.current); };
+  }, [completeRound, exercise.quantityAutoComplete, exercise.quantityIdleSeconds, judgement, mode, selected.size, target]);
+  useEffect(() => () => {
+    if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
+    if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current);
+  }, []);
+  const toggle = (index: number) => {
+    if (judgement) return;
+    setPossibleDone(false);
+    setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
+  };
+  return <div className="session-screen quantity-session">
+    <div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Numero quantità</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div>
+    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><strong className={selected.size === target ? "reached" : selected.size > target ? "over" : ""}>{selected.size} / {target}</strong></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}</div>{possibleDone && <p className="quantity-done-hint" role="status"><CircleHelp />Il conteggio coincide. Conferma l’esito quando il bambino ha davvero terminato.</p>}<div className="quantity-controls"><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(true, "adult")} disabled={Boolean(judgement) || selected.size !== target}><Check />Numero corretto</button></div>
+  </div></div>;
 }
 
 function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
@@ -2188,9 +2242,9 @@ function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
   return <aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside>;
 }
 
-type ProgressKind = "recognition" | "articles" | "word-categories" | "naming";
+type ProgressKind = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
 type ProgressCell = { total: number; correct: number; percent: number | null };
-type MonthlyProgress = { month: string; label: string; recognition?: number; articles?: number; "word-categories"?: number; naming?: number };
+type MonthlyProgress = { month: string; label: string; recognition?: number; articles?: number; "word-categories"?: number; naming?: number; "number-quantity"?: number };
 
 function ProgressScore({ cell }: { cell: ProgressCell }) {
   if (cell.percent === null) return <span className="score-cell empty">—<small>Nessuna prova</small></span>;
@@ -2224,9 +2278,9 @@ function StatsView({ child, therapist, therapists, attempts, helps, histories, e
   const [selectedWordId, setSelectedWordId] = useState("");
   const exerciseMap = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const itemMap = new Map(library.map((item) => [item.id, item]));
-  const attemptWordId = (attempt: Attempt) => attempt.wordId ?? (attempt.exerciseId.startsWith("article-") ? attempt.exerciseId.slice(8) : exerciseMap.get(attempt.exerciseId)?.promptId);
+  const attemptWordId = (attempt: Attempt) => attempt.wordId?.startsWith("quantity:") ? undefined : attempt.wordId ?? (attempt.exerciseId.startsWith("article-") ? attempt.exerciseId.slice(8) : exerciseMap.get(attempt.exerciseId)?.promptId);
   const attemptKind = (attempt: Attempt): ProgressKind => exerciseKind(exerciseMap.get(attempt.exerciseId) ?? { id: attempt.exerciseId, title: "", kind: attempt.exerciseId.startsWith("article-") ? "articles" : "recognition", optionIds: [], updatedAt: "" });
-  const helpWordId = (help: HelpEvent) => help.wordId ?? exerciseMap.get(help.exerciseId)?.promptId;
+  const helpWordId = (help: HelpEvent) => help.wordId?.startsWith("quantity:") ? undefined : help.wordId ?? exerciseMap.get(help.exerciseId)?.promptId;
   const allWordIds = new Set<string>();
   attempts.forEach((attempt) => { const wordId = attemptWordId(attempt); if (wordId) allWordIds.add(wordId); });
   helps.forEach((help) => { const wordId = helpWordId(help); if (wordId) allWordIds.add(wordId); });
@@ -2252,7 +2306,7 @@ function StatsView({ child, therapist, therapists, attempts, helps, histories, e
   modeAttempts.filter((attempt) => attemptWordId(attempt) === activeWordId).forEach((attempt) => {
     const month = attempt.createdAt.slice(0, 7);
     const kind = attemptKind(attempt);
-    const record = monthMap.get(month) ?? { recognition: { total: 0, correct: 0 }, articles: { total: 0, correct: 0 }, "word-categories": { total: 0, correct: 0 }, naming: { total: 0, correct: 0 } };
+    const record = monthMap.get(month) ?? { recognition: { total: 0, correct: 0 }, articles: { total: 0, correct: 0 }, "word-categories": { total: 0, correct: 0 }, naming: { total: 0, correct: 0 }, "number-quantity": { total: 0, correct: 0 } };
     record[kind].total += 1;
     if (attempt.correct) record[kind].correct += 1;
     monthMap.set(month, record);
@@ -2260,7 +2314,7 @@ function StatsView({ child, therapist, therapists, attempts, helps, histories, e
   const monthly: MonthlyProgress[] = [...monthMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, values]) => {
     const [year, monthNumber] = month.split("-").map(Number);
     const label = new Intl.DateTimeFormat("it-IT", { month: "short", year: "2-digit" }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
-    return { month, label, recognition: values.recognition.total ? Math.round(values.recognition.correct / values.recognition.total * 100) : undefined, articles: values.articles.total ? Math.round(values.articles.correct / values.articles.total * 100) : undefined, "word-categories": values["word-categories"].total ? Math.round(values["word-categories"].correct / values["word-categories"].total * 100) : undefined, naming: values.naming.total ? Math.round(values.naming.correct / values.naming.total * 100) : undefined };
+    return { month, label, recognition: values.recognition.total ? Math.round(values.recognition.correct / values.recognition.total * 100) : undefined, articles: values.articles.total ? Math.round(values.articles.correct / values.articles.total * 100) : undefined, "word-categories": values["word-categories"].total ? Math.round(values["word-categories"].correct / values["word-categories"].total * 100) : undefined, naming: values.naming.total ? Math.round(values.naming.correct / values.naming.total * 100) : undefined, "number-quantity": values["number-quantity"].total ? Math.round(values["number-quantity"].correct / values["number-quantity"].total * 100) : undefined };
   });
   const firstCorrect = modeAttempts.filter((attempt) => attempt.correct).length;
   const accuracy = modeAttempts.length ? Math.round(firstCorrect / modeAttempts.length * 100) : 0;
@@ -2399,6 +2453,11 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
   const [categoryNames, setCategoryNames] = useState<string[]>(exercise?.categoryNames ?? defaultCategoryNames);
   const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? defaultCategoryNames.flatMap((category) => library.filter((item) => item.category === category).slice(0, 3).map((item) => item.id)));
   const [rounds, setRounds] = useState(exercise?.rounds ?? 6);
+  const [quantityMin, setQuantityMin] = useState(exercise?.quantityMin ?? 1);
+  const [quantityMax, setQuantityMax] = useState(exercise?.quantityMax ?? 10);
+  const [quantityObjectSet, setQuantityObjectSet] = useState<QuantityObjectSet>(exercise?.quantityObjectSet ?? "mixed");
+  const [quantityAutoComplete, setQuantityAutoComplete] = useState(exercise?.quantityAutoComplete ?? true);
+  const [quantityIdleSeconds, setQuantityIdleSeconds] = useState(exercise?.quantityIdleSeconds ?? 3);
   const recognitionCandidates = availableForRecognition(library, exercisePresentation);
   const effectivePromptId = recognitionCandidates.some((item) => item.id === promptId) ? promptId : recognitionCandidates[0]?.id ?? "";
   const randomCandidates = recognitionCandidates.filter((item) => (!recognitionCategories.length || recognitionCategories.includes(item.category)) && (!recognitionItemIds.length || recognitionItemIds.includes(item.id)) && matchesSyllableFilter(item, recognitionSyllables));
@@ -2435,6 +2494,12 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
     deleted: false,
   });
   const saveRandom = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || (randomPromptMode === "fixed" ? `Trova ${prompt?.word.toLowerCase() ?? "la parola"}` : "Trova la parola · casuale"), kind: "recognition", recognitionMode: "random", presentation: exercisePresentation, autoPronounce, promptId: randomPromptMode === "fixed" ? effectivePromptId : "", optionIds: [], recognitionItemIds, recognitionCategories, recognitionSyllables, distractorCount, distractorSource, rounds: Math.max(1, rounds), updatedAt: new Date().toISOString(), deleted: false });
+  if (kind === "number-quantity") {
+    const safeMin = Math.min(10, Math.max(1, Math.trunc(quantityMin)));
+    const safeMax = Math.min(10, Math.max(safeMin, Math.trunc(quantityMax)));
+    const saveQuantityExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Numero quantità", kind: "number-quantity", promptId: "", optionIds: [], rounds: Math.min(50, Math.max(1, Math.trunc(rounds))), quantityMin: safeMin, quantityMax: safeMax, quantityObjectSet, quantityAutoComplete, quantityIdleSeconds: Math.min(10, Math.max(1, Math.trunc(quantityIdleSeconds))), updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Numero quantità</h2><p>Il bambino tocca il numero richiesto di oggetti. In valutazione l’adulto conferma sempre l’esito.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Numero quantità" /></label><div className="builder-inline-fields"><label>Numero di turni<input type="number" min={1} max={50} value={rounds} onChange={(event) => setRounds(Number(event.target.value))} /></label><label>Quantità minima<input type="number" min={1} max={10} value={quantityMin} onChange={(event) => setQuantityMin(Number(event.target.value))} /></label><label>Quantità massima<input type="number" min={safeMin} max={10} value={quantityMax} onChange={(event) => setQuantityMax(Number(event.target.value))} /></label><label>Oggetti<select value={quantityObjectSet} onChange={(event) => setQuantityObjectSet(event.target.value as QuantityObjectSet)}><option value="mixed">Casuali a ogni turno</option><option value="candy">Caramelle</option><option value="ladybug">Coccinelle</option><option value="stone">Sassolini</option></select></label><label>Secondi di inattività<input type="number" min={1} max={10} value={quantityIdleSeconds} onChange={(event) => setQuantityIdleSeconds(Number(event.target.value))} /></label></div><label className="check-line pronunciation-option"><input type="checkbox" checked={quantityAutoComplete} onChange={(event) => setQuantityAutoComplete(event.target.checked)} /><span><strong>Completamento automatico in insegnamento</strong><small>Se il conteggio è corretto e non ci sono altri tocchi, conclude il turno. In valutazione mostra soltanto un suggerimento all’adulto.</small></span></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" onClick={saveQuantityExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
   if (kind === "naming") {
     const categoryCandidates = library.filter((item) => hasArtwork(item) && (!namingCategories.length || namingCategories.includes(item.category)));
     const selectedCandidates = namingItemIds.length ? categoryCandidates.filter((item) => namingItemIds.includes(item.id)) : categoryCandidates;

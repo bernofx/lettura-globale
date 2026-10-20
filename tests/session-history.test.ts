@@ -27,4 +27,12 @@ test("mostra immagini nel riepilogo soltanto per le attività che le prevedevano
   assert.equal(historyItemUsesArtwork({ kind: "word-categories" }), false);
   assert.equal(historyItemUsesArtwork({ kind: "articles" }), true);
   assert.equal(historyItemUsesArtwork({ kind: "naming" }), true);
+  assert.equal(historyItemUsesArtwork({ kind: "number-quantity" }), false);
+});
+
+test("rende leggibile il risultato numerico nello storico", () => {
+  const result = buildSessionHistoryItems("session-q", [{ id: "quantity", title: "Numero quantità", kind: "number-quantity", optionIds: [] }], [
+    { id: "q1", sessionId: "session-q", sessionItemId: "turn-q", exerciseId: "quantity", answerId: "quantity:5:4:adult", correct: false, firstAttempt: true, mode: "test", createdAt: "2026-10-20T10:00:00Z" },
+  ], [], []);
+  assert.equal(result[0].responses[0].label, "Richiesti 5 · selezionati 4 · conferma adulta");
 });
