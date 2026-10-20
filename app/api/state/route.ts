@@ -3,7 +3,8 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { therapistCredentials, userStates } from "../../../db/schema";
-import { persistRelationalShadow, relationalMigrationRevision } from "../../../db/relational-state";
+import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, stateChecksum } from "../../../db/relational-state";
+import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
 
 const MAX_STATE_BYTES = 4_000_000;
 
@@ -17,15 +18,29 @@ export async function GET() {
 
   try {
     const state = JSON.parse(row.payload) as unknown;
-    let relationalStatus = "verified";
+    let responseState = state;
+    let relationalStatus = "pending";
+    let dataSource = "snapshot";
     try {
-      if (env.DB && await relationalMigrationRevision(env.DB, user.userId) < row.revision) {
+      let relationalRevision = env.DB ? await relationalMigrationRevision(env.DB, user.userId) : 0;
+      if (env.DB && relationalRevision < row.revision) {
         await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: row.email, displayName: user.displayName, rawState: row.payload, state, sourceRevision: row.revision });
+        relationalRevision = row.revision;
+      }
+      if (env.DB) {
+        const projection = await loadRelationalProjection(env.DB, user.userId);
+        const migration = await relationalMigrationInfo(env.DB, user.userId);
+        const parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+        relationalStatus = parity.ready ? "ready" : "pending";
+        if (parity.ready) {
+          responseState = rebuildLegacyState(projection);
+          dataSource = "relational";
+        }
       }
     } catch {
       relationalStatus = "pending";
     }
-    return Response.json({ state, revision: row.revision, relationalStatus, user: { email: user.email, name: user.displayName } });
+    return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } });
   } catch {
     return Response.json({ error: "invalid_saved_state" }, { status: 500 });
   }

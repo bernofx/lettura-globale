@@ -69,6 +69,7 @@
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
 - [x] Prima fase della migrazione relazionale D1: schema additivo, proiezione idempotente dello snapshot per account, revisione/checksum, tombstone per riferimenti storici e compatibilità completa con il JSON durante il periodo shadow.
 - [x] Seconda fase della migrazione relazionale: ricostruzione completa del formato applicativo dalle tabelle, conservazione esplicita di opzioni/risposte/aiuti storici e diagnostica autenticata di revisioni e conteggi; letture applicative ancora sullo snapshot fino alla verifica del D1 pubblicato.
+- [x] Cutover controllato delle letture D1: ordine delle raccolte persistito, confronto per revisione e identificativi, uso automatico delle tabelle quando allineate e fallback trasparente allo snapshot in caso di errore o differenza.
 
 ## Scelte di persistenza e costo
 
@@ -93,8 +94,8 @@
 1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
 3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
-4. Verificare sul D1 pubblicato la proiezione shadow e attivare gradualmente le letture relazionali.
-5. Sostituire il salvataggio monolitico con API granulari, idempotenti e dotate di controllo di revisione.
+4. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
+5. Sostituire il salvataggio monolitico con API granulari, idempotenti e dotate di controllo di revisione; mantenere il fallback finché non è provato il ripristino.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
 8. Definire retention, backup e prova di ripristino D1/R2.
