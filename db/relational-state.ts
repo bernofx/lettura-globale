@@ -15,14 +15,18 @@ function insertStatement(database: D1Database, table: string, row: Record<string
   return database.prepare(sql).bind(...columns.map((column) => row[column]));
 }
 
-async function checksum(value: string) {
+export async function stateChecksum(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function relationalMigrationRevision(database: D1Database, accountId: string) {
-  const row = await database.prepare("SELECT source_revision FROM data_migrations WHERE account_id = ? AND migration_key = ? AND status = 'verified'").bind(accountId, RELATIONAL_MIGRATION_KEY).first<{ source_revision: number }>();
+  const row = await relationalMigrationInfo(database, accountId);
   return row?.source_revision ?? 0;
+}
+
+export async function relationalMigrationInfo(database: D1Database, accountId: string) {
+  return database.prepare("SELECT source_revision, source_checksum FROM data_migrations WHERE account_id = ? AND migration_key = ? AND status = 'verified'").bind(accountId, RELATIONAL_MIGRATION_KEY).first<{ source_revision: number; source_checksum: string }>();
 }
 
 /** Replaces one account's shadow rows in a single D1 batch transaction. */
@@ -38,7 +42,7 @@ export async function persistRelationalShadow(options: {
 }) {
   const now = options.now ?? Date.now();
   const projection = projectLegacyState(options.state, options.accountId, now);
-  const sourceChecksum = await checksum(options.rawState);
+  const sourceChecksum = await stateChecksum(options.rawState);
   const statements: D1PreparedStatement[] = [
     options.database.prepare("INSERT INTO accounts (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, display_name = excluded.display_name, updated_at = excluded.updated_at").bind(options.accountId, options.email, options.displayName, now, now),
   ];

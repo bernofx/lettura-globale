@@ -31,7 +31,7 @@ SELECT COUNT(*) AS snapshots_without_current_projection
 FROM user_states u
 LEFT JOIN data_migrations m
   ON m.account_id = u.user_id
- AND m.migration_key = 'snapshot-to-relational-v2'
+ AND m.migration_key = 'snapshot-to-relational-v3'
  AND m.status = 'verified'
  AND m.source_revision = u.revision
 WHERE m.account_id IS NULL;
@@ -47,4 +47,6 @@ Ripubblicare la versione precedente dell'applicazione. `user_states`, `therapist
 
 ## Passaggio al relazionale
 
-Il percorso di ricostruzione dalle tabelle è disponibile e coperto da test, ma il cambio delle letture è una release separata. Prima del cambio devono risultare zero snapshot senza proiezione corrente, zero violazioni di chiave esterna e parità di storico e statistiche sul dataset di prova.
+`GET /api/state` usa la ricostruzione relazionale soltanto quando revisione e checksum dello snapshot coincidono, gli identificativi di tutte le entità coincidono e non esistono anomalie bloccanti. La risposta indica `dataSource: "relational"`. In caso di errore o differenza restituisce immediatamente lo snapshot con `dataSource: "snapshot"`.
+
+Prima di ritirare lo snapshot devono comunque risultare zero proiezioni incomplete, zero violazioni di chiave esterna e parità di storico e statistiche sul dataset di prova.
