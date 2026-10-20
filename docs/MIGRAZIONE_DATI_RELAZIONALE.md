@@ -11,7 +11,7 @@ SELECT COUNT(*) AS accounts, MAX(length(payload)) AS max_payload_bytes FROM user
 SELECT COUNT(*) AS invalid_payloads FROM user_states WHERE json_valid(payload) = 0;
 ```
 
-3. Applicare in ordine le migrazioni da `0004_relational_data.sql` a `0007_granular_state_operations.sql` prima di servire la nuova applicazione.
+3. Applicare in ordine le migrazioni da `0004_relational_data.sql` a `0008_account_scoped_adult_email.sql` prima di servire la nuova applicazione. La `0008` rende l'email del profilo adulto univoca per account, non globalmente; il login globale continua a usare `therapist_credentials`.
 4. Verificare che le quattro tabelle precedenti e le nuove tabelle coesistano.
 
 ## Modalità shadow

@@ -12,6 +12,7 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 
 - Introdurre tabelle relazionali separate per identità, libreria, configurazione e risultati.
 - Usare chiavi composte `account_id + id`, perché gli identificativi dimostrativi non sono globalmente univoci.
+- Vincolare l'email normalizzata del profilo adulto all'interno dello stesso account; `therapist_credentials` resta la fonte dell'unicità globale del login. La migrazione `0008` corregge l'indice inizialmente globale, che impediva il reintegro di account distinti con un profilo omonimo.
 - Conservare file e immagini in R2; D1 contiene riferimenti e metadati.
 - Trattare tentativi e aiuti come eventi append-only e ricostruire lo storico dalle sessioni.
 - Conservare nelle sessioni una fotografia relazionale dei contenuti mostrati.

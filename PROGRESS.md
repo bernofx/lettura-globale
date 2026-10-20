@@ -8,7 +8,7 @@
 
 ## Completato
 
-- [x] Riparazione dello shadow relazionale incompleto: controllo delle identità di tutte le tabelle prima delle scritture granulari, fallback atomico allo snapshot per non perdere sequenze e reintegro non distruttivo a batch limitati al successivo caricamento. Test D1 con registro `verified` ma righe mancanti.
+- [x] Riparazione dello shadow relazionale incompleto: controllo delle identità di tutte le tabelle prima delle scritture granulari, fallback atomico allo snapshot per non perdere sequenze e reintegro non distruttivo a batch limitati al successivo caricamento. Migrazione `0008` per circoscrivere l'unicità email dei profili adulti all'account, con test D1 di due account sovrapposti.
 - [x] Journal locale e copiabile dei salvataggi cloud, privo di contenuti personali, con codice di errore e revisione; l'API segnala esplicitamente la migrazione `state_operations` mancante e associa agli errori inattesi una fase tecnica e un identificatore diagnostico.
 
 - [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
