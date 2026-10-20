@@ -44,10 +44,16 @@ function guardedStageUnique(database: D1Database, table: RelationalTable, column
   return database.prepare(`UPDATE \`${table}\` SET \`${column}\` = ? || \`${idColumn}\` WHERE account_id = ? AND \`${idColumn}\` IN (${ids.map(() => "?").join(", ")}) AND EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)`).bind(`pending-${accountId}-${operationId}-`, accountId, ...ids, accountId, operationId);
 }
 
-function positionStatement(database: D1Database, table: RelationalTable, rows: RelationalRow[], accountId: string, operationId: string) {
-  if (!rows.length) return null;
-  const sql = `UPDATE \`${table}\` SET position = CASE id ${rows.map(() => "WHEN ? THEN ?").join(" ")} ELSE position END WHERE account_id = ? AND id IN (${rows.map(() => "?").join(", ")}) AND EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)`;
-  return database.prepare(sql).bind(...rows.flatMap((row) => [String(row.id), Number(row.position)]), accountId, ...rows.map((row) => String(row.id)), accountId, operationId);
+const POSITION_ROWS_PER_STATEMENT = 25;
+
+function positionStatements(database: D1Database, table: RelationalTable, rows: RelationalRow[], accountId: string, operationId: string) {
+  const statements: D1PreparedStatement[] = [];
+  for (let start = 0; start < rows.length; start += POSITION_ROWS_PER_STATEMENT) {
+    const chunk = rows.slice(start, start + POSITION_ROWS_PER_STATEMENT);
+    const sql = `UPDATE \`${table}\` SET position = CASE id ${chunk.map(() => "WHEN ? THEN ?").join(" ")} ELSE position END WHERE account_id = ? AND id IN (${chunk.map(() => "?").join(", ")}) AND EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)`;
+    statements.push(database.prepare(sql).bind(...chunk.flatMap((row) => [String(row.id), Number(row.position)]), accountId, ...chunk.map((row) => String(row.id)), accountId, operationId));
+  }
+  return statements;
 }
 
 function collectionIds(change: StateChangeRequest, key: StateCollectionName) {
@@ -99,15 +105,13 @@ export async function prepareRelationalChange(options: {
     const stageEmails = guardedStageUnique(database, "adult_profiles", "email_normalized", "id", change.collections.therapists.upserts.map((item) => item.id), accountId, operationId);
     if (stageEmails) statements.push(stageEmails);
     upsert("adult_profiles", rowsByIds("adult_profiles", therapistIds));
-    const positions = positionStatement(database, "adult_profiles", tables.adult_profiles.filter((row) => change.collections.therapists!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "adult_profiles", tables.adult_profiles.filter((row) => change.collections.therapists!.order.includes(String(row.id))), accountId, operationId));
   }
   const childIds = collectionIds(change, "children");
   if (change.collections.children) {
     for (const id of change.collections.children.removedIds) statements.push(guardedDelete(database, "adult_child_access", "child_id = ?", [id], accountId, operationId));
     upsert("children", rowsByIds("children", childIds));
-    const positions = positionStatement(database, "children", tables.children.filter((row) => change.collections.children!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "children", tables.children.filter((row) => change.collections.children!.order.includes(String(row.id))), accountId, operationId));
   }
   if (change.collections.therapists) upsert("adult_child_access", tables.adult_child_access.filter((row) => therapistIds.includes(String(row.adult_id))));
 
@@ -124,8 +128,7 @@ export async function prepareRelationalChange(options: {
     for (const id of change.collections.library.removedIds) {
       statements.push(guardedDelete(database, "exercise_items", "library_item_id = ?", [id], accountId, operationId));
     }
-    const positions = positionStatement(database, "library_items", tables.library_items.filter((row) => change.collections.library!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "library_items", tables.library_items.filter((row) => change.collections.library!.order.includes(String(row.id))), accountId, operationId));
   }
 
   const exerciseIds = collectionIds(change, "exercises");
@@ -139,8 +142,7 @@ export async function prepareRelationalChange(options: {
     for (const id of change.collections.exercises.removedIds) statements.push(guardedDelete(database, "exercises", "id = ?", [id], accountId, operationId));
     upsert("exercise_items", tables.exercise_items.filter((row) => exerciseIds.includes(String(row.exercise_id))));
     upsert("exercise_categories", tables.exercise_categories.filter((row) => exerciseIds.includes(String(row.exercise_id))));
-    const positions = positionStatement(database, "exercises", tables.exercises.filter((row) => change.collections.exercises!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "exercises", tables.exercises.filter((row) => change.collections.exercises!.order.includes(String(row.id))), accountId, operationId));
   }
 
   const sequenceIds = collectionIds(change, "sequences");
@@ -149,8 +151,7 @@ export async function prepareRelationalChange(options: {
     upsert("sequences", rowsByIds("sequences", sequenceIds));
     for (const id of change.collections.sequences.removedIds) statements.push(guardedDelete(database, "sequences", "id = ?", [id], accountId, operationId));
     upsert("sequence_exercises", tables.sequence_exercises.filter((row) => sequenceIds.includes(String(row.sequence_id))));
-    const positions = positionStatement(database, "sequences", tables.sequences.filter((row) => change.collections.sequences!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "sequences", tables.sequences.filter((row) => change.collections.sequences!.order.includes(String(row.id))), accountId, operationId));
   }
 
   const sessionIds = collectionIds(change, "sessionHistory");
@@ -164,8 +165,7 @@ export async function prepareRelationalChange(options: {
     upsert("session_item_content", tables.session_item_content.filter((row) => sessionItemIds.has(String(row.session_item_id))));
     upsert("session_item_responses", tables.session_item_responses.filter((row) => sessionItemIds.has(String(row.session_item_id))));
     upsert("session_item_help_labels", tables.session_item_help_labels.filter((row) => sessionItemIds.has(String(row.session_item_id))));
-    const positions = positionStatement(database, "sessions", tables.sessions.filter((row) => change.collections.sessionHistory!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "sessions", tables.sessions.filter((row) => change.collections.sessionHistory!.order.includes(String(row.id))), accountId, operationId));
   }
 
   const attemptIds = collectionIds(change, "attempts");
@@ -174,16 +174,14 @@ export async function prepareRelationalChange(options: {
     upsert("attempts", rowsByIds("attempts", attemptIds));
     for (const id of change.collections.attempts.removedIds) statements.push(guardedDelete(database, "attempts", "id = ?", [id], accountId, operationId));
     upsert("attempt_options", tables.attempt_options.filter((row) => attemptIds.includes(String(row.attempt_id))));
-    const positions = positionStatement(database, "attempts", tables.attempts.filter((row) => change.collections.attempts!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "attempts", tables.attempts.filter((row) => change.collections.attempts!.order.includes(String(row.id))), accountId, operationId));
   }
 
   const helpIds = collectionIds(change, "helps");
   if (change.collections.helps) {
     upsert("help_events", rowsByIds("help_events", helpIds));
     for (const id of change.collections.helps.removedIds) statements.push(guardedDelete(database, "help_events", "id = ?", [id], accountId, operationId));
-    const positions = positionStatement(database, "help_events", tables.help_events.filter((row) => change.collections.helps!.order.includes(String(row.id))), accountId, operationId);
-    if (positions) statements.push(positions);
+    statements.push(...positionStatements(database, "help_events", tables.help_events.filter((row) => change.collections.helps!.order.includes(String(row.id))), accountId, operationId));
   }
 
   if (Object.keys(change.values).length) upsert("account_preferences", tables.account_preferences);
