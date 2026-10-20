@@ -36,6 +36,8 @@ L'aggiornamento della revisione, il registro dell'operazione, le credenziali e l
 
 La diagnostica restituisce `writeMode: "direct"` dopo la prima operazione eseguita con il cutover. `GET /api/state` e il `PUT` di prima inizializzazione conservano la capacità di ricostruire la proiezione dal mirror in caso di rollback o migrazione incompleta.
 
+Un registro `verified` non è sufficiente da solo: un'operazione diretta precedente può averlo aggiornato anche se altre tabelle non erano state inizializzate. Prima del `PATCH` confrontiamo le identità attese di tutte le righe shadow con lo snapshot. Se mancano, il batch salva comunque snapshot, revisione, credenziali e idempotenza, ma non esegue le scritture relazionali e segnala `writeMode: "snapshot"`. Al successivo `GET` un reintegro non distruttivo aggiunge o aggiorna le righe attese in batch limitati e aggiorna il registro solo dopo la verifica. Righe estranee o errori di vincolo lasciano lo stato `pending` e richiedono analisi, senza cancellazione automatica.
+
 ## Compatibilità e rollback
 
 La migrazione non cancella né modifica lo snapshot. Una versione precedente dell'app può quindi essere ripubblicata senza downgrade del database. Le nuove tabelle sono additive. Il ritiro di `user_states` richiederà un ADR separato su retention e backup.

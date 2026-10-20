@@ -9,7 +9,7 @@ Il salvataggio di una sequenza può apparire riuscito nel browser mentre il `PAT
 - Il browser conserva sul dispositivo un journal circolare delle ultime 60 operazioni tecniche. Registra timestamp, evento, identificatore casuale dell'operazione, revisione, stato HTTP, codice di errore e conteggi di sequenze; esclude titoli, parole, immagini, dati dei bambini e identità degli adulti.
 - Il puntino cloud nell'header apre il journal e permette di copiarlo volontariamente per l'assistenza. Il journal non viene inviato automaticamente al server.
 - L'API incrementale verifica la presenza di `state_operations` e restituisce `state_operations_migration_missing` con HTTP 503 quando manca la migrazione `0007`.
-- Gli errori imprevisti dell'API riportano una fase tecnica e un identificatore diagnostico casuale. Il log del Worker contiene solo questi due campi, senza payload né messaggi del database.
+- Gli errori imprevisti dell'API riportano una fase tecnica e un identificatore diagnostico casuale. Il log del Worker contiene solo questi campi e, se riconoscibile, la categoria `SQLITE_*`; non registra payload o messaggi del database.
 - Il journal diagnostico non è la fonte dei dati: il delta pendente rimane nel meccanismo di recupero locale separato.
 
 ## Verifica operativa

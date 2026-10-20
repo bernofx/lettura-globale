@@ -4,7 +4,8 @@ import { getChatGPTUser } from "../../../chatgpt-auth";
 import { applyStateChange, parseStateChangeRequest } from "../../../domain/state-changes";
 import { getDb } from "../../../../db";
 import { therapistCredentials, userStates } from "../../../../db/schema";
-import { prepareRelationalChange, stateChecksum } from "../../../../db/relational-state";
+import { loadRelationalProjection, prepareRelationalChange, relationalMigrationInfo, relationalShadowMatches, stateChecksum } from "../../../../db/relational-state";
+import { relationalParityReport } from "../../../domain/relational-state";
 
 const MAX_CHANGE_BYTES = 4_000_000;
 const MAX_STATE_BYTES = 4_000_000;
@@ -30,8 +31,9 @@ export async function PATCH(request: Request) {
   const diagnosticId = crypto.randomUUID();
   let phase = "authentication";
   try { return await applyPatch(request, diagnosticId, (next) => { phase = next; }); }
-  catch {
-    console.error("state_change_failed", { diagnosticId, phase });
+  catch (error) {
+    const sqliteCode = error instanceof Error ? error.message.match(/SQLITE_[A-Z_]+/)?.[0] : undefined;
+    console.error("state_change_failed", { diagnosticId, phase, sqliteCode: sqliteCode ?? "unknown" });
     return Response.json({ error: `state_change_failed_${phase}`, diagnosticId }, { status: 500 });
   }
 }
@@ -80,11 +82,18 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
     if (existing && existing.ownerUserId !== user.userId) return Response.json({ error: "therapist_email_unavailable" }, { status: 409 });
   }
 
+  // A matching migration journal row alone is not proof that the shadow rows exist.
+  // Older granular writes could advance that row after an unsuccessful initial backfill.
+  setPhase("relational_preflight");
+  const migration = await relationalMigrationInfo(database, user.userId);
+  const projection = await loadRelationalProjection(database, user.userId);
+  const parity = relationalParityReport(JSON.parse(current.payload), projection, current.revision, migration?.source_revision ?? 0, migration?.source_checksum === await stateChecksum(current.payload));
+  const relationalReady = parity.relationalRevision === current.revision && parity.sourceChecksumMatches && relationalShadowMatches(JSON.parse(current.payload), projection, user.userId);
   setPhase("projection");
-  const relational = await prepareRelationalChange({
+  const relational = relationalReady ? await prepareRelationalChange({
     database, accountId: user.userId, email: user.email, displayName: user.displayName, rawState, state,
     change, sourceRevision: revision, operationId: change.operationId, now,
-  });
+  }) : null;
   const statements = [
     database.prepare("UPDATE user_states SET email = ?, payload = ?, schema_version = 1, revision = ?, updated_at = ? WHERE user_id = ? AND revision = ?")
       .bind(user.email, rawState, revision, now, user.userId, current.revision),
@@ -94,7 +103,7 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
       .bind(user.userId, user.userId, change.operationId),
     ...credentials.map((credential) => database.prepare("INSERT INTO therapist_credentials (login_email, owner_user_id, therapist_id, pin_hash, display_name, updated_at) SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)")
       .bind(credential.loginEmail, credential.ownerUserId, credential.therapistId, credential.pinHash, credential.displayName, credential.updatedAt, user.userId, change.operationId)),
-    ...relational.statements,
+    ...(relational?.statements ?? []),
   ];
   setPhase("batch");
   await database.batch(statements);
@@ -106,5 +115,5 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
     return Response.json({ error: "revision_conflict", currentRevision: latest?.revision ?? 0 }, { status: 409 });
   }
 
-  return Response.json({ ok: true, revision, updatedAt: now, relationalStatus: "verified", writeMode: "direct", idempotent: false });
+  return Response.json({ ok: true, revision, updatedAt: now, relationalStatus: relational ? "verified" : "pending", writeMode: relational ? "direct" : "snapshot", idempotent: false });
 }
