@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const userStates = sqliteTable("user_states", {
   userId: text("user_id").primaryKey(),
@@ -9,6 +9,18 @@ export const userStates = sqliteTable("user_states", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const stateOperations = sqliteTable("state_operations", {
+  accountId: text("account_id").notNull(),
+  operationId: text("operation_id").notNull(),
+  baseRevision: integer("base_revision").notNull(),
+  resultRevision: integer("result_revision").notNull(),
+  requestChecksum: text("request_checksum").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.accountId, table.operationId] }),
+  index("state_operations_account_created_idx").on(table.accountId, table.createdAt),
+]);
 
 export const authSessions = sqliteTable("auth_sessions", {
   tokenHash: text("token_hash").primaryKey(),

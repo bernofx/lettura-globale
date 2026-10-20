@@ -70,6 +70,7 @@
 - [x] Prima fase della migrazione relazionale D1: schema additivo, proiezione idempotente dello snapshot per account, revisione/checksum, tombstone per riferimenti storici e compatibilità completa con il JSON durante il periodo shadow.
 - [x] Seconda fase della migrazione relazionale: ricostruzione completa del formato applicativo dalle tabelle, conservazione esplicita di opzioni/risposte/aiuti storici e diagnostica autenticata di revisioni e conteggi; letture applicative ancora sullo snapshot fino alla verifica del D1 pubblicato.
 - [x] Cutover controllato delle letture D1: ordine delle raccolte persistito, confronto per revisione e identificativi, uso automatico delle tabelle quando allineate e fallback trasparente allo snapshot in caso di errore o differenza.
+- [x] Prima fase delle scritture granulari: il browser invia solo entità e preferenze cambiate, con coda seriale, controllo ottimistico della revisione e retry idempotente registrato in D1; lo snapshot resta copia di rollback e alimenta ancora la proiezione relazionale.
 
 ## Scelte di persistenza e costo
 
@@ -81,12 +82,13 @@
 
 ## Limitazioni note
 
-- Il modello D1 usa ultima scrittura valida: manca ancora la risoluzione dei conflitti fra modifiche simultanee da più dispositivi.
+- Le modifiche simultanee da più dispositivi non si sovrascrivono più: la seconda riceve un conflitto di revisione. Manca ancora un flusso UI per ricaricare e riconciliare automaticamente le due copie.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
 - Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
 - Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
 - La modalità protetta è un controllo dell'interfaccia web: Chrome/PWA non può impedire la chiusura dell'app, i gesti del sistema operativo o altri comandi del dispositivo.
+- La durata di conservazione dei soli metadati tecnici in `state_operations` deve essere inclusa nella policy di retention prima del pilot.
 - Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi
@@ -95,7 +97,7 @@
 2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
 3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
 4. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
-5. Sostituire il salvataggio monolitico con API granulari, idempotenti e dotate di controllo di revisione; mantenere il fallback finché non è provato il ripristino.
+5. Applicare le operazioni granulari direttamente alle tabelle di dominio, mantenendo lo snapshot di rollback finché backup e ripristino non sono provati.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
 8. Definire retention, backup e prova di ripristino D1/R2.
