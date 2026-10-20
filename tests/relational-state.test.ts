@@ -80,9 +80,11 @@ test("preserva la configurazione di Numero quantità nella proiezione relazional
     exercises: [{ id: "quantity", title: "Conta", kind: "number-quantity", promptId: "", optionIds: [], rounds: 5, quantityMin: 2, quantityMax: 8, quantityObjectSet: "ladybug", quantityAutoComplete: true, quantityIdleSeconds: 4, updatedAt: "2026-10-20T10:00:00.000Z" }],
   };
   const projection = projectLegacyState(state, "account-1", now);
+  assert.equal(projection.tables.exercises[0].kind, "recognition");
   assert.equal(projection.tables.exercises[0].quantity_min, 2);
   assert.equal(projection.tables.exercises[0].quantity_auto_complete, 1);
   const rebuilt = rebuildLegacyState(projection);
+  assert.equal(rebuilt.exercises[0].kind, "number-quantity");
   assert.deepEqual({
     min: rebuilt.exercises[0].quantityMin,
     max: rebuilt.exercises[0].quantityMax,
