@@ -4,6 +4,7 @@
 2. Controlla branch e working tree; non sovrascrivere lavoro non tuo.
 3. Lavora su una issue GitLab e su un branch breve. Mai push diretto a `main` dopo il bootstrap.
 4. Non decidere implicitamente autenticazione, licenze, privacy, retention, provider o deploy: crea un ADR e chiedi approvazione.
+5. Quando aggiungi una tipologia di esercizio o un nuovo valore enumerato persistito, controlla tutti i `CHECK` D1 già distribuiti (non solo lo schema corrente), inclusi esercizi, item di sessione e storico. Prevedi una migrazione forward-only oppure una codifica retrocompatibile; aggiungi test di round-trip e di scrittura con lo schema storico. Vedi `docs/MIGRAZIONE_DATI_RELAZIONALE.md`.
 
 ## Regole non negoziabili
 

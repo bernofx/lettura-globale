@@ -17,6 +17,8 @@ Gli esercizi esistenti registrano risposte riferite soprattutto a elementi della
 
 La soluzione mantiene compatibilità con il journal degli eventi e con le scritture granulari senza introdurre una tabella per ogni futura attività non lessicale. Il prefisso discriminato deve essere interpretato soltanto da funzioni di dominio, non costruito liberamente dai componenti UI. Se futuri esercizi richiederanno traiettorie complete dei gesti o payload più articolati, sarà introdotta una colonna JSON tipizzata o una tabella `attempt_payloads` con una nuova ADR.
 
+Lo schema D1 storico di `session_items.kind` non include `number-quantity`. Per evitare l'errore 500 `state_change_failed_batch` nelle installazioni già pubblicate, la proiezione salva questi item con il valore compatibile `recognition` e ne ricostruisce il tipo tramite l'identificatore discriminato delle risposte. È una compatibilità intenzionale, coperta da test di round-trip; un'eventuale migrazione del `CHECK` richiede verifica separata sullo schema distribuito.
+
 ## Verifica
 
 I test devono coprire generazione entro i limiti, oggetti misti, compilazione in turni, round-trip relazionale, etichette dello storico e assenza di immagini nel riepilogo. La prova manuale deve verificare timer annullato dai tocchi, selezione reversibile e conferma adulta obbligatoria in valutazione.

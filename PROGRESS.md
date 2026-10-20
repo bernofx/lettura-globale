@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Documentata la causa del `state_change_failed_batch` per lo storico di `Numero quantità` e aggiunta una verifica obbligatoria dei vincoli `CHECK` D1 storici quando si introducono nuove tipologie.
 - [x] Nuovo esercizio `Numero quantità`: bersaglio casuale 1–10, dieci oggetti vettoriali toccabili e deselezionabili, contatore, pronuncia, conferma adulta e completamento automatico opzionale solo in insegnamento. Configurazione e risultati persistono nello shadow relazionale D1 e nello storico senza immagini.
 - [x] L’amministratore può modificare nome, cognome, email, PIN, ruolo e bambini associati dei profili adulti non amministrativi.
 - [x] `Trova la parola` supporta un bersaglio fisso con distrattori casuali; il configuratore spiega in modo puntuale quando i filtri non producono abbastanza alternative.

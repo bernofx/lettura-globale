@@ -1,5 +1,18 @@
 # Runbook della migrazione relazionale
 
+## Nuove tipologie e compatibilità con i vincoli D1
+
+Prima di salvare una nuova tipologia di esercizio, verificare **tutte** le tabelle che persistono `kind`, anche quelle dello storico. Una migrazione che aggiunge colonne o amplia `exercises.kind` non modifica automaticamente il `CHECK` di `session_items.kind` nelle installazioni esistenti. In SQLite un `CHECK` storico resta attivo finché la tabella non viene ricreata con una migrazione forward-only.
+
+L'incidente di `Numero quantità` lo ha mostrato: la proiezione relazionale provava a inserire `number-quantity` in `session_items.kind`, che nello schema distribuito accettava soltanto `recognition`, `articles`, `word-categories` e `naming`. Il batch atomico di `PATCH /api/state/changes` falliva con `SQLITE_CONSTRAINT` e il client registrava `state_change_failed_batch` (HTTP 500), anche se `changedSequences` era zero: quel contatore non identifica la tabella che ha causato l'errore.
+
+La compatibilità attuale proietta lo storico quantità con `kind = 'recognition'` e ricostruisce il tipo applicativo dalle risposte `quantity:<target>:<selected>:<method>`. Prima di introdurre un'altra tipologia, scegliere e documentare esplicitamente una delle due strade:
+
+1. migrazione numerata e forward-only che aggiorni ogni `CHECK` interessato, verificata su un database creato dalle migrazioni precedenti;
+2. codifica compatibile con i valori storici, con ricostruzione deterministica e test di round-trip.
+
+In entrambi i casi testare una sessione completa e il relativo salvataggio contro lo **schema già distribuito**, non soltanto contro un database nuovo. Dopo la pubblicazione controllare un salvataggio reale, la revisione cloud e `/api/state/relational-status`. Se ricompare `state_change_failed_batch`, cercare nel log server il `diagnosticId`, la fase e il codice SQLite; non ripetere alla cieca il salvataggio né concludere dai soli contatori del journal quale entità sia difettosa. La copia locale va preservata finché il cloud non conferma il salvataggio.
+
 ## Prima della pubblicazione
 
 1. Esportare il D1 dell'ambiente interessato e conservarlo secondo la policy approvata.
