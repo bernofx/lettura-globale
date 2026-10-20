@@ -3,17 +3,23 @@ import test from "node:test";
 import { filterQuickCandidates, quickStartIsValid } from "../app/domain/session-planning.ts";
 
 const candidates = [
-  { id: "mela", category: "Cibi" },
-  { id: "pane", category: "Cibi" },
-  { id: "gatto", category: "Animali" },
-  { id: "cane", category: "Animali" },
-  { id: "sole", category: "Natura" },
+  { id: "mela", category: "Cibi", syllableCount: 2 },
+  { id: "pane", category: "Cibi", syllableCount: 2 },
+  { id: "gatto", category: "Animali", syllableCount: 2 },
+  { id: "cane", category: "Animali", syllableCount: 2 },
+  { id: "sole", category: "Natura", syllableCount: 2 },
+  { id: "telefono", category: "Oggetti", syllableCount: 4 },
 ];
 
 test("l'avvio rapido filtra per categorie senza modificare la libreria", () => {
   const filtered = filterQuickCandidates(candidates, { activity: "recognition", selection: "categories", categoryNames: ["Animali"], itemIds: [] });
   assert.deepEqual(filtered.map((item) => item.id), ["gatto", "cane"]);
-  assert.equal(candidates.length, 5);
+  assert.equal(candidates.length, 6);
+});
+
+test("l'avvio rapido applica il parametro condiviso per il numero di sillabe", () => {
+  const filtered = filterQuickCandidates(candidates, { activity: "recognition", selection: "all", categoryNames: [], itemIds: [], recognitionSyllables: "4+" });
+  assert.deepEqual(filtered.map((item) => item.id), ["telefono"]);
 });
 
 test("la scelta manuale conserva soltanto gli elementi indicati", () => {
