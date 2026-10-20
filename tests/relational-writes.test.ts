@@ -21,6 +21,11 @@ test("a session-history operation includes snapshots and referenced profile pare
   ]));
 });
 
+test("a sequence operation writes its header and ordered exercises", () => {
+  const tables = relationalTablesForChange(change({ sequences: { upserts: [{ id: "sequence-1", title: "Mattina", exerciseIds: ["exercise-2", "exercise-1"] }], removedIds: [], order: ["sequence-1"] } }));
+  assert.deepEqual(new Set(tables), new Set(["adult_profiles", "sequences", "sequence_exercises"]));
+});
+
 test("preference-only changes write only account preferences", () => {
   assert.deepEqual(relationalTablesForChange(change({}, { activeChildId: "child-2" })), ["account_preferences"]);
 });
