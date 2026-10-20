@@ -8,7 +8,7 @@ import { hasArtwork } from "../../domain/library-availability";
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
   id?: string;
-  kind?: "recognition" | "articles" | "word-categories" | "naming";
+  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
   deleted?: boolean;
   promptId?: string;
   optionIds?: string[];
@@ -57,8 +57,12 @@ export async function POST(request: Request) {
       if (exercise.namingItemIds?.length) exercise.namingItemIds.forEach((id) => referencedIds.add(id));
       else availableLibrary.filter((item) => hasArtwork(item) && (!exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? ""))).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     }
+    else if (exercise.kind === "number-quantity") {
+      // This exercise uses vector objects and needs no library assets.
+    }
     else if (exercise.recognitionMode === "random") {
-      if (exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
+      if (exercise.promptId) referencedIds.add(exercise.promptId);
+      if (!exercise.promptId && exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
       else availableLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     } else {
       if (exercise.promptId) referencedIds.add(exercise.promptId);

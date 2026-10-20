@@ -516,6 +516,25 @@ function playFeedbackTone(kind: FeedbackSound, enabled: boolean) {
   void audio.play().catch(() => undefined);
 }
 
+function playQuantityTick(selected: boolean, enabled: boolean) {
+  if (!enabled) return;
+  const context = feedbackContext();
+  if (!context) return;
+  if (context.state === "suspended") void context.resume().catch(() => undefined);
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(selected ? 520 : 420, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.045, now + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.09);
+}
+
 function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[]) {
   return compileSessionPlan(selectedExercises, sourceLibrary, { articleFor });
 }
@@ -695,7 +714,7 @@ export default function HomePage() {
         return response.json() as Promise<SharedPreviewPayload>;
       })
       .then((payload) => {
-        if (cancelled || payload.schemaVersion !== 1 || !payload.exercises?.length || !payload.library?.length) throw new Error("invalid_preview");
+        if (cancelled || payload.schemaVersion !== 1 || !payload.exercises?.length || !Array.isArray(payload.library)) throw new Error("invalid_preview");
         const plan = compileExercises(payload.exercises, payload.library.filter((item) => !item.deleted));
         if (!plan.length) throw new Error("empty_preview");
         setSharedPreview(payload);
@@ -1882,7 +1901,6 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   const prompt = `Tocca ${target} ${quantityObjectLabel(object, target)}`;
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
-  const [possibleDone, setPossibleDone] = useState(false);
   const idleTimer = useRef<number | null>(null);
   const advanceTimer = useRef<number | null>(null);
   const speakPrompt = useCallback(() => speakWord(prompt), [prompt]);
@@ -1896,11 +1914,10 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   useEffect(() => { speakPrompt(); }, [speakPrompt]);
   useEffect(() => {
     if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
-    if (judgement || selected.size !== target) return;
+    if (judgement || mode !== "teaching" || !exercise.quantityAutoComplete || selected.size !== target) return;
     idleTimer.current = window.setTimeout(() => {
       idleTimer.current = null;
-      if (mode === "teaching" && exercise.quantityAutoComplete) completeRound(true, "idle-teaching");
-      else setPossibleDone(true);
+      completeRound(true, "idle-teaching");
     }, Math.min(10, Math.max(1, exercise.quantityIdleSeconds ?? 3)) * 1000);
     return () => { if (idleTimer.current !== null) window.clearTimeout(idleTimer.current); };
   }, [completeRound, exercise.quantityAutoComplete, exercise.quantityIdleSeconds, judgement, mode, selected.size, target]);
@@ -1910,12 +1927,15 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   }, []);
   const toggle = (index: number) => {
     if (judgement) return;
-    setPossibleDone(false);
-    setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
+    const willSelect = !selected.has(index);
+    const next = new Set(selected);
+    if (willSelect) next.add(index); else next.delete(index);
+    playQuantityTick(willSelect, soundEffects);
+    setSelected(next);
   };
   return <div className="session-screen quantity-session">
     <div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Numero quantità</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div>
-    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><strong className={selected.size === target ? "reached" : selected.size > target ? "over" : ""}>{selected.size} / {target}</strong></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}</div>{possibleDone && <p className="quantity-done-hint" role="status"><CircleHelp />Il conteggio coincide. Conferma l’esito quando il bambino ha davvero terminato.</p>}<div className="quantity-controls"><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(true, "adult")} disabled={Boolean(judgement) || selected.size !== target}><Check />Numero corretto</button></div>
+    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><div className="quantity-count" aria-live="polite"><span>Obiettivo</span><strong>{target}</strong><small>{selected.size} selezionati</small></div></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}</div><div className="quantity-controls"><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(selected.size === target, "adult")} disabled={Boolean(judgement)}><Check />Numero corretto</button></div>
   </div></div>;
 }
 
@@ -2427,6 +2447,27 @@ function LibraryDeleteDialog({ item, onCancel, onConfirm }: { item: LibraryItem;
   return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="library-delete-title"><div className="modal delete-modal"><span className="delete-icon"><AlertTriangle /></span><span className="eyebrow">ARCHIVIA ELEMENTO</span><h2 id="library-delete-title">Rimuovere {item.word} dalla libreria?</h2><p>La scheda non sarà più proposta nei nuovi esercizi. Il contenuto resterà archiviato per conservare intatti gli storici che lo utilizzano.</p><div className="modal-actions"><button className="ghost-button" onClick={onCancel}>Annulla</button><button className="danger-button solid" onClick={onConfirm}><Trash2 />Archivia elemento</button></div></div></div>;
 }
 
+function FullTextItemPicker({ items, selectedIds, onChange, multiple, presentation, placeholder, max }: { items: LibraryItem[]; selectedIds: string[]; onChange: (ids: string[]) => void; multiple: boolean; presentation: Presentation; placeholder: string; max?: number }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("it-IT");
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  const selected = selectedIds.map((id) => items.find((item) => item.id === id)).filter((item): item is LibraryItem => Boolean(item));
+  const results = tokens.length ? items.filter((item) => {
+    const text = `${item.word} ${item.category} ${item.syllabification ?? ""}`.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("it-IT");
+    return tokens.every((token) => text.includes(token));
+  }).slice(0, 8) : [];
+  const choose = (id: string) => {
+    if (!multiple) { onChange([id]); setQuery(""); return; }
+    if (selectedIds.includes(id)) onChange(selectedIds.filter((itemId) => itemId !== id));
+    else if (!max || selectedIds.length < max) onChange([...selectedIds, id]);
+  };
+  return <div className="fulltext-picker">
+    {selected.length > 0 && <div className="fulltext-selection" aria-label="Elementi selezionati">{selected.map((item) => <button type="button" key={item.id} onClick={() => multiple && choose(item.id)} className={!multiple ? "single" : ""} title={multiple ? `Rimuovi ${item.word}` : item.word}>{presentation === "images" && <span><Artwork item={item} compact /></span>}<strong>{item.word}</strong>{multiple && <X />}</button>)}</div>}
+    <label className="search-box fulltext-search"><Search /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" /></label>
+    {tokens.length > 0 && <div className="fulltext-results" role="listbox">{results.length ? results.map((item) => { const chosen = selectedIds.includes(item.id); return <button type="button" role="option" aria-selected={chosen} key={item.id} onClick={() => choose(item.id)} disabled={!chosen && Boolean(max && selectedIds.length >= max)}>{presentation === "images" && <span><Artwork item={item} compact /></span>}<span><strong>{item.word}</strong><small>{item.category}{item.syllabification ? ` · ${item.syllabification}` : ""}</small></span>{chosen ? <Check /> : <Plus />}</button>; }) : <p>Nessun risultato per “{query.trim()}”.</p>}</div>}
+  </div>;
+}
+
 function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: SessionActivity; exercise?: Exercise; library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
   const initialPresentation = exercise?.presentation ?? "images";
   const initialRecognitionLibrary = availableForRecognition(library, initialPresentation);
@@ -2478,10 +2519,6 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
   const matchesItemSearch = (item: LibraryItem) => !normalizedItemSearch || `${item.word} ${item.category}`.toLocaleLowerCase("it-IT").includes(normalizedItemSearch);
   const itemSearchField = <label className="search-box builder-search"><Search /><input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Cerca per parola o categoria…" /></label>;
   const finalOptions = Array.from(new Set([effectivePromptId, ...options])).filter((id) => recognitionCandidates.some((item) => item.id === id)).slice(0, 4);
-  const toggle = (id: string) => {
-    if (id === effectivePromptId) return;
-    setOptions((current) => current.includes(id) ? current.filter((item) => item !== id) : finalOptions.length < 4 ? [...current, id] : current);
-  };
   const saveFixed = () => onSave({
     id: exercise?.id ?? crypto.randomUUID(),
     title: title.trim() || `Trova ${prompt?.word.toLowerCase() ?? "la parola"}`,
@@ -2543,16 +2580,9 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
             <button type="button" className={randomPromptMode === "fixed" ? "selected" : ""} onClick={() => setRandomPromptMode("fixed")}>Una parola precisa</button>
             <button type="button" className={randomPromptMode === "random" ? "selected" : ""} onClick={() => setRandomPromptMode("random")}>Casuale a ogni turno</button>
           </div>
-          {itemSearchField}
           {randomPromptMode === "fixed" && <>
             <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>
-            <div className={`builder-grid ${exercisePresentation === "words" ? "compact-words" : ""}`}>
-              {recognitionCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={effectivePromptId === item.id ? "selected" : ""} onClick={() => setPromptId(item.id)} aria-pressed={effectivePromptId === item.id}>
-                {exercisePresentation === "images" ? <Artwork item={item} compact /> : <strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong>}
-                <span>{item.word.toLocaleUpperCase("it-IT")}</span>
-                {effectivePromptId === item.id && <i><Check /></i>}
-              </button>)}
-            </div>
+            <FullTextItemPicker items={recognitionCandidates} selectedIds={effectivePromptId ? [effectivePromptId] : []} onChange={(ids) => setPromptId(ids[0] ?? "")} multiple={false} presentation={exercisePresentation} placeholder="Cerca la parola da riconoscere…" />
           </>}
           <div className="builder-inline-fields">
             <label>Numero di turni<input type="number" min={1} max={50} value={Math.max(1, rounds)} onChange={(event) => setRounds(Number(event.target.value))} /></label>
@@ -2562,26 +2592,13 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
           <div className="filter-chips">{availableCategories.map((category) => <button type="button" key={category} className={recognitionCategories.includes(category) ? "selected" : ""} onClick={() => setRecognitionCategories((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category])} aria-pressed={recognitionCategories.includes(category)}>{category}</button>)}</div>
           <div className="builder-label">{randomPromptMode === "fixed" ? "Distrattori preferiti (facoltativo)" : "Limita a parole specifiche"} <span>{recognitionItemIds.length ? `${recognitionItemIds.length} scelte` : randomPromptMode === "fixed" ? "Scelta automatica" : "Tutte"}</span></div>
           {randomPromptMode === "fixed" && <p className="field-note">Se non ne scegli abbastanza, l’app completa automaticamente le opzioni con elementi compatibili della libreria.</p>}
-          <div className={`builder-grid ${exercisePresentation === "words" ? "compact-words" : ""}`}>
-            {compatibleRandomCandidates.filter((item) => (randomPromptMode !== "fixed" || item.id !== effectivePromptId) && matchesItemSearch(item)).map((item) => <button type="button" key={item.id} className={recognitionItemIds.includes(item.id) ? "selected" : ""} onClick={() => setRecognitionItemIds((current) => current.includes(item.id) ? current.filter((value) => value !== item.id) : [...current, item.id])} aria-pressed={recognitionItemIds.includes(item.id)}>
-              {exercisePresentation === "images" ? <Artwork item={item} compact /> : <strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong>}
-              <span>{item.word.toLocaleUpperCase("it-IT")} · {item.category}</span>
-              {recognitionItemIds.includes(item.id) && <i><Check /></i>}
-            </button>)}
-          </div>
+          <FullTextItemPicker items={compatibleRandomCandidates.filter((item) => randomPromptMode !== "fixed" || item.id !== effectivePromptId)} selectedIds={recognitionItemIds} onChange={setRecognitionItemIds} multiple presentation={exercisePresentation} placeholder={randomPromptMode === "fixed" ? "Cerca uno o più distrattori preferiti…" : "Cerca e aggiungi più parole…"} />
           {randomConfigError && <p className="wizard-error" role="alert">{randomConfigError}</p>}
         </> : <>
           <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>
-          {itemSearchField}
-          <div className={`builder-grid ${exercisePresentation === "words" ? "compact-words" : ""}`}>
-            {recognitionCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={effectivePromptId === item.id ? "selected" : ""} onClick={() => { setPromptId(item.id); setOptions((current) => current.filter((id) => id !== item.id)); }} aria-pressed={effectivePromptId === item.id}>
-              {exercisePresentation === "images" ? <Artwork item={item} compact /> : <strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong>}
-              <span>{item.word.toLocaleUpperCase("it-IT")}</span>
-              {effectivePromptId === item.id && <i><Check /></i>}
-            </button>)}
-          </div>
+          <FullTextItemPicker items={recognitionCandidates} selectedIds={effectivePromptId ? [effectivePromptId] : []} onChange={(ids) => { const nextId = ids[0] ?? ""; setPromptId(nextId); setOptions((current) => current.filter((id) => id !== nextId)); }} multiple={false} presentation={exercisePresentation} placeholder="Cerca la parola da riconoscere…" />
           <div className="builder-label">{exercisePresentation === "words" ? "Parole da mostrare" : "Immagini da mostrare"} <span>{finalOptions.length}/4</span></div>
-          <div className="builder-grid">{recognitionCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={finalOptions.includes(item.id) ? "selected" : ""} onClick={() => toggle(item.id)} aria-pressed={finalOptions.includes(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")}</span>{finalOptions.includes(item.id) && <i><Check /></i>}</button>)}</div>
+          <FullTextItemPicker items={recognitionCandidates.filter((item) => item.id !== effectivePromptId)} selectedIds={options.filter((id) => id !== effectivePromptId)} onChange={(ids) => setOptions(ids.slice(0, 3))} multiple presentation={exercisePresentation} placeholder="Cerca e aggiungi fino a 3 alternative…" max={3} />
         </>}
         <div className="modal-actions">
           <button className="ghost-button" type="button" onClick={onClose}>Annulla</button>

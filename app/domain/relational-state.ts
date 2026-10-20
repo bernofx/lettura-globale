@@ -224,7 +224,7 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
     tables.sessions.push({ account_id: accountId, id: sessionId, child_id: childId, adult_id: adultId, title: string(history.title, "Sessione"), source: string(history.source, "sequence"), mode: string(history.mode, "test"), presentation: string(history.presentation, "images"), status: "completed", started_at: time(history.startedAt, completedAt), completed_at: completedAt, comment: string(history.comment), position, deleted_at: deletedTime(history.deletedAt, now), updated_at: completedAt });
     list(history.items).forEach((item, position) => {
       const itemId = string(item.id, `${sessionId}:item:${position}`);
-      tables.session_items.push({ account_id: accountId, id: itemId, session_id: sessionId, position, exercise_id: optionalString(item.exerciseId), exercise_title: string(item.exerciseTitle, "Esercizio archiviato"), kind: string(item.kind, "recognition"), presentation: optionalString(item.presentation) });
+      tables.session_items.push({ account_id: accountId, id: itemId, session_id: sessionId, position, exercise_id: optionalString(item.exerciseId), exercise_title: string(item.exerciseTitle, "Esercizio archiviato"), kind: item.kind === "number-quantity" ? "recognition" : string(item.kind, "recognition"), presentation: optionalString(item.presentation) });
       const target = object(item.target);
       if (target) tables.session_item_content.push(itemSnapshot(accountId, itemId, "target", 0, target));
       list(item.options).forEach((option, optionPosition) => tables.session_item_content.push(itemSnapshot(accountId, itemId, "option", optionPosition, option)));
@@ -360,7 +360,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
       const content = rowsFor(tables.session_item_content, "session_item_id", item.id);
       const responses = rowsFor(tables.session_item_responses, "session_item_id", item.id).map((response) => ({ answerId: response.answer_id, label: response.label_snapshot, correct: Boolean(response.correct), firstAttempt: Boolean(response.first_attempt), createdAt: iso(response.created_at) }));
       return definedEntries([
-        ["id", item.id], ["exerciseId", item.exercise_id ?? ""], ["exerciseTitle", item.exercise_title], ["kind", item.kind], ["presentation", item.presentation],
+        ["id", item.id], ["exerciseId", item.exercise_id ?? ""], ["exerciseTitle", item.exercise_title], ["kind", responses.some((response) => /^quantity:\d+:\d+:(adult|idle-teaching)$/.test(String(response.answerId))) ? "number-quantity" : item.kind], ["presentation", item.presentation],
         ["target", content.find((entry) => entry.role === "target") ? snapshot(content.find((entry) => entry.role === "target")!) : undefined], ["options", content.filter((entry) => entry.role === "option").map(snapshot)],
         ["responses", responses], ["helpLabels", rowsFor(tables.session_item_help_labels, "session_item_id", item.id).map((entry) => entry.label_snapshot)], ["firstCorrect", Boolean(responses.find((response) => response.firstAttempt)?.correct)],
       ]);

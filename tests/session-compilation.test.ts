@@ -70,3 +70,11 @@ test("compila Numero quantità in turni con bersaglio e oggetto risolti", () => 
   assert.equal(plan.length, 3);
   assert.ok(plan.every((item) => item.quantityTarget === 3 && item.quantityObject === "candy" && item.rounds === 1));
 });
+
+test("compila Numero quantità anche senza elementi di libreria, come nei link condivisi", () => {
+  const exercise: SessionExercise = { ...base, id: "quantity-shared", title: "Numero quantità", kind: "number-quantity", rounds: 1, quantityMin: 5, quantityMax: 5, quantityObjectSet: "stone" };
+  const plan = compileSessionPlan([exercise], [], { articleFor: () => null, random: () => 0, createId: () => "shared-round" });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].quantityTarget, 5);
+  assert.equal(plan[0].quantityObject, "stone");
+});
