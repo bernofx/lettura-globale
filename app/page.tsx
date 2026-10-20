@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LogOut, Menu, MousePointer2, Pencil, Play, Plus, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Check, ChevronLeft, ChevronRight, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
@@ -14,8 +14,11 @@ import { analyzeItalianSyllables, countSyllables, hydrateSyllables, matchesSylla
 import { wordOnlyCatalog } from "./domain/word-catalog";
 import { availableForRecognition, hasArtwork } from "./domain/library-availability";
 import { compileSessionPlan, type SessionActivity, type SessionExercise } from "./domain/session-compilation";
+import { appearancePresetId, appearancePresets, defaultAppearance, hydrateAppearance, type AppearanceSettings, type ControlShape, type ThemePalette } from "./domain/appearance";
+import { ACTIVE_SESSION_STORAGE_KEY, parseRecoverableSession, serializeRecoverableSession, type RecoverableSession } from "./domain/session-recovery";
+import { retryOperation } from "./domain/retry";
 
-type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles";
+type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
 type Presentation = "images" | "words";
 type Article = "IL" | "LA";
@@ -30,7 +33,7 @@ type HelpEvent = HelpEventRecord;
 type ProfileRole = "Amministratore" | "Genitore" | "Supervisore" | "Terapista";
 type Therapist = { id: string; firstName: string; lastName: string; email: string; role: ProfileRole; pinHash?: string; pin?: string; childIds: string[] };
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
-type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[] };
+type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings };
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 type SharedPreviewPayload = { schemaVersion: 1; kind: "exercise" | "sequence"; title: string; exercises: Exercise[]; library: LibraryItem[] };
 
@@ -488,10 +491,12 @@ export default function HomePage() {
   const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
   const [helps, setHelps, helpsLoaded] = useStoredState<HelpEvent[]>("lg-helps", []);
   const [sessionHistory, setSessionHistory, sessionHistoryLoaded] = useStoredState<SessionHistoryRecord[]>("lg-session-history", []);
+  const [appearance, setAppearance, appearanceLoaded] = useStoredState<AppearanceSettings>("lg-appearance", defaultAppearance, hydrateAppearance);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [localLoadSlow, setLocalLoadSlow] = useState(false);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
-  const backendStarted = useRef(false);
+  const [backendRetryKey, setBackendRetryKey] = useState(0);
   const [backendInitialized, setBackendInitialized] = useState(false);
   const backendHydrating = useRef(true);
   const backendSaveTimer = useRef<number | null>(null);
@@ -507,6 +512,9 @@ export default function HomePage() {
   const [pendingDelete, setPendingDelete] = useState<{ kind: "therapist" | "child"; id: string; name: string } | null>(null);
   const [pendingStatsReset, setPendingStatsReset] = useState(false);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<{ id?: string; label: string } | null>(null);
+  const [exitPinOpen, setExitPinOpen] = useState(false);
+  const [recoveryCandidate, setRecoveryCandidate] = useState<RecoverableSession | null>(null);
+  const recoveryCheckedFor = useRef("");
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
@@ -533,9 +541,17 @@ export default function HomePage() {
   const wrongFeedbackTimer = useRef<number | null>(null);
   const handledSharedLaunch = useRef("");
   const sessionReturnView = useRef<View>("session");
+  const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
   const ignoreNextModalPop = useRef(false);
-  const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete);
+  const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete) || exitPinOpen || Boolean(recoveryCandidate);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.palette = appearance.palette;
+    root.dataset.shape = appearance.shape;
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", getComputedStyle(root).getPropertyValue("--violet").trim() || "#6659d9");
+  }, [appearance]);
 
   useEffect(() => {
     preloadFeedbackSounds();
@@ -543,7 +559,7 @@ export default function HomePage() {
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
     window.addEventListener("keydown", prime, { capture: true, once: true });
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      navigator.serviceWorker.register("/sw.js").then((registration) => registration.update()).catch(() => undefined);
     }
     const authTimer = window.setTimeout(() => {
       const legacyLaunch = parseSharedLaunch(window.location.search);
@@ -560,6 +576,29 @@ export default function HomePage() {
       window.removeEventListener("keydown", prime, true);
     };
   }, []);
+
+  useEffect(() => {
+    const resume = (event?: PageTransitionEvent) => {
+      if (document.visibilityState === "hidden") return;
+      if ("serviceWorker" in navigator) void navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => undefined);
+      const now = Date.now();
+      if (!backendInitialized && (event?.persisted || backendStatus === "loading" || backendStatus === "error" || backendStatus === "local") && navigator.onLine && now - lastResumeCheck.current > 15_000) {
+        lastResumeCheck.current = now;
+        setBackendStatus("loading");
+        setBackendRetryKey((current) => current + 1);
+      }
+    };
+    const onVisibilityChange = () => resume();
+    const onPageShow = (event: PageTransitionEvent) => resume(event);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [backendInitialized, backendStatus]);
 
   useEffect(() => {
     if (modalOpen && !modalHistoryMarker.current) {
@@ -631,17 +670,16 @@ export default function HomePage() {
         setPendingDelete(null);
         setPendingStatsReset(false);
         setPendingHistoryDelete(null);
+        setExitPinOpen(false);
+        setRecoveryCandidate(null);
         return;
       }
-      const nextView = (["home", "library", "exercises", "session", "stats", "profiles"] as View[]).includes(event.state?.lgView) ? event.state.lgView as View : "home";
+      const nextView = (["home", "library", "exercises", "session", "stats", "profiles", "appearance"] as View[]).includes(event.state?.lgView) ? event.state.lgView as View : "home";
       if (sessionActive) {
-        setSessionActive(false);
-        setSessionComplete(false);
-        setSessionFromSharedLink(false);
-        setSessionIsTrial(false);
-        setSharedPreview(null);
-        setAnswerState("idle");
-        setWrongAnswerId(null);
+        window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
+        setToast("Per uscire tieni premuto Termina per 4 secondi");
+        window.setTimeout(() => setToast(null), 3200);
+        return;
       }
       setView(nextView);
       setMenuOpen(false);
@@ -670,7 +708,18 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, [library, setLibrary]);
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded;
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded;
+  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
+
+  useEffect(() => {
+    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance };
+  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
+
+  useEffect(() => {
+    if (allLocalDataLoaded) return;
+    const timer = window.setTimeout(() => setLocalLoadSlow(true), 6000);
+    return () => window.clearTimeout(timer);
+  }, [allLocalDataLoaded]);
 
   useEffect(() => {
     if (!libraryLoaded || !exercisesLoaded) return;
@@ -681,21 +730,15 @@ export default function HomePage() {
   }, [library, libraryLoaded, exercisesLoaded, setLibrary, setExercises]);
 
   useEffect(() => {
-    if (!allLocalDataLoaded || backendStarted.current) return;
-    backendStarted.current = true;
+    if (!allLocalDataLoaded || backendInitialized) return;
     let cancelled = false;
     const initializeBackend = async () => {
-      let response: Response | null = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          response = await fetchWithTimeout("/api/state", { cache: "no-store" });
-          break;
-        } catch (error) {
-          if (!(error instanceof DOMException && error.name === "AbortError") || attempt === 1) throw error;
-          await new Promise((resolve) => window.setTimeout(resolve, 350));
-        }
-      }
-      if (!response) throw new Error("backend_load_timeout");
+      if (!backendInitialized) setBackendStatus("loading");
+      const response = await retryOperation(async () => {
+        const result = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
+        if (result.status >= 500) throw new Error(`backend_http_${result.status}`);
+        return result;
+      }, { attempts: 3, delayMs: 400 });
       if (response.status === 401) {
         if (!cancelled) {
           sessionStorage.removeItem("lg-therapist-session");
@@ -720,6 +763,7 @@ export default function HomePage() {
         setAttempts(saved.attempts ?? []);
         setHelps(saved.helps ?? []);
         setSessionHistory(saved.sessionHistory ?? []);
+        setAppearance(hydrateAppearance(saved.appearance));
         backendHydrating.current = false;
         setBackendInitialized(true);
         setBackendStatus("ready");
@@ -727,16 +771,17 @@ export default function HomePage() {
       }
 
       setBackendStatus("migrating");
+      const local = localBootstrapSnapshot.current;
       const migratedLibrary: LibraryItem[] = [];
-      for (const item of library) {
+      for (const item of local.library) {
         if (!item.privateUpload || item.remoteImageId) { migratedLibrary.push(item); continue; }
         const localImage = item.image?.startsWith("data:") ? item.image : item.imageKey ? await readLibraryImage(item.imageKey) : undefined;
         if (!localImage) { migratedLibrary.push(item); continue; }
         const remote = await uploadRemoteImage(crypto.randomUUID(), localImage);
         migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
       }
-      const migrated: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library: migratedLibrary, exercises, sequences, attempts, helps, sessionHistory };
-      const saveResponse = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) });
+      const migrated: BackendState = { ...local, library: migratedLibrary };
+      const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
       if (!saveResponse.ok) throw new Error("backend_migration_failed");
       if (cancelled) return;
       setLibrary(migratedLibrary);
@@ -744,38 +789,74 @@ export default function HomePage() {
       setBackendInitialized(true);
       setBackendStatus("ready");
     };
-    initializeBackend().catch((error) => {
+    initializeBackend().catch(() => {
       if (cancelled) return;
-      if (error instanceof DOMException && error.name === "AbortError") {
-        sessionStorage.removeItem("lg-therapist-session");
-        setLoggedInTherapistId(null);
-        setBackendStatus("local");
-        return;
-      }
-      setBackendStatus("error");
+      backendHydrating.current = true;
+      setBackendStatus("local");
     });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, setTherapists, setChildren, setActiveChildId, setActiveSequenceId, setLibrary, setExercises, setSequences, setAttempts, setHelps, setSessionHistory]);
+  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+
+  useEffect(() => {
+    if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
+    const watchdog = window.setTimeout(() => {
+      backendHydrating.current = true;
+      setBackendStatus("local");
+    }, 16_000);
+    return () => window.clearTimeout(watchdog);
+  }, [backendInitialized, backendStatus, backendRetryKey]);
 
   useEffect(() => {
     if (backendHydrating.current || !backendInitialized) return;
-    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory };
+    const snapshot: BackendState = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance };
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = window.setTimeout(async () => {
       setBackendStatus("syncing");
       try {
-        const response = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(snapshot)) });
+        const response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(snapshot)) }, 6500);
         if (!response.ok) throw new Error("backend_save_failed");
         setBackendStatus("ready");
       } catch { setBackendStatus("error"); }
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); };
-  }, [backendInitialized, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory]);
+  }, [backendInitialized, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
 
   const therapist = therapists.find((item) => item.id === loggedInTherapistId);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
-  const associatedChildren = therapist?.role === "Amministratore" ? children : children.filter((child) => therapist?.childIds.includes(child.id));
+  const associatedChildren = useMemo(() => therapist?.role === "Amministratore" ? children : children.filter((child) => therapist?.childIds.includes(child.id)), [children, therapist]);
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
+
+  useEffect(() => {
+    if (!sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
+    recoveryCheckedFor.current = therapist.id;
+    const saved = parseRecoverableSession(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY));
+    if (!saved || saved.therapistId !== therapist.id || !associatedChildren.some((child) => child.id === saved.childId)) {
+      if (!saved || saved?.therapistId !== therapist.id) localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      return;
+    }
+    const timer = window.setTimeout(() => setRecoveryCandidate(saved), 0);
+    return () => window.clearTimeout(timer);
+  }, [allLocalDataLoaded, associatedChildren, backendStatus, sessionActive, sessionChecked, therapist]);
+
+  useEffect(() => {
+    if (!sessionActive || sessionFromSharedLink || !therapist || !sessionPlan.length || !sessionRunId || !sessionChildId) return;
+    try {
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, serializeRecoverableSession({
+        plan: sessionPlan,
+        runId: sessionRunId,
+        therapistId: therapist.id,
+        childId: sessionChildId,
+        startedAt: sessionStartedAt,
+        descriptor: sessionDescriptor,
+        mode: sessionMode,
+        presentation: sessionPresentation,
+        currentIndex: sessionIndex,
+        furthestIndex: sessionFurthestIndex,
+        isTrial: sessionIsTrial,
+        returnView: sessionReturnView.current === "exercises" ? "exercises" : "session",
+      }));
+    } catch { /* localStorage può non essere disponibile */ }
+  }, [sessionActive, sessionFromSharedLink, sessionPlan, sessionRunId, sessionChildId, sessionStartedAt, sessionDescriptor, sessionMode, sessionPresentation, sessionIndex, sessionFurthestIndex, sessionIsTrial, therapist]);
   const visibleLibrary = library.filter((item) => !item.deleted);
   const visibleIds = new Set(visibleLibrary.map((item) => item.id));
   const visibleExercises: Exercise[] = exercises.filter((exercise) => !exercise.deleted).map((exercise): Exercise => ({
@@ -937,9 +1018,42 @@ export default function HomePage() {
       try { await navigator.clipboard.writeText(url); notify("Link copiato negli appunti"); } catch { notify("Non è stato possibile copiare il link"); }
     }
   };
-  const navigate = (next: View) => { if (next !== view) window.history.pushState({ lgView: next }, "", window.location.pathname); setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const navigate = (next: View) => {
+    if (sessionActive && next !== "session") { notify("Per uscire tieni premuto Termina per 4 secondi"); return; }
+    if (next !== view) window.history.pushState({ lgView: next }, "", window.location.pathname);
+    setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const discardRecoveredSession = () => {
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setRecoveryCandidate(null);
+  };
+  const resumeRecoveredSession = () => {
+    if (!recoveryCandidate) return;
+    const saved = recoveryCandidate;
+    sessionReturnView.current = saved.returnView;
+    setActiveChildId(saved.childId);
+    setSessionPlan(saved.plan);
+    setSessionRunId(saved.runId);
+    setSessionChildId(saved.childId);
+    setSessionStartedAt(saved.startedAt);
+    setSessionDescriptor(saved.descriptor);
+    setSessionMode(saved.mode);
+    setSessionPresentation(saved.presentation);
+    setSessionIndex(saved.currentIndex);
+    setSessionFurthestIndex(saved.furthestIndex);
+    setSessionIsTrial(saved.isTrial);
+    setSessionFromSharedLink(false);
+    setSessionComplete(false);
+    setAnswerState("idle");
+    setWrongAnswerId(null);
+    setRecoveryCandidate(null);
+    window.history.replaceState({ lgView: saved.returnView }, "", window.location.pathname);
+    window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
+    setSessionActive(true);
+    setView("session");
+  };
   const compileSession = (selectedExercises: Exercise[]) => compileExercises(selectedExercises, visibleLibrary);
-  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
+  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
   const startSequenceById = (sequenceId: string) => {
     const sequence = visibleSequences.find((item) => item.id === sequenceId);
     if (!sequence) return;
@@ -994,6 +1108,10 @@ export default function HomePage() {
     notify(`Aiuto registrato: ${label}`);
   };
   const closeActiveSession = () => {
+    const exitModalMarker = modalHistoryMarker.current;
+    if (exitModalMarker) modalHistoryMarker.current = null;
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setExitPinOpen(false);
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
@@ -1010,6 +1128,12 @@ export default function HomePage() {
     setAnswerState("idle");
     setWrongAnswerId(null);
     if (shared) { window.history.replaceState({ lgView: "home" }, "", window.location.pathname); setView("home"); return; }
+    if (exitModalMarker) {
+      if (!trial) setSessionWizardKey((current) => current + 1);
+      setView(trial ? returnView : "session");
+      window.setTimeout(() => window.history.go(-2), 0);
+      return;
+    }
     if (trial) {
       if (window.history.state?.lgActivity) window.history.back();
       else setView(returnView);
@@ -1027,7 +1151,7 @@ export default function HomePage() {
     if (sessionIndex >= sessionExercises.length - 1) {
       if (sessionFromSharedLink) { notify("Anteprima completata"); closeActiveSession(); return; }
       if (sessionIsTrial) { notify("Prova completata · nessun risultato registrato"); closeActiveSession(); return; }
-      setSessionActive(false); setSessionComplete(true); setAnswerState("idle"); setWrongAnswerId(null); notify("Sessione completata e salvata"); return;
+      localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); setSessionActive(false); setSessionComplete(true); setAnswerState("idle"); setWrongAnswerId(null); notify("Sessione completata e salvata"); return;
     }
     const nextIndex = sessionIndex + 1;
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
@@ -1148,14 +1272,14 @@ export default function HomePage() {
     notify("Profilo bambino e dati locali collegati eliminati");
   };
 
-  if (!sessionChecked || (pendingSharedPreviewToken && (sharedPreviewStatus === "idle" || sharedPreviewStatus === "loading"))) return <div className="auth-loading"><Sparkles /><span>{pendingSharedPreviewToken ? "Caricamento anteprima…" : "Caricamento dati…"}</span></div>;
+  if (!sessionChecked || (pendingSharedPreviewToken && (sharedPreviewStatus === "idle" || sharedPreviewStatus === "loading"))) return <LoadingScreen label={pendingSharedPreviewToken ? "Caricamento anteprima…" : "Caricamento dati…"} stalled={localLoadSlow} />;
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
     return <main className="public-preview-shell"><SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
   }
-  if (!allLocalDataLoaded || backendStatus === "loading" || backendStatus === "migrating") return <div className="auth-loading"><Sparkles /><span>{backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Caricamento dati…"}</span></div>;
-  if (backendStatus === "error" && !backendInitialized) return <BackendErrorScreen />;
+  if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
+  if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => setBackendStatus("local")} />;
   if (!therapist) return showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -1167,7 +1291,8 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
+        {view === "session" && <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={() => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}
+        {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -1181,13 +1306,32 @@ export default function HomePage() {
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {pendingHistoryDelete && <ContentDeleteDialog title={`Eliminare ${pendingHistoryDelete.label}?`} detail="Lo storico verrà nascosto agli utenti. Le immagini archiviate resteranno nello storage per non alterare altre sessioni." onCancel={() => setPendingHistoryDelete(null)} onConfirm={() => { const deletedAt = new Date().toISOString(); setSessionHistory((current) => current.map((record) => (!pendingHistoryDelete.id || record.id === pendingHistoryDelete.id) && record.childId === activeChild.id ? { ...record, deletedAt } : record)); setPendingHistoryDelete(null); notify("Storico eliminato"); }} />}
       {pendingStatsReset && <ContentDeleteDialog title={`Azzerare le statistiche di ${activeChild.firstName}?`} detail="Saranno eliminati tutti i tentativi e gli aiuti registrati per questo bambino. Profili, immagini, esercizi e sequenze restano invariati." onCancel={() => setPendingStatsReset(false)} onConfirm={() => { setAttempts((current) => current.filter((attempt) => attempt.childId && attempt.childId !== activeChild.id)); setHelps((current) => current.filter((help) => help.childId && help.childId !== activeChild.id)); setPendingStatsReset(false); notify("Statistiche del bambino azzerate"); }} />}
+      {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
+      {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
     </div>
   );
 }
 
-function BackendErrorScreen() {
-  return <main className="auth-page"><section className="login-card"><div className="auth-icon"><Cloud /></div><span className="eyebrow">SINCRONIZZAZIONE</span><h1>Il cloud non è raggiungibile</h1><p>I dati locali non sono stati cancellati. Riprova quando la connessione è disponibile.</p><button className="primary-button large" onClick={() => window.location.reload()}>Riprova</button></section></main>;
+function LoadingScreen({ label, stalled = false, onRetry, onContinueLocal }: { label: string; stalled?: boolean; onRetry?: () => void; onContinueLocal?: () => void }) {
+  return <main className="auth-loading"><Sparkles /><span>{label}</span>{stalled && <div className="loading-recovery"><p>Il caricamento sta richiedendo più tempo del previsto.</p><div>{onContinueLocal && <button className="ghost-button" type="button" onClick={onContinueLocal}>Usa i dati locali</button>}<button className="primary-button" type="button" onClick={onRetry ?? (() => window.location.reload())}><RefreshCw />Riprova</button></div></div>}</main>;
+}
+
+function SessionExitDialog({ therapist, onCancel, onConfirm }: { therapist: Therapist; onCancel: () => void; onConfirm: () => void }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const valid = therapist.pinHash ? therapist.pinHash === await hashPin(pin) : therapist.pin === pin;
+    if (!valid) { setError("PIN non corretto."); return; }
+    onConfirm();
+  };
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="session-exit-title"><form className="modal protected-exit-modal" onSubmit={submit}><span className="auth-icon"><LockKeyhole /></span><span className="eyebrow">USCITA PROTETTA</span><h2 id="session-exit-title">Termina la sessione?</h2><p>Inserisci il PIN di {therapist.firstName} per tornare al pannello.</p><label>PIN<input autoFocus type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" /></label>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="ghost-button" type="button" onClick={onCancel}>Continua l’esercizio</button><button className="primary-button" type="submit" disabled={!pin}><LockKeyhole />Termina</button></div></form></div>;
+}
+
+function SessionRecoveryDialog({ saved, childName, onResume, onDiscard }: { saved: RecoverableSession; childName: string; onResume: () => void; onDiscard: () => void }) {
+  const position = Math.min(saved.currentIndex + 1, saved.plan.length);
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="session-recovery-title"><div className="modal recovery-modal"><span className="auth-icon"><RefreshCw /></span><span className="eyebrow">SESSIONE INTERROTTA</span><h2 id="session-recovery-title">Riprendere da dove eri rimasto?</h2><p><strong>{saved.descriptor.title}</strong> con {childName}, passaggio {position} di {saved.plan.length}.</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={onDiscard}>Scarta</button><button className="primary-button" type="button" onClick={onResume}><Play />Riprendi</button></div></div></div>;
 }
 
 function PublicPreviewError() {
@@ -1236,7 +1380,7 @@ function ChildChooser({ therapist, childProfiles, onChoose, onLogout }: { therap
 }
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
-  { id: "home", label: "Oggi", icon: Home }, { id: "library", label: "Libreria", icon: Library }, { id: "exercises", label: "Configurazione", icon: BookOpenCheck }, { id: "session", label: "Sessione", icon: Play }, { id: "stats", label: "Progressi", icon: BarChart3 }, { id: "profiles", label: "Profili", icon: UserCog },
+  { id: "home", label: "Oggi", icon: Home }, { id: "library", label: "Libreria", icon: Library }, { id: "exercises", label: "Configurazione", icon: BookOpenCheck }, { id: "session", label: "Sessione", icon: Play }, { id: "stats", label: "Progressi", icon: BarChart3 }, { id: "appearance", label: "Aspetto", icon: Palette }, { id: "profiles", label: "Profili", icon: UserCog },
 ];
 
 function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus }) {
@@ -1248,6 +1392,13 @@ function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backend
 function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus }) {
   const syncLabel = backendStatus === "syncing" ? "Sincronizzazione…" : backendStatus === "error" ? "Cloud non raggiungibile" : backendStatus === "local" ? "Solo su questo dispositivo" : "Salvato nel cloud";
   return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><span className={`private-pill ${backendStatus === "error" || backendStatus === "local" ? "sync-error" : ""}`}><Cloud size={15} />{syncLabel}</span><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+}
+
+function AppearanceView({ settings, onChange }: { settings: AppearanceSettings; onChange: (settings: AppearanceSettings) => void }) {
+  const presetId = appearancePresetId(settings);
+  const palettes: Array<{ id: ThemePalette; label: string }> = [{ id: "violet", label: "Viola" }, { id: "ocean", label: "Mare" }, { id: "forest", label: "Natura" }, { id: "sunset", label: "Arancio" }];
+  const shapes: Array<{ id: ControlShape; label: string; detail: string }> = [{ id: "compact", label: "Compatto", detail: "Angoli più netti" }, { id: "soft", label: "Morbido", detail: "Equilibrato" }, { id: "round", label: "Rotondo", detail: "Controlli più curvi" }];
+  return <div className="page appearance-page"><section className="page-title-row"><div><span className="eyebrow">PERSONALIZZAZIONE</span><h1>Aspetto e temi</h1><p>Scegli colori e forme dei controlli. L’anteprima si aggiorna subito e la scelta viene salvata.</p></div></section><section className="appearance-layout"><div className="appearance-controls"><section className="panel"><div className="panel-heading"><div><span className="eyebrow">TEMI PREDEFINITI</span><h2>Scegli una combinazione</h2></div></div><div className="theme-preset-grid">{appearancePresets.map((preset) => <button type="button" key={preset.id} className={presetId === preset.id ? "selected" : ""} onClick={() => onChange(preset.settings)} aria-pressed={presetId === preset.id}><span className={`theme-swatch palette-${preset.settings.palette}`}><i /><i /><i /></span><strong>{preset.name}</strong><small>{preset.description}</small>{presetId === preset.id && <Check />}</button>)}</div></section><section className="panel"><div className="panel-heading"><div><span className="eyebrow">PERSONALIZZA</span><h2>Colori e forme</h2></div></div><span className="choice-label">Palette</span><div className="palette-picker">{palettes.map((palette) => <button type="button" key={palette.id} className={`${palette.id} ${settings.palette === palette.id ? "selected" : ""}`} onClick={() => onChange({ ...settings, palette: palette.id })} aria-pressed={settings.palette === palette.id}><i />{palette.label}</button>)}</div><span className="choice-label shape-label">Forma dei controlli</span><div className="shape-picker">{shapes.map((shape) => <button type="button" key={shape.id} className={`${shape.id} ${settings.shape === shape.id ? "selected" : ""}`} onClick={() => onChange({ ...settings, shape: shape.id })} aria-pressed={settings.shape === shape.id}><span /><strong>{shape.label}</strong><small>{shape.detail}</small></button>)}</div></section></div><aside className="panel appearance-preview"><span className="eyebrow">ANTEPRIMA DAL VIVO</span><h2>Trova la parola</h2><p>Quale parola corrisponde all’immagine?</p><div className="preview-word-card"><span aria-hidden="true">🍎</span><strong>MELA</strong></div><div className="preview-actions"><button className="primary-button" type="button"><Volume2 />Ascolta</button><button className="ghost-button" type="button">Continua</button></div><small>Le preferenze si applicano al pannello e agli esercizi su questo account.</small></aside></section></div>;
 }
 
 function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; sequenceCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
@@ -1328,7 +1479,30 @@ function WizardBack({ onClick }: { onClick: () => void }) {
 }
 
 function SessionTools({ soundEffects, onToggleSound, onExit, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void } & SessionNavigationProps) {
-  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><button className="ghost-button" onClick={onExit}>Termina</button></div>;
+  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button><ProtectedExitButton onComplete={onExit} /></div>;
+}
+
+function ProtectedExitButton({ onComplete }: { onComplete: () => void }) {
+  const [holding, setHolding] = useState(false);
+  const timer = useRef<number | null>(null);
+  const cancel = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    setHolding(false);
+  };
+  const start = () => {
+    if (timer.current !== null) return;
+    setHolding(true);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setHolding(false);
+      onComplete();
+    }, 4_000);
+  };
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label="Tieni premuto per 4 secondi per terminare"><span>{holding ? "Continua a premere…" : "Termina"}</span><i aria-hidden="true" /></button>;
 }
 
 function NamingSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
