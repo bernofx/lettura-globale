@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Journal locale e copiabile dei salvataggi cloud, privo di contenuti personali, con codice di errore e revisione; l'API segnala esplicitamente la migrazione `state_operations` mancante e associa agli errori inattesi una fase tecnica e un identificatore diagnostico.
+
 - [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
 - [x] Landing pubblica separata dal pannello adulto autenticato.
 - [x] Sessione applicativa server-side e accesso ai profili adulti con email e PIN.

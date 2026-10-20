@@ -27,10 +27,23 @@ function credentialsFromState(state: unknown, ownerUserId: string, now: number):
 }
 
 export async function PATCH(request: Request) {
+  const diagnosticId = crypto.randomUUID();
+  let phase = "authentication";
+  try { return await applyPatch(request, diagnosticId, (next) => { phase = next; }); }
+  catch {
+    console.error("state_change_failed", { diagnosticId, phase });
+    return Response.json({ error: `state_change_failed_${phase}`, diagnosticId }, { status: 500 });
+  }
+}
+
+async function applyPatch(request: Request, diagnosticId: string, setPhase: (phase: string) => void) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
   if (!env.DB) return Response.json({ error: "database_unavailable" }, { status: 503 });
   const database = env.DB;
+  setPhase("schema_check");
+  const operationsTable = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'state_operations'").first();
+  if (!operationsTable) return Response.json({ error: "state_operations_migration_missing", diagnosticId }, { status: 503 });
 
   const rawRequest = await request.text();
   if (new TextEncoder().encode(rawRequest).byteLength > MAX_CHANGE_BYTES) return Response.json({ error: "change_too_large" }, { status: 413 });
@@ -38,6 +51,7 @@ export async function PATCH(request: Request) {
   try { change = parseStateChangeRequest(JSON.parse(rawRequest)); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
 
   const requestChecksum = await stateChecksum(rawRequest);
+  setPhase("operation_lookup");
   const prior = await database.prepare("SELECT result_revision, request_checksum FROM state_operations WHERE account_id = ? AND operation_id = ?")
     .bind(user.userId, change.operationId).first<{ result_revision: number; request_checksum: string }>();
   if (prior) {
@@ -45,6 +59,7 @@ export async function PATCH(request: Request) {
     return Response.json({ ok: true, revision: prior.result_revision, idempotent: true });
   }
 
+  setPhase("state_read");
   const current = (await getDb().select({ payload: userStates.payload, revision: userStates.revision, createdAt: userStates.createdAt })
     .from(userStates).where(eq(userStates.userId, user.userId)).limit(1))[0];
   if (!current) return Response.json({ error: "state_not_initialized" }, { status: 409, headers: { "x-current-revision": "0" } });
@@ -65,6 +80,7 @@ export async function PATCH(request: Request) {
     if (existing && existing.ownerUserId !== user.userId) return Response.json({ error: "therapist_email_unavailable" }, { status: 409 });
   }
 
+  setPhase("projection");
   const relational = await prepareRelationalChange({
     database, accountId: user.userId, email: user.email, displayName: user.displayName, rawState, state,
     change, sourceRevision: revision, operationId: change.operationId, now,
@@ -80,7 +96,9 @@ export async function PATCH(request: Request) {
       .bind(credential.loginEmail, credential.ownerUserId, credential.therapistId, credential.pinHash, credential.displayName, credential.updatedAt, user.userId, change.operationId)),
     ...relational.statements,
   ];
+  setPhase("batch");
   await database.batch(statements);
+  setPhase("confirmation");
   const recorded = await database.prepare("SELECT result_revision FROM state_operations WHERE account_id = ? AND operation_id = ?")
     .bind(user.userId, change.operationId).first<{ result_revision: number }>();
   if (!recorded) {
