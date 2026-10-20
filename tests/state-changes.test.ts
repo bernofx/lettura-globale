@@ -18,6 +18,16 @@ test("returns no operation when state did not change", () => {
   assert.equal(buildStateChange(state, structuredClone(state), "12345678-1234-1234-1234-123456789abc", 1), null);
 });
 
+test("persists sequence creation, title and exercise order", () => {
+  const previous = { schemaVersion: 1, therapists: [], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
+  const sequence = { id: "sequence-1", title: "Mattina", exerciseIds: ["exercise-2", "exercise-1"], therapistId: "adult-1", updatedAt: "2026-10-20T10:00:00.000Z", deleted: false };
+  const next = { ...previous, sequences: [sequence], activeSequenceId: sequence.id };
+  const change = buildStateChange(previous, next, "12345678-1234-1234-1234-123456789abc", 2);
+  assert.ok(change);
+  assert.deepEqual(change.collections.sequences?.upserts, [sequence]);
+  assert.deepEqual(applyStateChange(previous, change), next);
+});
+
 test("rejects an order that does not cover the resulting collection", () => {
   const state = { schemaVersion: 1, library: [{ id: "a" }] };
   const change = { schemaVersion: 1, operationId: "12345678-1234-1234-1234-123456789abc", baseRevision: 1, collections: { library: { upserts: [], removedIds: [], order: [] } }, values: {} };
