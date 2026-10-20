@@ -2,7 +2,7 @@
 
 ## Stato
 
-Accettato. Proiezione shadow, ricostruzione, diagnostica e protocollo incrementale di scrittura implementati. Il cambio delle letture è automatico soltanto quando revisione, checksum dello snapshot, identità delle entità e anomalie bloccanti risultano allineati; in ogni altro caso resta attivo lo snapshot.
+Accettato e implementato fino al cutover delle scritture. Letture e modifiche granulari usano le tabelle relazionali quando revisione, checksum, identità delle entità e anomalie bloccanti risultano allineati; in ogni altro caso resta disponibile lo snapshot di rollback.
 
 ## Contesto
 
@@ -15,7 +15,7 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 - Conservare file e immagini in R2; D1 contiene riferimenti e metadati.
 - Trattare tentativi e aiuti come eventi append-only e ricostruire lo storico dalle sessioni.
 - Conservare nelle sessioni una fotografia relazionale dei contenuti mostrati.
-- Mantenere temporaneamente `user_states.payload` come fonte autorevole e rollback.
+- Mantenere temporaneamente `user_states.payload` come mirror di rollback e compatibilità.
 - Proiettare lo snapshot nelle nuove tabelle al primo accesso e a ogni nuova revisione.
 - Registrare revisione, checksum, conteggi e anomalie in `data_migrations`.
 - Non modificare `shared_launches.payload` nella prima fase: i link pubblici esistenti sono snapshot immutabili e devono continuare a funzionare.
@@ -25,14 +25,16 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 1. Tabelle additive e proiezione shadow, senza cambio delle letture.
 2. Confronto sul D1 pubblicato di revisioni, conteggi, riferimenti e statistiche.
 3. Lettura relazionale condizionata dalla verifica di parità, con fallback allo snapshot.
-4. API granulari con versionamento ottimistico e operazioni idempotenti. Il client invia soltanto entità modificate, rimosse o riordinate; il server applica l'operazione alla copia compatibile e rigenera temporaneamente la proiezione relazionale.
+4. API granulari con versionamento ottimistico e operazioni idempotenti. Il client invia soltanto entità modificate, rimosse o riordinate; il server aggiorna direttamente le relative righe e relazioni D1.
 5. Arresto delle scritture dello snapshot dopo backup e prova di ripristino.
 
 ## Protocollo di scrittura incrementale
 
 `PATCH /api/state/changes` riceve un identificatore univoco dell'operazione, la revisione di partenza e le sole raccolte o preferenze cambiate. L'aggiornamento della revisione e la registrazione in `state_operations` avvengono nello stesso batch D1. Un retry con lo stesso contenuto restituisce la revisione già assegnata; il riuso dell'identificatore con contenuto diverso o una revisione superata produce `409` senza sovrascrivere lo stato più recente.
 
-Durante questa fase il server aggiorna ancora `user_states.payload` come copia di rollback e ricostruisce le tabelle relazionali. Il passaggio successivo porterà gli upsert direttamente sulle tabelle di dominio, mantenendo lo snapshot finché backup e ripristino non saranno provati.
+L'aggiornamento della revisione, il registro dell'operazione, le credenziali e le modifiche relazionali avvengono nello stesso batch D1. Ogni istruzione relazionale è subordinata alla presenza dell'operazione accettata, quindi un conflitto non produce modifiche parziali. `user_states.payload` viene aggiornato nello stesso batch come mirror di rollback; non viene più usato per rigenerare tutte le tabelle a ogni modifica.
+
+La diagnostica restituisce `writeMode: "direct"` dopo la prima operazione eseguita con il cutover. `GET /api/state` e il `PUT` di prima inizializzazione conservano la capacità di ricostruire la proiezione dal mirror in caso di rollback o migrazione incompleta.
 
 ## Compatibilità e rollback
 
