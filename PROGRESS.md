@@ -71,14 +71,15 @@
 - [x] Seconda fase della migrazione relazionale: ricostruzione completa del formato applicativo dalle tabelle, conservazione esplicita di opzioni/risposte/aiuti storici e diagnostica autenticata di revisioni e conteggi; letture applicative ancora sullo snapshot fino alla verifica del D1 pubblicato.
 - [x] Cutover controllato delle letture D1: ordine delle raccolte persistito, confronto per revisione e identificativi, uso automatico delle tabelle quando allineate e fallback trasparente allo snapshot in caso di errore o differenza.
 - [x] Prima fase delle scritture granulari: il browser invia solo entità e preferenze cambiate, con coda seriale, controllo ottimistico della revisione e retry idempotente registrato in D1; lo snapshot resta copia di rollback e alimenta ancora la proiezione relazionale.
+- [x] Cutover delle scritture relazionali: ogni operazione aggiorna direttamente e atomicamente le sole tabelle di dominio coinvolte, insieme a revisione, idempotenza e credenziali; il JSON resta un mirror di rollback e prima inizializzazione.
 
 ## Scelte di persistenza e costo
 
-- D1 conserva ancora lo snapshot JSON versionato come fonte autorevole e rollback. Le nuove tabelle relazionali vengono popolate in modalità shadow a ogni revisione; il cambio delle letture richiede la verifica sul D1 pubblicato descritta nel runbook.
+- D1 usa le tabelle relazionali per le letture verificate e per le scritture granulari. Lo snapshot JSON versionato resta temporaneamente come mirror di rollback e compatibilità con versioni precedenti.
 - R2 contiene soltanto i file binari privati, separati dallo stato D1. I riferimenti alle immagini sono salvati nello snapshot.
 - Esercizi e sequenze cancellati restano nello snapshot con flag `deleted`, così i risultati storici continuano a essere interpretabili senza duplicare dati.
 - Le immagini rimosse o sostituite non vengono eliminate fisicamente da R2: la libreria usa la cancellazione logica e ogni storico conserva il riferimento alla versione mostrata durante la sessione.
-- La struttura rimane compatibile con una futura migrazione verso tabelle D1 relazionali, da introdurre quando serve ricerca server-side o modifica concorrente.
+- La struttura relazionale supporta ricerca server-side e modifiche concorrenti protette da revisione; l'eliminazione futura del mirror JSON resta subordinata alla prova di backup e ripristino.
 
 ## Limitazioni note
 
@@ -97,12 +98,11 @@
 2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
 3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
 4. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
-5. Applicare le operazioni granulari direttamente alle tabelle di dominio, mantenendo lo snapshot di rollback finché backup e ripristino non sono provati.
-6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
-7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
-8. Definire retention, backup e prova di ripristino D1/R2.
-9. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
-10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
+5. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
+6. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
+7. Definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
+8. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+9. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
 

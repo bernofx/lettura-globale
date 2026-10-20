@@ -53,7 +53,9 @@ Prima di ritirare lo snapshot devono comunque risultare zero proiezioni incomple
 
 ## Scritture incrementali
 
-Il client usa `PATCH /api/state/changes` e invia le sole entità modificate con `baseRevision` e `operationId`. Verificare dopo la pubblicazione che le operazioni vengano registrate senza contenuti applicativi:
+Il client usa `PATCH /api/state/changes` e invia le sole entità modificate con `baseRevision` e `operationId`. L'endpoint aggiorna direttamente le tabelle coinvolte nello stesso batch che registra l'operazione e il mirror JSON. Per esempio, una modifica della libreria non riscrive sessioni, tentativi o aiuti.
+
+Verificare dopo la pubblicazione che `/api/state/relational-status` restituisca anche `writeMode: "direct"` dopo una modifica e che le operazioni vengano registrate senza contenuti applicativi:
 
 ```sql
 SELECT COUNT(*) AS operations, COUNT(DISTINCT account_id) AS accounts
