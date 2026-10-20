@@ -1,9 +1,4 @@
-ALTER TABLE `exercises` ADD `quantity_min` integer;
---> statement-breakpoint
-ALTER TABLE `exercises` ADD `quantity_max` integer;
---> statement-breakpoint
-ALTER TABLE `exercises` ADD `quantity_object_set` text;
---> statement-breakpoint
-ALTER TABLE `exercises` ADD `quantity_auto_complete` integer DEFAULT false NOT NULL;
---> statement-breakpoint
-ALTER TABLE `exercises` ADD `quantity_idle_seconds` integer DEFAULT 3 NOT NULL;
+-- The production rollout applied these columns before the migration journal
+-- was committed. Keep this entry as a no-op so existing databases can record
+-- it safely; fresh databases receive the columns in 0004.
+SELECT 1;
