@@ -2,7 +2,7 @@
 
 ## Stato
 
-Accettato. Prima fase shadow implementata; ricostruzione relazionale e diagnostica di parità implementate senza attivare il cambio delle letture.
+Accettato. Proiezione shadow, ricostruzione e diagnostica implementate. Il cambio delle letture è automatico soltanto quando revisione, checksum dello snapshot, identità delle entità e anomalie bloccanti risultano allineati; in ogni altro caso resta attivo lo snapshot.
 
 ## Contesto
 
@@ -24,7 +24,7 @@ Lo stato applicativo è conservato in una singola riga `user_states` per account
 
 1. Tabelle additive e proiezione shadow, senza cambio delle letture.
 2. Confronto sul D1 pubblicato di revisioni, conteggi, riferimenti e statistiche.
-3. Lettura relazionale dietro flag con fallback allo snapshot.
+3. Lettura relazionale condizionata dalla verifica di parità, con fallback allo snapshot.
 4. API granulari con versionamento ottimistico e operazioni idempotenti.
 5. Arresto delle scritture dello snapshot dopo backup e prova di ripristino.
 
@@ -44,3 +44,5 @@ I profili adulto o bambino già rimossi ma ancora referenziati dallo storico div
 - backup e rollback provati in staging.
 
 La diagnostica autenticata `/api/state/relational-status` espone soltanto stato, revisioni, conteggi, aree non allineate e numero di anomalie. Non restituisce contenuti, nomi o altri dati personali.
+
+Le posizioni delle raccolte vengono persistite esplicitamente: SQLite non garantisce l'ordine delle righe in assenza di un ordinamento. I campi opzionali che modificano i default applicativi, come `autoPronounce`, conservano anche l'informazione che la scelta sia stata configurata.

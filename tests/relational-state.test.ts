@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { projectLegacyState, projectionCounts, rebuildLegacyState } from "../app/domain/relational-state.ts";
+import { projectLegacyState, projectionCounts, rebuildLegacyState, relationalParityReport } from "../app/domain/relational-state.ts";
 
 const now = Date.UTC(2026, 9, 20);
 
@@ -52,6 +52,35 @@ test("projects the legacy snapshot into relational rows without losing exercise 
     { answerId: "mela", label: "Mela", correct: true, firstAttempt: false, createdAt: "2026-10-20T10:01:02.000Z" },
   ]);
   assert.deepEqual(rebuilt.sessionHistory[0].items[0].helpLabels, ["Indicazione"]);
+  assert.equal(relationalParityReport({ schemaVersion: 1, therapists: [{ id: "adult-1" }], children: [{ id: "child-1" }], library: [{ id: "mela" }, { id: "pane" }], exercises: [{ id: "exercise-1" }], sequences: [{ id: "sequence-1" }], attempts: [{ id: "attempt-1" }, { id: "attempt-2" }], helps: [{ id: "help-1" }], sessionHistory: [{ id: "session-1" }] }, projection, 4, 4).ready, true);
+});
+
+test("preserves collection order and the legacy automatic-pronunciation default", () => {
+  const state = {
+    schemaVersion: 1,
+    therapists: [
+      { id: "second", firstName: "Secondo", lastName: "", email: "second@example.test", role: "Terapista", childIds: [] },
+      { id: "first", firstName: "Primo", lastName: "", email: "first@example.test", role: "Terapista", childIds: [] },
+    ],
+    children: [], library: [],
+    exercises: [{ id: "legacy", title: "Storico", optionIds: [], presentation: "words", updatedAt: "2026-01-01T00:00:00Z" }],
+    sequences: [], attempts: [], helps: [], sessionHistory: [],
+  };
+  const projection = projectLegacyState(state, "account-1", now);
+  projection.tables.adult_profiles.reverse();
+  const rebuilt = rebuildLegacyState(projection);
+  assert.deepEqual(rebuilt.therapists.map((item) => item.id), ["second", "first"]);
+  assert.equal("autoPronounce" in rebuilt.exercises[0], false);
+});
+
+test("blocks relational reads when entity identities or revisions differ", () => {
+  const state = { schemaVersion: 1, therapists: [], children: [], library: [{ id: "mela", word: "Mela", category: "Cibi" }], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
+  const projection = projectLegacyState(state, "account-1", now);
+  assert.equal(relationalParityReport(state, projection, 3, 2).ready, false);
+  projection.tables.library_items[0].id = "pane";
+  const report = relationalParityReport(state, projection, 3, 3);
+  assert.equal(report.ready, false);
+  assert.deepEqual(report.mismatches, ["library_items"]);
 });
 
 test("creates deleted tombstones for profiles still referenced by history", () => {

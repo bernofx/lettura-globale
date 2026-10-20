@@ -1,4 +1,4 @@
-export const RELATIONAL_MIGRATION_KEY = "snapshot-to-relational-v2";
+export const RELATIONAL_MIGRATION_KEY = "snapshot-to-relational-v3";
 
 type JsonObject = Record<string, unknown>;
 type Row = Record<string, string | number | null>;
@@ -118,40 +118,40 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   attempts.forEach((item) => { const id = string(item.therapistId); if (id) requiredAdultIds.add(id); });
   helps.forEach((item) => { const id = string(item.therapistId); if (id) requiredAdultIds.add(id); });
 
-  for (const adult of adults) {
+  for (const [position, adult] of adults.entries()) {
     const id = string(adult.id);
     if (!id) { warnings.push("adult_without_id"); continue; }
     requiredAdultIds.delete(id);
     tables.adult_profiles.push({
       account_id: accountId, id, first_name: string(adult.firstName), last_name: string(adult.lastName),
       email_normalized: normalized(string(adult.email, `archived-${id}@invalid.local`)), role: string(adult.role, "Terapista"),
-      pin_hash: optionalString(adult.pinHash), deleted_at: null, created_at: now, updated_at: now,
+      pin_hash: optionalString(adult.pinHash), position, deleted_at: null, created_at: now, updated_at: now,
     });
   }
   for (const id of requiredAdultIds) {
     warnings.push(`archived_adult:${id}`);
-    tables.adult_profiles.push({ account_id: accountId, id, first_name: "Profilo", last_name: "rimosso", email_normalized: `archived-${accountId}-${id}@invalid.local`, role: "Terapista", pin_hash: null, deleted_at: now, created_at: now, updated_at: now });
+    tables.adult_profiles.push({ account_id: accountId, id, first_name: "Profilo", last_name: "rimosso", email_normalized: `archived-${accountId}-${id}@invalid.local`, role: "Terapista", pin_hash: null, position: tables.adult_profiles.length, deleted_at: now, created_at: now, updated_at: now });
   }
 
   const requiredChildIds = new Set<string>();
   histories.forEach((item) => { const id = string(item.childId); if (id) requiredChildIds.add(id); });
   attempts.forEach((item) => { const id = string(item.childId); if (id) requiredChildIds.add(id); });
   helps.forEach((item) => { const id = string(item.childId); if (id) requiredChildIds.add(id); });
-  for (const child of children) {
+  for (const [position, child] of children.entries()) {
     const id = string(child.id);
     if (!id) { warnings.push("child_without_id"); continue; }
     requiredChildIds.delete(id);
-    tables.children.push({ account_id: accountId, id, first_name: string(child.firstName), last_name: string(child.lastName), birth_year: string(child.birthYear), notes: string(child.notes), avatar_color: string(child.avatarColor), deleted_at: null, created_at: now, updated_at: now });
+    tables.children.push({ account_id: accountId, id, first_name: string(child.firstName), last_name: string(child.lastName), birth_year: string(child.birthYear), notes: string(child.notes), avatar_color: string(child.avatarColor), position, deleted_at: null, created_at: now, updated_at: now });
   }
   for (const id of requiredChildIds) {
     warnings.push(`archived_child:${id}`);
-    tables.children.push({ account_id: accountId, id, first_name: "Profilo", last_name: "rimosso", birth_year: "", notes: "", avatar_color: "", deleted_at: now, created_at: now, updated_at: now });
+    tables.children.push({ account_id: accountId, id, first_name: "Profilo", last_name: "rimosso", birth_year: "", notes: "", avatar_color: "", position: tables.children.length, deleted_at: now, created_at: now, updated_at: now });
   }
 
   for (const adult of adults) {
     const adultId = string(adult.id);
-    for (const childId of strings(adult.childIds)) {
-      if (adultId && tables.children.some((child) => child.id === childId)) tables.adult_child_access.push({ account_id: accountId, adult_id: adultId, child_id: childId, created_at: now });
+    for (const [position, childId] of strings(adult.childIds).entries()) {
+      if (adultId && tables.children.some((child) => child.id === childId)) tables.adult_child_access.push({ account_id: accountId, adult_id: adultId, child_id: childId, position, created_at: now });
       else warnings.push(`invalid_adult_child_access:${adultId}:${childId}`);
     }
   }
@@ -169,12 +169,12 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   }
   for (const name of categoryNames) tables.categories.push({ account_id: accountId, name, normalized_name: normalized(name), deleted_at: null, created_at: now, updated_at: now });
 
-  for (const item of library) {
+  for (const [position, item] of library.entries()) {
     const id = string(item.id);
     if (!id) { warnings.push("library_item_without_id"); continue; }
     const hasMedia = Boolean(item.remoteImageId || item.image || item.imageKey || item.emoji);
     if (hasMedia) tables.media_assets.push({ account_id: accountId, id, r2_object_id: optionalString(item.remoteImageId), local_path: optionalString(item.image) ?? optionalString(item.imageKey), image_path: optionalString(item.image), image_key: optionalString(item.imageKey), emoji: optionalString(item.emoji), source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), is_private_upload: item.privateUpload ? 1 : 0, deleted_at: deletedTime(item.deleted, now), created_at: now });
-    tables.library_items.push({ account_id: accountId, id, word: string(item.word, "Elemento archiviato"), normalized_word: normalized(string(item.word, "Elemento archiviato")), category_name: string(item.category, "Altro"), article: optionalString(item.article), syllabification: optionalString(item.syllabification), syllable_count: integer(item.syllableCount), syllable_status: optionalString(item.syllableStatus), media_asset_id: hasMedia ? id : null, source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), deleted_at: deletedTime(item.deleted, now), created_at: now, updated_at: now });
+    tables.library_items.push({ account_id: accountId, id, word: string(item.word, "Elemento archiviato"), normalized_word: normalized(string(item.word, "Elemento archiviato")), category_name: string(item.category, "Altro"), article: optionalString(item.article), syllabification: optionalString(item.syllabification), syllable_count: integer(item.syllableCount), syllable_status: optionalString(item.syllableStatus), media_asset_id: hasMedia ? id : null, source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), position, deleted_at: deletedTime(item.deleted, now), created_at: now, updated_at: now });
   }
 
   const libraryIds = new Set(tables.library_items.map((item) => String(item.id)));
@@ -184,11 +184,11 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   });
   const addExerciseCategories = (exerciseId: string, role: string, names: string[]) => names.forEach((name, position) => addUnique(tables.exercise_categories, ["account_id", "exercise_id", "role", "category_name"], { account_id: accountId, exercise_id: exerciseId, category_name: name, role, position }));
 
-  for (const exercise of list(state.exercises)) {
+  for (const [position, exercise] of list(state.exercises).entries()) {
     const id = string(exercise.id);
     if (!id) { warnings.push("exercise_without_id"); continue; }
     const updatedAt = time(exercise.updatedAt, now);
-    tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: string(exercise.kind, "recognition"), recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), auto_pronounce: exercise.autoPronounce ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), source_exercise_id: optionalString(exercise.sourceExerciseId), version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
+    tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: string(exercise.kind, "recognition"), recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
     if (typeof exercise.promptId === "string") addExerciseItems(id, "prompt", [exercise.promptId]);
     addExerciseItems(id, "option", strings(exercise.optionIds));
     addExerciseItems(id, "recognition_pool", strings(exercise.recognitionItemIds));
@@ -201,12 +201,12 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   }
 
   const exerciseIds = new Set(tables.exercises.map((item) => String(item.id)));
-  for (const sequence of sequences) {
+  for (const [position, sequence] of sequences.entries()) {
     const id = string(sequence.id);
     const owner = string(sequence.therapistId);
     if (!id || !owner) { warnings.push(`invalid_sequence:${id}`); continue; }
     const updatedAt = time(sequence.updatedAt, now);
-    tables.sequences.push({ account_id: accountId, id, owner_adult_id: owner, title: string(sequence.title, "Sequenza"), last_used_at: sequence.lastUsedAt ? time(sequence.lastUsedAt, now) : null, version: 1, deleted_at: deletedTime(sequence.deleted, now), created_at: updatedAt, updated_at: updatedAt });
+    tables.sequences.push({ account_id: accountId, id, owner_adult_id: owner, title: string(sequence.title, "Sequenza"), last_used_at: sequence.lastUsedAt ? time(sequence.lastUsedAt, now) : null, position, version: 1, deleted_at: deletedTime(sequence.deleted, now), created_at: updatedAt, updated_at: updatedAt });
     strings(sequence.exerciseIds).forEach((exerciseId, position) => {
       if (exerciseIds.has(exerciseId)) tables.sequence_exercises.push({ account_id: accountId, sequence_id: id, exercise_id: exerciseId, position });
       else warnings.push(`missing_sequence_exercise:${id}:${exerciseId}`);
@@ -214,13 +214,13 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   }
 
   const historyResponses = new Map<string, JsonObject>();
-  for (const history of histories) {
+  for (const [position, history] of histories.entries()) {
     const sessionId = string(history.id);
     const childId = string(history.childId);
     const adultId = string(history.therapistId);
     if (!sessionId || !childId || !adultId) { warnings.push(`invalid_session:${sessionId}`); continue; }
     const completedAt = time(history.completedAt, now);
-    tables.sessions.push({ account_id: accountId, id: sessionId, child_id: childId, adult_id: adultId, title: string(history.title, "Sessione"), source: string(history.source, "sequence"), mode: string(history.mode, "test"), presentation: string(history.presentation, "images"), status: "completed", started_at: time(history.startedAt, completedAt), completed_at: completedAt, comment: string(history.comment), deleted_at: deletedTime(history.deletedAt, now), updated_at: completedAt });
+    tables.sessions.push({ account_id: accountId, id: sessionId, child_id: childId, adult_id: adultId, title: string(history.title, "Sessione"), source: string(history.source, "sequence"), mode: string(history.mode, "test"), presentation: string(history.presentation, "images"), status: "completed", started_at: time(history.startedAt, completedAt), completed_at: completedAt, comment: string(history.comment), position, deleted_at: deletedTime(history.deletedAt, now), updated_at: completedAt });
     list(history.items).forEach((item, position) => {
       const itemId = string(item.id, `${sessionId}:item:${position}`);
       tables.session_items.push({ account_id: accountId, id: itemId, session_id: sessionId, position, exercise_id: optionalString(item.exerciseId), exercise_title: string(item.exerciseTitle, "Esercizio archiviato"), kind: string(item.kind, "recognition"), presentation: optionalString(item.presentation) });
@@ -236,21 +236,21 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   }
 
   const ordinalByItem = new Map<string, number>();
-  for (const attempt of attempts.sort((a, b) => time(a.createdAt, 0) - time(b.createdAt, 0))) {
+  for (const [position, attempt] of attempts.entries()) {
     const id = string(attempt.id);
     if (!id) { warnings.push("attempt_without_id"); continue; }
     const itemId = optionalString(attempt.sessionItemId);
     const ordinal = itemId ? (ordinalByItem.get(itemId) ?? 0) + 1 : attempt.firstAttempt ? 1 : 2;
     if (itemId) ordinalByItem.set(itemId, ordinal);
     const response = itemId ? historyResponses.get(`${itemId}\u0000${string(attempt.answerId)}\u0000${string(attempt.createdAt)}`) : undefined;
-    tables.attempts.push({ account_id: accountId, id, session_id: optionalString(attempt.sessionId), session_item_id: itemId, exercise_id: string(attempt.exerciseId, "unknown"), child_id: optionalString(attempt.childId), adult_id: optionalString(attempt.therapistId), word_id: optionalString(attempt.wordId), answer_id: string(attempt.answerId), answer_label_snapshot: string(response?.label, string(attempt.answerId)), correct: attempt.correct ? 1 : 0, attempt_ordinal: ordinal, mode: string(attempt.mode, "test"), created_at: time(attempt.createdAt, now) });
+    tables.attempts.push({ account_id: accountId, id, session_id: optionalString(attempt.sessionId), session_item_id: itemId, exercise_id: string(attempt.exerciseId, "unknown"), child_id: optionalString(attempt.childId), adult_id: optionalString(attempt.therapistId), word_id: optionalString(attempt.wordId), answer_id: string(attempt.answerId), answer_label_snapshot: string(response?.label, string(attempt.answerId)), correct: attempt.correct ? 1 : 0, attempt_ordinal: ordinal, mode: string(attempt.mode, "test"), position, created_at: time(attempt.createdAt, now) });
     strings(attempt.optionIds).forEach((libraryItemId, position) => tables.attempt_options.push({ account_id: accountId, attempt_id: id, position, library_item_id: libraryItemId }));
   }
 
-  for (const help of helps) {
+  for (const [position, help] of helps.entries()) {
     const id = string(help.id);
     if (!id) { warnings.push("help_without_id"); continue; }
-    tables.help_events.push({ account_id: accountId, id, session_id: optionalString(help.sessionId), session_item_id: optionalString(help.sessionItemId), exercise_id: string(help.exerciseId, "unknown"), child_id: optionalString(help.childId), adult_id: optionalString(help.therapistId), word_id: optionalString(help.wordId), mode: optionalString(help.mode), label: string(help.label), created_at: time(help.createdAt, now) });
+    tables.help_events.push({ account_id: accountId, id, session_id: optionalString(help.sessionId), session_item_id: optionalString(help.sessionItemId), exercise_id: string(help.exerciseId, "unknown"), child_id: optionalString(help.childId), adult_id: optionalString(help.therapistId), word_id: optionalString(help.wordId), mode: optionalString(help.mode), label: string(help.label), position, created_at: time(help.createdAt, now) });
   }
 
   return { tables, warnings };
@@ -258,6 +258,39 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
 
 export function projectionCounts(projection: RelationalProjection) {
   return Object.fromEntries(Object.entries(projection.tables).map(([name, rows]) => [name, rows.length]));
+}
+
+const parityEntities = {
+  adult_profiles: "therapists",
+  children: "children",
+  library_items: "library",
+  exercises: "exercises",
+  sequences: "sequences",
+  attempts: "attempts",
+  help_events: "helps",
+  sessions: "sessionHistory",
+} as const;
+
+export function relationalParityReport(state: unknown, projection: RelationalProjection, snapshotRevision: number, relationalRevision: number, sourceChecksumMatches = true) {
+  const source = object(state) ?? {};
+  const mismatches: string[] = [];
+  for (const [table, stateKey] of Object.entries(parityEntities)) {
+    const legacyIds = list(source[stateKey]).map((item) => string(item.id)).filter(Boolean).sort();
+    const rows = projection.tables[table as keyof RelationalProjection["tables"]];
+    const relationalIds = rows.filter((row) => (table === "adult_profiles" || table === "children") ? row.deleted_at === null : true).map((row) => string(row.id)).filter(Boolean).sort();
+    if (legacyIds.length !== relationalIds.length || legacyIds.some((id, index) => id !== relationalIds[index])) mismatches.push(table);
+  }
+  const blockingWarnings = projection.warnings.filter((warning) => !warning.startsWith("archived_adult:") && !warning.startsWith("archived_child:"));
+  return {
+    ready: relationalRevision === snapshotRevision && sourceChecksumMatches && mismatches.length === 0 && blockingWarnings.length === 0,
+    snapshotRevision,
+    relationalRevision,
+    sourceChecksumMatches,
+    mismatches,
+    warningCount: projection.warnings.length,
+    blockingWarningCount: blockingWarnings.length,
+    counts: projectionCounts(projection),
+  };
 }
 
 function definedEntries(entries: Array<[string, unknown]>) {
@@ -272,11 +305,15 @@ function rowsFor(rows: Row[], key: string, value: unknown) {
   return rows.filter((row) => row[key] === value).sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 }
 
+function ordered(rows: Row[]) {
+  return [...rows].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+}
+
 /** Rebuilds the compatibility BackendState shape from normalized rows. */
 export function rebuildLegacyState(projection: RelationalProjection) {
   const { tables } = projection;
-  const activeAdults = tables.adult_profiles.filter((row) => row.deleted_at === null);
-  const activeChildren = tables.children.filter((row) => row.deleted_at === null);
+  const activeAdults = ordered(tables.adult_profiles.filter((row) => row.deleted_at === null));
+  const activeChildren = ordered(tables.children.filter((row) => row.deleted_at === null));
   const mediaById = new Map(tables.media_assets.map((row) => [row.id, row]));
 
   const therapists = activeAdults.map((row) => definedEntries([
@@ -284,7 +321,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     ["childIds", rowsFor(tables.adult_child_access, "adult_id", row.id).map((access) => access.child_id)],
   ]));
   const children = activeChildren.map((row) => ({ id: row.id, firstName: row.first_name, lastName: row.last_name, birthYear: row.birth_year, notes: row.notes, avatarColor: row.avatar_color }));
-  const library = tables.library_items.map((row) => {
+  const library = ordered(tables.library_items).map((row) => {
     const media = row.media_asset_id ? mediaById.get(row.media_asset_id) : undefined;
     return definedEntries([
       ["id", row.id], ["word", row.word], ["image", media?.image_path], ["imageKey", media?.image_key], ["remoteImageId", media?.r2_object_id], ["emoji", media?.emoji],
@@ -294,7 +331,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
   });
   const exerciseRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_items.filter((row) => row.role === role), "exercise_id", exerciseId).map((row) => row.library_item_id);
   const categoryRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_categories.filter((row) => row.role === role), "exercise_id", exerciseId).map((row) => row.category_name);
-  const exercises = tables.exercises.map((row) => definedEntries([
+  const exercises = ordered(tables.exercises).map((row) => definedEntries([
     ["id", row.id], ["title", row.title], ["kind", row.kind], ["promptId", exerciseRole(row.id, "prompt")[0]], ["optionIds", exerciseRole(row.id, "option")],
     ["articleItemIds", exerciseRole(row.id, "article_pool").length ? exerciseRole(row.id, "article_pool") : undefined],
     ["categoryItemIds", exerciseRole(row.id, "category_pool").length ? exerciseRole(row.id, "category_pool") : undefined],
@@ -302,20 +339,20 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     ["recognitionMode", row.recognition_mode], ["recognitionItemIds", exerciseRole(row.id, "recognition_pool").length ? exerciseRole(row.id, "recognition_pool") : undefined],
     ["recognitionCategories", categoryRole(row.id, "recognition_filter").length ? categoryRole(row.id, "recognition_filter") : undefined], ["recognitionSyllables", row.syllable_filter],
     ["namingItemIds", exerciseRole(row.id, "naming_pool").length ? exerciseRole(row.id, "naming_pool") : undefined], ["namingCategories", categoryRole(row.id, "naming_filter").length ? categoryRole(row.id, "naming_filter") : undefined],
-    ["distractorCount", row.distractor_count], ["distractorSource", row.distractor_source], ["presentation", row.presentation], ["autoPronounce", Boolean(row.auto_pronounce)], ["rounds", row.rounds], ["sourceExerciseId", row.source_exercise_id], ["updatedAt", iso(row.updated_at)], ["deleted", row.deleted_at === null ? undefined : true],
+    ["distractorCount", row.distractor_count], ["distractorSource", row.distractor_source], ["presentation", row.presentation], ["autoPronounce", row.auto_pronounce_configured ? Boolean(row.auto_pronounce) : undefined], ["rounds", row.rounds], ["sourceExerciseId", row.source_exercise_id], ["updatedAt", iso(row.updated_at)], ["deleted", row.deleted_at === null ? undefined : true],
   ]));
-  const sequences = tables.sequences.map((row) => definedEntries([
+  const sequences = ordered(tables.sequences).map((row) => definedEntries([
     ["id", row.id], ["title", row.title], ["exerciseIds", rowsFor(tables.sequence_exercises, "sequence_id", row.id).map((item) => item.exercise_id)], ["therapistId", row.owner_adult_id], ["updatedAt", iso(row.updated_at)], ["lastUsedAt", row.last_used_at === null ? undefined : iso(row.last_used_at)], ["deleted", row.deleted_at === null ? undefined : true],
   ]));
   const optionsByAttempt = (attemptId: unknown) => rowsFor(tables.attempt_options, "attempt_id", attemptId).map((row) => row.library_item_id);
-  const attempts = tables.attempts.map((row) => definedEntries([
+  const attempts = ordered(tables.attempts).map((row) => definedEntries([
     ["id", row.id], ["sessionId", row.session_id], ["sessionItemId", row.session_item_id], ["exerciseId", row.exercise_id], ["wordId", row.word_id], ["answerId", row.answer_id], ["optionIds", optionsByAttempt(row.id).length ? optionsByAttempt(row.id) : undefined], ["correct", Boolean(row.correct)], ["firstAttempt", row.attempt_ordinal === 1], ["mode", row.mode], ["createdAt", iso(row.created_at)], ["childId", row.child_id], ["therapistId", row.adult_id],
   ]));
-  const helps = tables.help_events.map((row) => definedEntries([
+  const helps = ordered(tables.help_events).map((row) => definedEntries([
     ["id", row.id], ["sessionId", row.session_id], ["sessionItemId", row.session_item_id], ["exerciseId", row.exercise_id], ["wordId", row.word_id], ["mode", row.mode], ["label", row.label], ["createdAt", iso(row.created_at)], ["childId", row.child_id], ["therapistId", row.adult_id],
   ]));
   const snapshot = (row: Row) => definedEntries([["itemId", row.library_item_id], ["word", row.word_snapshot], ["category", row.category_snapshot], ["emoji", row.emoji_snapshot], ["image", row.image_path_snapshot], ["imageKey", row.image_key_snapshot], ["remoteImageId", row.remote_image_id]]);
-  const sessionHistory = [...tables.sessions].sort((a, b) => Number(a.started_at) - Number(b.started_at)).map((session) => ({
+  const sessionHistory = ordered(tables.sessions).map((session) => ({
     id: session.id, childId: session.child_id, therapistId: session.adult_id, title: session.title, source: session.source, mode: session.mode, presentation: session.presentation,
     startedAt: iso(session.started_at), completedAt: iso(session.completed_at ?? session.updated_at), comment: session.comment,
     items: rowsFor(tables.session_items, "session_id", session.id).map((item) => {
