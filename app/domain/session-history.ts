@@ -46,6 +46,10 @@ export type SessionHistoryRecord = {
   deletedAt?: string;
 };
 
+export function historyItemUsesArtwork(item: Pick<SessionHistoryItem, "kind" | "presentation">) {
+  return item.kind === "articles" || item.kind === "naming" || (item.kind === "recognition" && item.presentation !== "words");
+}
+
 type HistoryExercise = {
   id: string;
   sourceExerciseId?: string;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSessionHistoryItems } from "../app/domain/session-history.ts";
+import { buildSessionHistoryItems, historyItemUsesArtwork } from "../app/domain/session-history.ts";
 
 test("preserva immagine, opzioni, errori e aiuti della sessione", () => {
   const result = buildSessionHistoryItems("session-1", [{ id: "exercise-1", title: "Trova Mela", kind: "recognition", presentation: "words", promptId: "mela", optionIds: ["mela", "pera"] }], [
@@ -19,4 +19,12 @@ test("preserva immagine, opzioni, errori e aiuti della sessione", () => {
   assert.deepEqual(result[0].helpLabels, ["Indicazione gestuale"]);
   assert.deepEqual(result[0].responses.map((response) => [response.label, response.correct]), [["Pera", false], ["Mela", true]]);
   assert.deepEqual(result[0].options.map((option) => option.word), ["Mela", "Pera"]);
+});
+
+test("mostra immagini nel riepilogo soltanto per le attività che le prevedevano", () => {
+  assert.equal(historyItemUsesArtwork({ kind: "recognition", presentation: "images" }), true);
+  assert.equal(historyItemUsesArtwork({ kind: "recognition", presentation: "words" }), false);
+  assert.equal(historyItemUsesArtwork({ kind: "word-categories" }), false);
+  assert.equal(historyItemUsesArtwork({ kind: "articles" }), true);
+  assert.equal(historyItemUsesArtwork({ kind: "naming" }), true);
 });
