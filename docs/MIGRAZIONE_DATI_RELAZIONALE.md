@@ -22,6 +22,8 @@ La proiezione di un account usa un batch D1: cancellazione delle sole righe shad
 
 ## Verifica dopo la pubblicazione
 
+Con una sessione autenticata, `GET /api/state/relational-status` deve restituire `status: "ready"`, revisioni uguali e `mismatches: []`. La risposta contiene soltanto conteggi e diagnostica tecnica.
+
 ```sql
 SELECT status, COUNT(*) FROM data_migrations GROUP BY status;
 
@@ -29,7 +31,7 @@ SELECT COUNT(*) AS snapshots_without_current_projection
 FROM user_states u
 LEFT JOIN data_migrations m
   ON m.account_id = u.user_id
- AND m.migration_key = 'snapshot-to-relational-v1'
+ AND m.migration_key = 'snapshot-to-relational-v2'
  AND m.status = 'verified'
  AND m.source_revision = u.revision
 WHERE m.account_id IS NULL;
@@ -45,4 +47,4 @@ Ripubblicare la versione precedente dell'applicazione. `user_states`, `therapist
 
 ## Passaggio al relazionale
 
-Il cambio delle letture è una release separata. Prima del cambio devono risultare zero snapshot senza proiezione corrente, zero violazioni di chiave esterna e parità di storico e statistiche sul dataset di prova.
+Il percorso di ricostruzione dalle tabelle è disponibile e coperto da test, ma il cambio delle letture è una release separata. Prima del cambio devono risultare zero snapshot senza proiezione corrente, zero violazioni di chiave esterna e parità di storico e statistiche sul dataset di prova.
