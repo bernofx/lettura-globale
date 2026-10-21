@@ -157,7 +157,8 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   }
 
   const appearance = object(state.appearance) ?? {};
-  tables.account_preferences.push({ account_id: accountId, active_child_id: optionalString(state.activeChildId), active_sequence_id: optionalString(state.activeSequenceId), theme_palette: string(appearance.palette, "violet"), control_shape: string(appearance.shape, "soft"), revision: 1, updated_at: now });
+  const sounds = object(state.soundPreferences) ?? {};
+  tables.account_preferences.push({ account_id: accountId, active_child_id: optionalString(state.activeChildId), active_sequence_id: optionalString(state.activeSequenceId), theme_palette: string(appearance.palette, "violet"), control_shape: string(appearance.shape, "soft"), sound_wrong: string(sounds.wrong, "classic"), sound_correct: string(sounds.correct, "classic"), sound_finish: string(sounds.finish, "fanfare"), sound_select: string(sounds.select, "plin"), revision: 1, updated_at: now });
 
   const library = list(state.library);
   const categoryNames = new Set<string>(["Altro"]);
@@ -379,5 +380,6 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     ...(preferences?.active_sequence_id ? { activeSequenceId: preferences.active_sequence_id } : {}),
     library, exercises, sequences, attempts, helps, sessionHistory,
     appearance: { palette: preferences?.theme_palette ?? "violet", shape: preferences?.control_shape ?? "soft" },
+    soundPreferences: { wrong: preferences?.sound_wrong ?? "classic", correct: preferences?.sound_correct ?? "classic", finish: preferences?.sound_finish ?? "fanfare", select: preferences?.sound_select ?? "plin" },
   };
 }

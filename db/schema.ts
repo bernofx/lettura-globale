@@ -68,7 +68,7 @@ export const adultChildAccess = sqliteTable("adult_child_access", {
 }, (table) => [primaryKey({ columns: [table.accountId, table.adultId, table.childId] })]);
 
 export const accountPreferences = sqliteTable("account_preferences", {
-  accountId: text("account_id").primaryKey(), activeChildId: text("active_child_id"), activeSequenceId: text("active_sequence_id"), themePalette: text("theme_palette").notNull(), controlShape: text("control_shape").notNull(), revision: integer("revision").notNull(), updatedAt: integer("updated_at").notNull(),
+  accountId: text("account_id").primaryKey(), activeChildId: text("active_child_id"), activeSequenceId: text("active_sequence_id"), themePalette: text("theme_palette").notNull(), controlShape: text("control_shape").notNull(), soundWrong: text("sound_wrong").notNull().default("classic"), soundCorrect: text("sound_correct").notNull().default("classic"), soundFinish: text("sound_finish").notNull().default("fanfare"), soundSelect: text("sound_select").notNull().default("plin"), revision: integer("revision").notNull(), updatedAt: integer("updated_at").notNull(),
 });
 
 export const categories = sqliteTable("categories", {

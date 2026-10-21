@@ -18,6 +18,15 @@ test("returns no operation when state did not change", () => {
   assert.equal(buildStateChange(state, structuredClone(state), "12345678-1234-1234-1234-123456789abc", 1), null);
 });
 
+test("persists audio preferences as an account-level value", () => {
+  const previous = { schemaVersion: 1, therapists: [], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
+  const soundPreferences = { wrong: "naaa", correct: "chime", finish: "applause", select: "select" };
+  const change = buildStateChange(previous, { ...previous, soundPreferences }, "12345678-1234-1234-1234-123456789abc", 3);
+  assert.ok(change);
+  assert.deepEqual(change.values.soundPreferences, soundPreferences);
+  assert.deepEqual(applyStateChange(previous, change), { ...previous, soundPreferences });
+});
+
 test("persists sequence creation, title and exercise order", () => {
   const previous = { schemaVersion: 1, therapists: [], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
   const sequence = { id: "sequence-1", title: "Mattina", exerciseIds: ["exercise-2", "exercise-1"], therapistId: "adult-1", updatedAt: "2026-10-20T10:00:00.000Z", deleted: false };
