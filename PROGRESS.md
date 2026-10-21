@@ -8,7 +8,7 @@
 
 ## Completato
 
-- [x] Configurazione Wrangler di produzione versionata e flusso GitHub → Cloudflare Workers Builds definito: build da `main`, deploy sul Worker `lettura-globale`, binding D1/R2 esistenti conservati e migrazioni escluse dal deploy ordinario.
+- [x] Configurazione Wrangler di produzione versionata e flusso GitHub → Cloudflare Workers Builds definito: build da `main`, deploy sul Worker `lettura-globale`, UUID D1 reale anche nella configurazione generata da Vinext, binding D1/R2 esistenti conservati e migrazioni escluse dal deploy ordinario.
 - [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
 - [x] `Numero quantità`: timer anche nei link condivisi, errore dopo cinque secondi di inattività in insegnamento, esiti ripetuti conservati, spunta verde e avanzamento solo con `Continua`; in valutazione conferma adulta immediata senza timer.

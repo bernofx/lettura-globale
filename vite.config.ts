@@ -5,8 +5,11 @@ import { readExecutionProfile } from "./scripts/execution-profile.mjs";
 import { sites } from "./build/sites-vite-plugin";
 import { connectorPreview } from "./build/connector-preview-plugin.mjs";
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
+// Resource identifiers are public configuration, not credentials. Vinext copies
+// this value into dist/server/wrangler.json, which Cloudflare Workers Builds
+// uses when uploading a version from Git.
+const CLOUDFLARE_D1_DATABASE_ID =
+  "10bf2c2e-ebb4-4943-8363-19784390955e";
 
 const { d1, r2 } = hostingConfig;
 
@@ -22,7 +25,7 @@ const localBindingConfig = {
         {
           binding: d1,
           database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_id: CLOUDFLARE_D1_DATABASE_ID,
         },
       ]
     : [],
