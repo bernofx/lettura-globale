@@ -38,7 +38,13 @@ export async function GET() {
         }
         relationalStatus = parity.ready ? "ready" : "pending";
         if (parity.ready) {
-          responseState = rebuildLegacyState(projection);
+          const rebuilt = rebuildLegacyState(projection) as Record<string, unknown>;
+          // Before audio preferences became cloud-backed, the browser copy was the
+          // only authoritative source. Keep the field absent for those snapshots so
+          // the client can migrate its existing local selection instead of replacing
+          // it with relational defaults.
+          if (!(state && typeof state === "object" && "soundPreferences" in state)) delete rebuilt.soundPreferences;
+          responseState = rebuilt;
           dataSource = "relational";
         }
       }

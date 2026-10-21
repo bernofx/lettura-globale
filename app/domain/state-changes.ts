@@ -16,7 +16,7 @@ export type StateChangeRequest = {
   operationId: string;
   baseRevision: number;
   collections: Partial<Record<StateCollectionName, CollectionChange>>;
-  values: Partial<Record<"activeChildId" | "activeSequenceId" | "appearance", unknown>>;
+  values: Partial<Record<"activeChildId" | "activeSequenceId" | "appearance" | "soundPreferences", unknown>>;
 };
 
 function document(value: unknown): Record<string, unknown> {
@@ -57,7 +57,7 @@ export function buildStateChange(previousValue: unknown, nextValue: unknown, ope
   }
 
   const values: StateChangeRequest["values"] = {};
-  for (const key of ["activeChildId", "activeSequenceId", "appearance"] as const) {
+  for (const key of ["activeChildId", "activeSequenceId", "appearance", "soundPreferences"] as const) {
     if (!sameValue(previous[key], next[key])) values[key] = next[key] ?? null;
   }
   if (!Object.keys(collections).length && !Object.keys(values).length) return null;
@@ -79,10 +79,11 @@ export function parseStateChangeRequest(value: unknown): StateChangeRequest {
     collections[key as StateCollectionName] = { upserts, removedIds, order };
   }
   const rawValues = document(request.values ?? {});
-  if (Object.keys(rawValues).some((key) => !["activeChildId", "activeSequenceId", "appearance"].includes(key))) throw new Error("invalid_state_value");
+  if (Object.keys(rawValues).some((key) => !["activeChildId", "activeSequenceId", "appearance", "soundPreferences"].includes(key))) throw new Error("invalid_state_value");
   if ("activeChildId" in rawValues && (typeof rawValues.activeChildId !== "string" || !rawValues.activeChildId)) throw new Error("invalid_active_child");
   if ("activeSequenceId" in rawValues && rawValues.activeSequenceId !== null && typeof rawValues.activeSequenceId !== "string") throw new Error("invalid_active_sequence");
   if ("appearance" in rawValues && rawValues.appearance !== null && (!rawValues.appearance || typeof rawValues.appearance !== "object" || Array.isArray(rawValues.appearance))) throw new Error("invalid_appearance");
+  if ("soundPreferences" in rawValues && rawValues.soundPreferences !== null && (!rawValues.soundPreferences || typeof rawValues.soundPreferences !== "object" || Array.isArray(rawValues.soundPreferences))) throw new Error("invalid_sound_preferences");
   if (!Object.keys(collections).length && !Object.keys(rawValues).length) throw new Error("empty_state_change");
   return { schemaVersion: 1, operationId: request.operationId, baseRevision: request.baseRevision as number, collections, values: rawValues };
 }
@@ -103,7 +104,7 @@ export function applyStateChange(stateValue: unknown, requestValue: unknown) {
     next[key] = change.order.map((id) => byId.get(id)!);
   }
   for (const [key, value] of Object.entries(request.values)) {
-    if (value === null && (key === "activeSequenceId" || key === "appearance")) delete next[key];
+    if (value === null && (key === "activeSequenceId" || key === "appearance" || key === "soundPreferences")) delete next[key];
     else next[key] = value;
   }
   return next;

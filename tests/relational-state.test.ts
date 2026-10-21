@@ -12,6 +12,7 @@ test("projects the legacy snapshot into relational rows without losing exercise 
     activeChildId: "child-1",
     activeSequenceId: "sequence-1",
     appearance: { palette: "ocean", shape: "round" },
+    soundPreferences: { wrong: "naaa", correct: "chime", finish: "applause", select: "select" },
     library: [
       { id: "mela", word: "Mela", category: "Cibi", article: "LA", syllabification: "me-la", syllableCount: 2, syllableStatus: "confirmed", remoteImageId: "media-1", source: "Test", license: "CC0", author: "Autore" },
       { id: "pane", word: "Pane", category: "Cibi", syllableCount: 2, source: "Test", license: "CC0", author: "Autore" },
@@ -42,6 +43,7 @@ test("projects the legacy snapshot into relational rows without losing exercise 
 
   const rebuilt = rebuildLegacyState(projection);
   assert.equal(rebuilt.therapists[0].email, "ada@example.test");
+  assert.deepEqual(rebuilt.soundPreferences, { wrong: "naaa", correct: "chime", finish: "applause", select: "select" });
   assert.deepEqual(rebuilt.therapists[0].childIds, ["child-1"]);
   assert.deepEqual(rebuilt.library.map((item) => item.word), ["Mela", "Pane"]);
   assert.equal(rebuilt.library[1].source, "Test");

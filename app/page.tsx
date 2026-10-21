@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronLeft, ChevronRight, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, QrCode, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, QrCode, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
@@ -46,7 +46,7 @@ type HelpEvent = HelpEventRecord;
 type ProfileRole = "Amministratore" | "Genitore" | "Supervisore" | "Terapista";
 type Therapist = { id: string; firstName: string; lastName: string; email: string; role: ProfileRole; pinHash?: string; pin?: string; childIds: string[] };
 type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
-type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings };
+type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings; soundPreferences?: SoundPreferences };
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 type SharedPreviewPayload = { schemaVersion: 1; kind: "exercise" | "sequence"; title: string; exercises: Exercise[]; library: LibraryItem[] };
 
@@ -665,7 +665,7 @@ export default function HomePage() {
   const recoveryCheckedFor = useRef("");
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
-  const [soundPreferences, setSoundPreferences] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
+  const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
   const [sessionIndex, setSessionIndex] = useState(0);
@@ -884,12 +884,12 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, [library, setLibrary]);
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded;
-  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded;
+  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences });
 
   useEffect(() => {
-    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance };
-  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance]);
+    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences };
+  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences]);
 
   useEffect(() => {
     if (!backendInitialized || sessionActive || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
@@ -909,7 +909,7 @@ export default function HomePage() {
         schemaVersion: 1,
         therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
         activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
-        attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
+        attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences,
       };
       backendHydrating.current = true;
       backendRevision.current = result.revision;
@@ -925,6 +925,7 @@ export default function HomePage() {
       setHelps(saved.helps ?? []);
       setSessionHistory(saved.sessionHistory ?? []);
       setAppearance(hydrateAppearance(saved.appearance));
+      if (saved.soundPreferences) setSoundPreferences(hydrateSoundPreferences(saved.soundPreferences));
       backendHydrating.current = false;
       setBackendStatus("ready");
       setToast("Dati aggiornati dal cloud");
@@ -932,7 +933,7 @@ export default function HomePage() {
     };
     void refresh().catch(() => { if (!cancelled) setBackendStatus("error"); });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (!backendInitialized || sessionActive) return;
@@ -988,7 +989,7 @@ export default function HomePage() {
           schemaVersion: 1,
           therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
           activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
-          attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance,
+          attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences,
         };
         let restoredState = savedBaseline;
         const pendingSave = readPendingCloudSave();
@@ -1017,6 +1018,7 @@ export default function HomePage() {
         setHelps(restoredState.helps ?? []);
         setSessionHistory(restoredState.sessionHistory ?? []);
         setAppearance(hydrateAppearance(restoredState.appearance));
+        setSoundPreferences(hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences));
         backendHydrating.current = false;
         setBackendInitialized(true);
         setBackendStatus(recoveredPendingSave ? "syncing" : "ready");
@@ -1052,7 +1054,7 @@ export default function HomePage() {
       setBackendStatus("local");
     });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
@@ -1124,6 +1126,7 @@ export default function HomePage() {
           setHelps(syncedSnapshot.helps ?? []);
           setSessionHistory(syncedSnapshot.sessionHistory ?? []);
           setAppearance(hydrateAppearance(syncedSnapshot.appearance));
+          setSoundPreferences(hydrateSoundPreferences(syncedSnapshot.soundPreferences));
           backendHydrating.current = false;
         }
         const currentSnapshot = backendStateForStorage(localBootstrapSnapshot.current);
@@ -1139,11 +1142,11 @@ export default function HomePage() {
       });
     backendSaveQueue.current = task;
     return task;
-  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance]);
+  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (backendHydrating.current) return;
-    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance });
+    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences });
     if (!backendInitialized) {
       if (!localFallbackBaseline.current) return;
       const localChange = buildStateChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
@@ -1165,7 +1168,7 @@ export default function HomePage() {
       void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
-  }, [backendInitialized, backendSaveRetryKey, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, enqueueBackendSave]);
+  }, [backendInitialized, backendSaveRetryKey, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, enqueueBackendSave]);
 
   useEffect(() => {
     if (!backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
@@ -2077,7 +2080,7 @@ function SoundSettingsPanel({ sounds, onChange }: { sounds: SoundPreferences; on
     { id: "finish", label: "Fine esercizio nella sequenza", detail: "Alla fine dell’ultimo turno di ciascun esercizio" },
     { id: "select", label: "Selezione in Numero quantità", detail: "Quando un oggetto viene selezionato o deselezionato" },
   ];
-  return <section className="panel sound-settings"><div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h2>Suoni degli esercizi</h2></div></div><p>Scegli un suono per ogni momento. Le scelte si salvano su questo dispositivo.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}</div></section>;
+  return <section className="panel sound-settings"><div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h2>Suoni degli esercizi</h2></div></div><p>Scegli un suono per ogni momento. Le scelte vengono salvate nel cloud e restano disponibili sugli altri dispositivi.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}</div></section>;
 }
 
 function SequenceCelebration() {
@@ -2100,6 +2103,8 @@ function Quick({ icon, title, detail, onClick }: { icon: React.ReactNode; title:
 
 function LibraryView({ items, search, setSearch, onUpload, onEdit, onDelete, sounds, onSoundsChange }: { items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: (kind: "word" | "sentence") => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
   const [reviewOnly, setReviewOnly] = useState(false);
+  const [wordsExpanded, setWordsExpanded] = useState(false);
+  const [sentencesExpanded, setSentencesExpanded] = useState(false);
   const words = items.filter((item) => item.contentKind !== "sentence");
   const sentences = items.filter((item) => item.contentKind === "sentence");
   const reviewCount = words.filter((item) => item.syllableStatus === "needs-review").length;
@@ -2107,8 +2112,12 @@ function LibraryView({ items, search, setSearch, onUpload, onEdit, onDelete, sou
   const matches = (item: LibraryItem) => `${item.word} ${item.category} ${item.syllabification ?? ""} ${item.subject ?? ""} ${item.verb ?? ""}`.toLocaleLowerCase("it-IT").includes(normalizedSearch);
   const filteredWords = words.filter((item) => (!reviewOnly || item.syllableStatus === "needs-review") && matches(item));
   const filteredSentences = sentences.filter(matches);
+  const searching = Boolean(normalizedSearch.trim());
+  const visibleWords = wordsExpanded || searching || reviewOnly ? filteredWords : filteredWords.slice(0, 4);
+  const visibleSentences = sentencesExpanded || searching ? filteredSentences : filteredSentences.slice(0, 4);
+  const expansion = (label: string, entries: LibraryItem[], visible: LibraryItem[], expanded: boolean, setExpanded: (value: boolean) => void) => entries.length > 4 && !searching && !(label === "immagini" && reviewOnly) ? <div className="library-expansion"><span>Mostrati {visible.length} di {entries.length}</span><button type="button" className="ghost-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}{expanded ? "Riduci" : `Mostra tutte le ${label}`}</button></div> : null;
   const cards = (entries: LibraryItem[], sentence = false) => <div className="library-grid">{entries.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}{!hasArtwork(item) && <span className="word-only-badge">Solo parola</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{sentence ? `${item.subject} · ${item.verb}` : `${item.category}${articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}`}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3>{sentence ? <p className="syllables">SOGGETTO + VERBO</p> : <p className={item.syllableStatus === "needs-review" ? "syllables needs-review" : "syllables"}>{item.syllabification?.toLocaleUpperCase("it-IT")} · {item.syllableCount} sillabe{item.syllableStatus === "needs-review" ? " · Da verificare" : ""}</p>}<p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>;
-  return <div className="page library-sections"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria</h1><p>Gestisci immagini singole, frasi d’azione e suoni in aree separate.</p></div></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><section className="library-area"><div className="section-heading"><div><span className="eyebrow">IMMAGINI SINGOLE</span><h2>Parole e immagini</h2><p>Contenuti per riconoscimento, categorie, articoli e denominazione.</p></div><button className="primary-button" onClick={() => onUpload("word")}><Plus size={18} />Aggiungi immagine</button></div><button type="button" className={`filter-chip ${reviewOnly ? "selected" : ""}`} onClick={() => setReviewOnly((value) => !value)} aria-pressed={reviewOnly}>Sillabazione da verificare <span>{reviewCount}</span></button>{cards(filteredWords)}{!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}</section><section className="library-area sentence-library-area"><div className="section-heading"><div><span className="eyebrow">FRASI</span><h2>Scene soggetto + verbo</h2><p>Immagini d’azione usate da Abbina la frase.</p></div><button className="primary-button" onClick={() => onUpload("sentence")}><Plus size={18} />Aggiungi frase</button></div>{cards(filteredSentences, true)}{!filteredSentences.length && <div className="empty-state compact"><Search /><h3>Nessuna frase</h3></div>}</section><section className="library-area sound-library-area"><SoundSettingsPanel sounds={sounds} onChange={onSoundsChange} /></section></div>;
+  return <div className="page library-sections"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria</h1><p>Gestisci immagini singole, frasi d’azione e suoni in aree separate.</p></div></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><section className="library-area"><div className="section-heading"><div><span className="eyebrow">IMMAGINI SINGOLE</span><h2>Parole e immagini</h2><p>Contenuti per riconoscimento, categorie, articoli e denominazione.</p></div><button className="primary-button" onClick={() => onUpload("word")}><Plus size={18} />Aggiungi immagine</button></div><button type="button" className={`filter-chip ${reviewOnly ? "selected" : ""}`} onClick={() => setReviewOnly((value) => !value)} aria-pressed={reviewOnly}>Sillabazione da verificare <span>{reviewCount}</span></button>{cards(visibleWords)}{!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}{expansion("immagini", filteredWords, visibleWords, wordsExpanded, setWordsExpanded)}</section><section className="library-area sentence-library-area"><div className="section-heading"><div><span className="eyebrow">FRASI</span><h2>Scene soggetto + verbo</h2><p>Immagini d’azione usate da Abbina la frase.</p></div><button className="primary-button" onClick={() => onUpload("sentence")}><Plus size={18} />Aggiungi frase</button></div>{cards(visibleSentences, true)}{!filteredSentences.length && <div className="empty-state compact"><Search /><h3>Nessuna frase</h3></div>}{expansion("frasi", filteredSentences, visibleSentences, sentencesExpanded, setSentencesExpanded)}</section><section className="library-area sound-library-area"><SoundSettingsPanel sounds={sounds} onChange={onSoundsChange} /></section></div>;
 }
 
 function ExercisesView({ exercises, sequences, activeSequence, therapists, showSequenceOwners, library, onSelectSequence, onCreateSequence, onRenameSequence, onDeleteSequence, onBuild, onEdit, onDuplicate, onDelete, onToggleInSequence, onMove, onTry, onShareSequence, onShareExercise }: { exercises: Exercise[]; sequences: Sequence[]; activeSequence?: Sequence; therapists: Therapist[]; showSequenceOwners: boolean; library: LibraryItem[]; onSelectSequence: (id: string) => void; onCreateSequence: () => void; onRenameSequence: () => void; onDeleteSequence: () => void; onBuild: (kind: SessionActivity) => void; onEdit: (exercise: Exercise) => void; onDuplicate: (exercise: Exercise) => void; onDelete: (exercise: Exercise) => void; onToggleInSequence: (exerciseId: string) => void; onMove: (exerciseId: string, direction: -1 | 1) => void; onTry: (exerciseId: string) => void; onShareSequence: () => void; onShareExercise: (exercise: Exercise) => void }) {
