@@ -4,7 +4,7 @@ PWA assistiva per esercizi di lettura globale guidati da un terapista o genitore
 
 ## Stato
 
-La release attuale è un prototipo funzionale pubblico pubblicato su ChatGPT Sites. Lo stato applicativo è conservato nel backend della demo e le immagini caricate nello storage associato; il browser mantiene una copia locale per reattività e migrazione. La pubblicazione autonoma su Cloudflare resta sospesa fino alla stabilizzazione del prodotto. Nessun dato reale di minori è ammesso in questa fase.
+La release attuale è un prototipo funzionale pubblico su Cloudflare Workers. Lo stato applicativo è conservato in D1 e le immagini caricate in R2; il browser mantiene una copia locale per reattività e migrazione. Il deploy applicativo parte automaticamente dagli aggiornamenti del branch `main` su GitHub. Nessun dato reale di minori è ammesso in questa fase.
 
 Funzioni disponibili:
 
@@ -39,13 +39,15 @@ pnpm typecheck
 pnpm build
 ```
 
+Cloudflare Workers Builds usa `pnpm run build` e poi `pnpm run deploy:cloudflare`. La configurazione di produzione è in `wrangler.production.jsonc`; il nome distinto evita che Vinext tenti di risolvere l'artefatto prima di averlo generato. Le migrazioni D1 restano un'operazione separata e controllata. La decisione e le impostazioni del collegamento Git sono documentate in `docs/adr/0011-deploy-cloudflare-da-git.md`.
+
 Leggere sempre `MASTER_PLAN.md`, `AGENTS.md` e `PROGRESS.md` prima di modificare il progetto.
 
 ## Hosting
 
-- Prove e revisioni: ChatGPT Sites, accesso pubblico tramite link.
-- Produzione stabile: Cloudflare Workers + D1 + R2, soltanto dopo hardening e approvazione.
-- Repository autorevole: GitLab privato.
+- Demo pubblica: Cloudflare Workers + D1 + R2.
+- Deploy applicativo: automatico da `main` tramite Cloudflare Workers Builds.
+- Repository autorevole: GitHub, `bernofx/lettura-globale`.
 
 ## Credenziali demo
 

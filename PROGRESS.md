@@ -4,10 +4,11 @@
 
 **Fase:** prototipo cloud funzionale pubblico
 
-**Target:** Cloudflare Workers + D1 + R2, distribuito tramite ChatGPT Sites
+**Target:** Cloudflare Workers + D1 + R2, distribuito automaticamente da GitHub
 
 ## Completato
 
+- [x] Configurazione Wrangler di produzione versionata e flusso GitHub → Cloudflare Workers Builds definito: build da `main`, deploy sul Worker `lettura-globale`, binding D1/R2 esistenti conservati e migrazioni escluse dal deploy ordinario.
 - [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
 - [x] `Numero quantità`: timer anche nei link condivisi, errore dopo cinque secondi di inattività in insegnamento, esiti ripetuti conservati, spunta verde e avanzamento solo con `Continua`; in valutazione conferma adulta immediata senza timer.
@@ -117,7 +118,7 @@
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
 8. Definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
-9. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+9. Separare staging e produzione Cloudflare e aggiungere una promozione protetta fra i due ambienti.
 10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
