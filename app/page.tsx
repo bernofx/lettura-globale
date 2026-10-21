@@ -26,7 +26,7 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type Quant
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
-import { parseControllerToken, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
@@ -1871,6 +1871,7 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
 /* eslint-enable @next/next/no-img-element */
 
 type ControllerConsoleState = { status: "joining" | "pending" | "connected" | "lost" | "error"; sessionId: string; controllerKey: string; snapshot: RemoteSessionSnapshot | null; error: string };
+type ControllerCommandFeedback = { id: string; key: string; phase: "sending" | "sent" | "error"; label: string };
 
 function browserRandomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -1878,8 +1879,14 @@ function browserRandomHex(bytes = 32) {
 
 function RemoteControllerConsole({ token, therapist, onLogout }: { token: string; therapist: Therapist; onLogout: () => void }) {
   const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
+  const [commandFeedback, setCommandFeedback] = useState<ControllerCommandFeedback | null>(null);
   const sendQueue = useRef<Promise<void>>(Promise.resolve());
+  const feedbackTimer = useRef<number | null>(null);
   const storageKey = `lg-controller:${token}`;
+
+  useEffect(() => () => {
+    if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1925,17 +1932,31 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
       } finally { polling = false; }
     };
     void poll();
-    const timer = window.setInterval(poll, 1_250);
+    const timer = window.setInterval(poll, REMOTE_CONTROLLER_POLL_MS);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [state.controllerKey, state.sessionId]);
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
     if (state.status !== "connected") return;
-    sendQueue.current = sendQueue.current.then(async () => {
-      const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: crypto.randomUUID(), command, payload } }) });
+    const id = crypto.randomUUID();
+    const key = `${command}:${payload?.label ?? ""}`;
+    const label = remoteCommandFeedback(command, payload);
+    if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current);
+    setCommandFeedback({ id, key, phase: "sending", label });
+    if ("vibrate" in navigator) navigator.vibrate(12);
+    sendQueue.current = sendQueue.current.catch(() => undefined).then(async () => {
+      const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) });
       if (!response.ok) throw new Error("command_failed");
-    }).catch(() => setState((current) => ({ ...current, status: "lost", error: "Comando non inviato. Il PC userà i controlli locali." })));
+      setCommandFeedback((current) => current?.id === id ? { ...current, phase: "sent" } : current);
+      if ("vibrate" in navigator) navigator.vibrate([10, 30, 10]);
+      feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 1_100);
+    }).catch(() => {
+      setCommandFeedback((current) => current?.id === id ? { ...current, phase: "error" } : current);
+      if ("vibrate" in navigator) navigator.vibrate([35, 30, 35]);
+      setState((current) => ({ ...current, status: "lost", error: "Comando non inviato. Il PC userà i controlli locali." }));
+    });
   };
+  const feedbackFor = (command: RemoteCommandName, payload?: { label?: string }) => commandFeedback?.key === `${command}:${payload?.label ?? ""}` ? commandFeedback.phase : undefined;
   const snapshot = state.snapshot;
   const connected = state.status === "connected";
   const supportsShuffle = snapshot?.exerciseKind === "recognition" || snapshot?.exerciseKind === "word-categories";
@@ -1947,23 +1968,27 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
       <div><strong>{connected ? "Collegato al PC" : state.status === "pending" ? "Attendi l’approvazione sul PC" : state.status === "joining" ? "Collegamento…" : "Non collegato"}</strong><small>{state.error || (connected ? "I comandi vengono registrati nella sessione." : "I controlli restano disponibili sul PC.")}</small></div>
       {state.error.startsWith("Un altro telefono") && <button type="button" onClick={() => { sessionStorage.removeItem(storageKey); window.location.reload(); }}><RefreshCw />Riprendi il controllo</button>}
     </section>
+    {commandFeedback && <div className={`remote-command-feedback ${commandFeedback.phase}`} role="status" aria-live="polite">
+      {commandFeedback.phase === "sending" ? <RefreshCw /> : commandFeedback.phase === "sent" ? <Check /> : <X />}
+      <span><strong>{commandFeedback.label}</strong><small>{commandFeedback.phase === "sending" ? "Invio al PC…" : commandFeedback.phase === "sent" ? "Comando inviato" : "Invio non riuscito"}</small></span>
+    </div>}
     {snapshot ? <>
       <section className="remote-now-card"><span>{snapshot.childName} · {snapshot.currentIndex + 1} di {snapshot.total}</span><h1>{snapshot.exerciseTitle}</h1><p>{snapshot.prompt || snapshot.sessionTitle}</p><div><small>{snapshot.answerState === "correct" ? "Risposta corretta" : snapshot.answerState === "wrong" ? "Risposta errata" : "In attesa della risposta"}</small>{snapshot.paused && <strong>IN PAUSA</strong>}</div></section>
       <section className="remote-command-grid">
-        <button type="button" disabled={!connected || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
-        <button type="button" className="primary" disabled={!connected} onClick={() => send("next")}>Passo successivo<ChevronRight /></button>
-        <button type="button" disabled={!connected} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
-        <button type="button" disabled={!connected} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
+        <button type="button" data-feedback={feedbackFor("previous")} disabled={!connected || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
+        <button type="button" className="primary" data-feedback={feedbackFor("next")} disabled={!connected} onClick={() => send("next")}>Passo successivo<ChevronRight /></button>
+        <button type="button" data-feedback={feedbackFor("previous_activity")} disabled={!connected} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
+        <button type="button" data-feedback={feedbackFor("next_activity")} disabled={!connected} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
       </section>
       <section className="remote-command-row">
-        <button type="button" disabled={!connected} onClick={() => send("speak")}><Volume2 />Riascolta</button>
-        <button type="button" disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
-        {supportsShuffle && <button type="button" disabled={!connected} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
-        <button type="button" disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
+        <button type="button" data-feedback={feedbackFor("speak")} disabled={!connected} onClick={() => send("speak")}><Volume2 />Riascolta</button>
+        <button type="button" data-feedback={feedbackFor("toggle_audio")} disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
+        {supportsShuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!connected} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
+        <button type="button" data-feedback={feedbackFor(snapshot.paused ? "resume" : "pause")} disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
       </section>
-      {supportsJudgement && <section className="remote-judgement"><button disabled={!connected} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button disabled={!connected} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button disabled={!connected} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button disabled={!connected} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
-      <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" disabled={!connected} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
-      <button className="remote-end-button" type="button" disabled={!connected} onClick={() => { if (window.confirm("Interrompere la sessione sul PC?")) send("end"); }}><Square />Interrompi sessione</button>
+      {supportsJudgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!connected} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button data-feedback={feedbackFor("mark_helped")} disabled={!connected} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!connected} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button data-feedback={feedbackFor("retry")} disabled={!connected} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
+      <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" data-feedback={feedbackFor("help", { label })} disabled={!connected} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
+      <button className="remote-end-button" data-feedback={feedbackFor("end")} type="button" disabled={!connected} onClick={() => { if (window.confirm("Interrompere la sessione sul PC?")) send("end"); }}><Square />Interrompi sessione</button>
     </> : <section className="remote-waiting"><Wifi /><h1>{state.status === "error" ? "Collegamento non disponibile" : "Connessione alla sessione"}</h1><p>{state.error || "Approva questo telefono dal PC per iniziare."}</p></section>}
   </main>;
 }

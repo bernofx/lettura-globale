@@ -2,7 +2,7 @@
 
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { controllerUrl, type RemoteControllerEvent, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { controllerUrl, REMOTE_HOST_POLL_MS, type RemoteControllerEvent, type RemoteSessionSnapshot } from "./domain/remote-controller";
 
 export type RemoteHostStatus = "off" | "creating" | "waiting" | "pending" | "connected" | "lost" | "error";
 
@@ -34,6 +34,7 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
   const creating = useRef(false);
   commandHandler.current = onCommand;
   snapshotRef.current = snapshot;
+  const snapshotPayload = snapshot ? JSON.stringify(snapshot) : "";
 
   const createPairing = useCallback(async () => {
     const currentSnapshot = snapshotRef.current;
@@ -62,14 +63,25 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
 
   useEffect(() => {
     if (!enabled || !sessionId || !state.pairingUrl) return;
+    if (!snapshotPayload) return;
+    const controller = new AbortController();
+    void fetch(`/api/controller/session/${encodeURIComponent(sessionId)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "sync", snapshot: snapshotRef.current }),
+      signal: controller.signal,
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [enabled, sessionId, snapshotPayload, state.pairingUrl]);
+
+  useEffect(() => {
+    if (!enabled || !sessionId || !state.pairingUrl) return;
     let cancelled = false;
     let polling = false;
     const poll = async () => {
       if (polling || cancelled) return;
       polling = true;
       try {
-        const currentSnapshot = snapshotRef.current;
-        if (currentSnapshot) await fetch(`/api/controller/session/${encodeURIComponent(sessionId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "sync", snapshot: currentSnapshot }) });
         const response = await fetch(`/api/controller/session/${encodeURIComponent(sessionId)}?since=${latestSequence.current}`, { cache: "no-store" });
         if (!response.ok) throw new Error("Stato controller non disponibile.");
         const result = await response.json() as { status: string; connected: boolean; pendingAdultName?: string | null; latestSequence: number; events?: RemoteControllerEvent[] };
@@ -92,7 +104,7 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
       }
     };
     void poll();
-    const timer = window.setInterval(poll, 1_250);
+    const timer = window.setInterval(poll, REMOTE_HOST_POLL_MS);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [enabled, sessionId, state.pairingUrl]);
 

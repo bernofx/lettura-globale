@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CONTROLLER_LEASE_MS, controllerIsConnected, controllerUrl, parseControllerToken, parseRemoteCommand, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
+import { CONTROLLER_LEASE_MS, controllerIsConnected, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
 
 test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123456", command: "shuffle" }), { clientEventId: "event-123456", command: "shuffle" });
@@ -16,6 +16,14 @@ test("la presenza del controller scade dopo il lease", () => {
   assert.equal(controllerIsConnected("connected", now - CONTROLLER_LEASE_MS + 1, now), true);
   assert.equal(controllerIsConnected("connected", now - CONTROLLER_LEASE_MS, now), false);
   assert.equal(controllerIsConnected("pending", now, now), false);
+});
+
+test("usa polling rapido ma conserva un lease tollerante e descrive il feedback", () => {
+  assert.ok(REMOTE_HOST_POLL_MS <= 500);
+  assert.ok(REMOTE_CONTROLLER_POLL_MS <= 750);
+  assert.ok(CONTROLLER_LEASE_MS >= REMOTE_CONTROLLER_POLL_MS * 10);
+  assert.equal(remoteCommandFeedback("next"), "Passo successivo");
+  assert.equal(remoteCommandFeedback("help", { label: "Gesto" }), "Aiuto: Gesto");
 });
 
 test("costruisce e riconosce un link QR senza dati del bambino", () => {
