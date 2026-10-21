@@ -96,6 +96,7 @@
 
 ## Limitazioni note
 
+- La pronuncia automatica del primo prompt di `Numero quantità` può non partire a freddo se il motore `speechSynthesis` non ha ancora caricato le voci. Da affrontare attendendo `voiceschanged`, gestendo `onerror` e prevedendo un solo retry; verificare il primo turno dopo un caricamento completo sui browser target e mantenere il comando manuale “Tocca per riascoltare”.
 - Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
@@ -108,15 +109,16 @@
 
 ## Prossimi passi
 
-1. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
-2. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
-3. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
-4. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
-5. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
-6. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
-7. Definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
-8. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
-9. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
+1. Rendere affidabile la pronuncia del primo prompt di `Numero quantità` a motore vocale freddo e aggiungere una verifica browser del primo turno.
+2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
+4. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
+5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
+6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
+7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
+8. Definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
+9. Preparare ambienti Cloudflare separati e pipeline protetta di promozione verso produzione.
+10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
 
