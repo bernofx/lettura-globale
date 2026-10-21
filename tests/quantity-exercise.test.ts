@@ -26,10 +26,11 @@ test("produce etichette leggibili per voce e storico", () => {
 
 test("il timer è escluso dalla verifica e attivo nell'anteprima condivisa", () => {
   assert.equal(quantityIdleDecision("test", 2, 4, true), null);
-  assert.deepEqual(quantityIdleDecision("test", 2, 4, false, true), { correct: false, delayMs: 5000, method: "idle-wrong" });
-  assert.deepEqual(quantityIdleDecision("test", 4, 4, false, true, 6), { correct: true, delayMs: 6000, method: "idle-teaching" });
-  assert.deepEqual(quantityIdleDecision("teaching", 2, 4, true), { correct: false, delayMs: 5000, method: "idle-wrong" });
-  assert.deepEqual(quantityIdleDecision("teaching", 4, 4, true), { correct: true, delayMs: 3000, method: "idle-teaching" });
+  assert.deepEqual(quantityIdleDecision("test", 2, 4, false, true), { correct: false, delayMs: 5000, method: "idle-wrong", autoResolve: true });
+  assert.deepEqual(quantityIdleDecision("test", 4, 4, false, true, 6), { correct: true, delayMs: 6000, method: "idle-teaching", autoResolve: true });
+  assert.deepEqual(quantityIdleDecision("teaching", 2, 4, true), { correct: false, delayMs: 5000, method: "idle-wrong", autoResolve: true });
+  assert.deepEqual(quantityIdleDecision("teaching", 4, 4, true), { correct: true, delayMs: 5000, method: "idle-teaching", autoResolve: true });
+  assert.deepEqual(quantityIdleDecision("teaching", 2, 4, true, false, 7), { correct: false, delayMs: 7000, method: "idle-wrong", autoResolve: true });
+  assert.deepEqual(quantityIdleDecision("teaching", 4, 4, false), { correct: true, delayMs: 5000, method: "idle-teaching", autoResolve: false });
   assert.equal(quantityIdleDecision("teaching", 0, 4, true), null);
-  assert.equal(quantityIdleDecision("teaching", 4, 4, false), null);
 });

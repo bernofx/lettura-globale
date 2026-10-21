@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 20 ottobre 2026
+**Aggiornato:** 21 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
 - [x] `Numero quantità`: timer anche nei link condivisi, errore dopo cinque secondi di inattività in insegnamento, esiti ripetuti conservati, spunta verde e avanzamento solo con `Continua`; in valutazione conferma adulta immediata senza timer.
 - [x] Documentata la causa del `state_change_failed_batch` per lo storico di `Numero quantità` e aggiunta una verifica obbligatoria dei vincoli `CHECK` D1 storici quando si introducono nuove tipologie.
 - [x] Nuovo esercizio `Numero quantità`: bersaglio casuale 1–10, dieci oggetti vettoriali toccabili e deselezionabili, contatore, pronuncia, conferma adulta e completamento automatico opzionale solo in insegnamento. Configurazione e risultati persistono nello shadow relazionale D1 e nello storico senza immagini.

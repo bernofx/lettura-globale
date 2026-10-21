@@ -41,8 +41,9 @@ export function quantityAnswerLabel(answerId: string) {
   return `Richiesti ${match[1]} · selezionati ${match[2]} · ${method}`;
 }
 
-export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, successSeconds = 3) {
+export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, idleSeconds = 5) {
   if ((mode !== "teaching" && !sharedPreview) || selected === 0) return null;
-  if (selected !== target) return { correct: false, delayMs: 5000, method: "idle-wrong" as const };
-  return autoComplete || sharedPreview ? { correct: true, delayMs: Math.min(10, Math.max(1, successSeconds)) * 1000, method: "idle-teaching" as const } : null;
+  const delayMs = Math.min(10, Math.max(1, idleSeconds)) * 1000;
+  if (selected !== target) return { correct: false, delayMs, method: "idle-wrong" as const, autoResolve: true };
+  return { correct: true, delayMs, method: "idle-teaching" as const, autoResolve: autoComplete || sharedPreview };
 }

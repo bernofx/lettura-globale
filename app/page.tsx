@@ -1754,7 +1754,7 @@ function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode,
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
   const categoryNames = useMemo(() => Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
-  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantityIdleSeconds: 3 }));
+  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: Array.from(new Set(library.map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantityIdleSeconds: 5 }));
   const [quickSearch, setQuickSearch] = useState("");
   const [completionDraft, setCompletionDraft] = useState(completionComment);
   const sortedSequences = useMemo(() => [...sequences].sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.title.localeCompare(b.title, "it")), [sequences]);
@@ -1904,7 +1904,8 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
   const idleTimer = useRef<number | null>(null);
-  const feedbackTimer = useRef<number | null>(null);
+  const progressFill = useRef<HTMLSpanElement>(null);
+  const progressAnimation = useRef<Animation | null>(null);
   const resolving = useRef(false);
   const speakPrompt = useCallback(() => speakWord(prompt), [prompt]);
   const completeRound = useCallback((correct: boolean, method: QuantityAnswerMethod) => {
@@ -1914,12 +1915,6 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (!teachingFlow) { onComplete(); return; }
     setJudgement(correct ? "correct" : "wrong");
-    if (!correct) feedbackTimer.current = window.setTimeout(() => {
-      setSelected(new Set());
-      setJudgement(null);
-      resolving.current = false;
-      feedbackTimer.current = null;
-    }, 900);
   }, [itemId, judgement, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow]);
   const completeRoundRef = useRef(completeRound);
   useEffect(() => { completeRoundRef.current = completeRound; }, [completeRound]);
@@ -1929,9 +1924,11 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
     if (!decision) return;
     const restartTimer = () => {
       if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
+      progressAnimation.current?.cancel();
+      progressAnimation.current = progressFill.current?.animate?.([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: decision.delayMs, fill: "forwards", easing: "linear" }) ?? null;
       idleTimer.current = window.setTimeout(() => {
         idleTimer.current = null;
-        completeRoundRef.current(decision.correct, decision.method);
+        if (decision.autoResolve) completeRoundRef.current(decision.correct, decision.method);
       }, decision.delayMs);
     };
     window.addEventListener("pointerdown", restartTimer);
@@ -1942,12 +1939,19 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
       window.removeEventListener("keydown", restartTimer);
       if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
       idleTimer.current = null;
+      progressAnimation.current?.cancel();
+      progressAnimation.current = null;
     };
   }, [exercise.quantityAutoComplete, exercise.quantityIdleSeconds, judgement, mode, previewLabel, selected.size, target]);
   useEffect(() => () => {
     if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
-    if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current);
+    progressAnimation.current?.cancel();
   }, []);
+  const retry = () => {
+    setSelected(new Set());
+    setJudgement(null);
+    resolving.current = false;
+  };
   const toggle = (index: number) => {
     if (judgement) return;
     const willSelect = !selected.has(index);
@@ -1958,7 +1962,7 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   };
   return <div className="session-screen quantity-session">
     <div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Numero quantità</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div>
-    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><div className="quantity-count" aria-live="polite"><span>Obiettivo</span><strong>{target}</strong><small>{selected.size} selezionati</small></div></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} disabled={Boolean(judgement)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}{judgement && <i className={`quantity-result-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`} aria-label={judgement === "correct" ? "Numero corretto" : "Numero errato"}>{judgement === "correct" ? <Check /> : <X />}</i>}</div><div className="quantity-controls">{judgement === "correct" && teachingFlow ? <button type="button" className="primary-button quantity-continue" onClick={onComplete}><ChevronRight />Continua</button> : <><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(selected.size === target, "adult")} disabled={Boolean(judgement)}><Check />Numero corretto</button></>}</div>
+    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><div className="quantity-count" aria-live="polite"><span>Obiettivo</span><strong>{target}</strong><small>{selected.size} selezionati</small></div></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} disabled={Boolean(judgement)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}{judgement && <i className={`quantity-result-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`} role="status" aria-label={judgement === "correct" ? "Numero corretto" : "Numero errato"}>{judgement === "correct" ? <Check /> : <X />}</i>}</div>{quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3) && !judgement && <div className="quantity-time" aria-label={`Tempo di inattività: ${exercise.quantityIdleSeconds ?? 3} secondi`}><div className="quantity-time-track" aria-hidden="true"><span ref={progressFill} /></div></div>}<div className="quantity-controls">{judgement && teachingFlow ? <>{judgement === "wrong" && <button type="button" className="ghost-button" onClick={retry}>Riprova</button>}<button type="button" className="primary-button quantity-continue" onClick={onComplete}><ChevronRight />Continua</button></> : <><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(selected.size === target, "adult")} disabled={Boolean(judgement)}><Check />Numero corretto</button></>}</div>
   </div></div>;
 }
 
@@ -2521,7 +2525,7 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
   const [quantityMax, setQuantityMax] = useState(exercise?.quantityMax ?? 10);
   const [quantityObjectSet, setQuantityObjectSet] = useState<QuantityObjectSet>(exercise?.quantityObjectSet ?? "mixed");
   const [quantityAutoComplete, setQuantityAutoComplete] = useState(exercise?.quantityAutoComplete ?? true);
-  const [quantityIdleSeconds, setQuantityIdleSeconds] = useState(exercise?.quantityIdleSeconds ?? 3);
+  const [quantityIdleSeconds, setQuantityIdleSeconds] = useState(exercise?.quantityIdleSeconds ?? 5);
   const recognitionCandidates = availableForRecognition(library, exercisePresentation);
   const effectivePromptId = recognitionCandidates.some((item) => item.id === promptId) ? promptId : recognitionCandidates[0]?.id ?? "";
   const compatibleRandomCandidates = recognitionCandidates.filter((item) => (!recognitionCategories.length || recognitionCategories.includes(item.category)) && matchesSyllableFilter(item, recognitionSyllables));
@@ -2559,7 +2563,7 @@ function ExerciseBuilder({ kind, exercise, library, onClose, onSave }: { kind: S
     const safeMin = Math.min(10, Math.max(1, Math.trunc(quantityMin)));
     const safeMax = Math.min(10, Math.max(safeMin, Math.trunc(quantityMax)));
     const saveQuantityExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Numero quantità", kind: "number-quantity", promptId: "", optionIds: [], rounds: Math.min(50, Math.max(1, Math.trunc(rounds))), quantityMin: safeMin, quantityMax: safeMax, quantityObjectSet, quantityAutoComplete, quantityIdleSeconds: Math.min(10, Math.max(1, Math.trunc(quantityIdleSeconds))), updatedAt: new Date().toISOString(), deleted: false });
-    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Numero quantità</h2><p>Il bambino tocca il numero richiesto di oggetti. In valutazione l’adulto conferma sempre l’esito, senza timer.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Numero quantità" /></label><div className="builder-inline-fields"><label>Numero di turni<input type="number" min={1} max={50} value={rounds} onChange={(event) => setRounds(Number(event.target.value))} /></label><label>Quantità minima<input type="number" min={1} max={10} value={quantityMin} onChange={(event) => setQuantityMin(Number(event.target.value))} /></label><label>Quantità massima<input type="number" min={safeMin} max={10} value={quantityMax} onChange={(event) => setQuantityMax(Number(event.target.value))} /></label><label>Oggetti<select value={quantityObjectSet} onChange={(event) => setQuantityObjectSet(event.target.value as QuantityObjectSet)}><option value="mixed">Casuali a ogni turno</option><option value="candy">Caramelle</option><option value="ladybug">Coccinelle</option><option value="stone">Sassolini</option></select></label><label>Secondi di inattività per risposta corretta<input type="number" min={1} max={10} value={quantityIdleSeconds} onChange={(event) => setQuantityIdleSeconds(Number(event.target.value))} /></label></div><label className="check-line pronunciation-option"><input type="checkbox" checked={quantityAutoComplete} onChange={(event) => setQuantityAutoComplete(event.target.checked)} /><span><strong>Rileva automaticamente il numero corretto in insegnamento</strong><small>Dopo l’inattività mostra la spunta; il terapista preme Continua. Un numero errato viene invece segnalato e azzerato dopo 5 secondi senza interazioni. Il link condiviso usa sempre il timer.</small></span></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" onClick={saveQuantityExercise}><Save />Salva esercizio</button></div></div></div>;
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Numero quantità</h2><p>Il bambino tocca il numero richiesto di oggetti. In valutazione l’adulto conferma sempre l’esito, senza timer.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Numero quantità" /></label><div className="builder-inline-fields"><label>Numero di turni<input type="number" min={1} max={50} value={rounds} onChange={(event) => setRounds(Number(event.target.value))} /></label><label>Quantità minima<input type="number" min={1} max={10} value={quantityMin} onChange={(event) => setQuantityMin(Number(event.target.value))} /></label><label>Quantità massima<input type="number" min={safeMin} max={10} value={quantityMax} onChange={(event) => setQuantityMax(Number(event.target.value))} /></label><label>Oggetti<select value={quantityObjectSet} onChange={(event) => setQuantityObjectSet(event.target.value as QuantityObjectSet)}><option value="mixed">Casuali a ogni turno</option><option value="candy">Caramelle</option><option value="ladybug">Coccinelle</option><option value="stone">Sassolini</option></select></label><label>Secondi di inattività<input type="number" min={1} max={10} value={quantityIdleSeconds} onChange={(event) => setQuantityIdleSeconds(Number(event.target.value))} /></label></div><label className="check-line pronunciation-option"><input type="checkbox" checked={quantityAutoComplete} onChange={(event) => setQuantityAutoComplete(event.target.checked)} /><span><strong>Rileva automaticamente il numero corretto in insegnamento</strong><small>La barra mostra lo stesso tempo per risposte giuste ed errate. Dopo l’esito il terapista può proseguire; dopo un errore può anche far riprovare. Se disattivato, la risposta corretta richiede conferma adulta. Il link condiviso usa sempre il timer.</small></span></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" onClick={saveQuantityExercise}><Save />Salva esercizio</button></div></div></div>;
   }
   if (kind === "naming") {
     const categoryCandidates = library.filter((item) => hasArtwork(item) && (!namingCategories.length || namingCategories.includes(item.category)));
