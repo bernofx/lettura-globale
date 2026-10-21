@@ -85,6 +85,13 @@
       "when": 1792591800000,
       "tag": "0011_remote_session_controller",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792596000000,
+      "tag": "0012_sentence_matching",
+      "breakpoints": true
     }
   ]
 }

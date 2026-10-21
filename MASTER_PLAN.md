@@ -129,6 +129,8 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 
 Il prototipo include selezione esplicita del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`; la creazione delle sequenze resta nel pannello Configurazione. L'MVP pubblicato separa i controlli adulti tramite console mobile collegata con QR e ripristina i controlli locali se il telefono perde il lease. Con il telefono collegato l'adulto conferma ogni avanzamento e può navigare fra turni e attività, gestire audio, pausa, conclusione e aiuti e rimescolare le scelte di riconoscimento/categorizzazione; tutte le azioni sono tracciate. Il trasporto attuale usa D1 con polling ottimizzato e feedback immediato sui comandi; restano lo spike Durable Objects/WebSocket e l'hardening dei permessi prima del pilot. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 
+`Abbina la frase` estende le attività con scene soggetto + verbo: frase scritta e pronunciata, 2 o 4 immagini e difficoltà a uno o due gradi di libertà. La struttura dati riserva già il complemento per uno sviluppo successivo, senza esporlo nell’interfaccia corrente.
+
 ## ADR ancora necessari
 
 1. permessi distinti fra terapista e genitore, inviti e recupero accesso;

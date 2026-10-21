@@ -111,6 +111,27 @@ test("salva lo storico di Numero quantità senza violare il vincolo sui tipi del
   assert.equal(rebuilt.firstCorrect, false);
 });
 
+test("preserva scene ed esercizi Abbina la frase usando un tipo fisico compatibile", () => {
+  const state = {
+    schemaVersion: 1, therapists: [], children: [], sequences: [], attempts: [], helps: [], sessionHistory: [],
+    library: [{ id: "cat-eats", word: "Il gatto mangia", category: "Azioni", contentKind: "sentence", phraseStructure: "subject-verb", subject: "Il gatto", verb: "mangia", complement: "", image: "/images/actions/gatto-mangia.webp", source: "Test", license: "Interna", author: "Test" }],
+    exercises: [{ id: "sentences", title: "Abbina", kind: "sentence-matching", promptId: "", optionIds: [], sentenceItemIds: ["cat-eats"], sentenceOptionCount: 4, sentenceDifficulty: 2, rounds: 5, presentation: "images", autoPronounce: true, updatedAt: "2026-10-21T10:00:00Z" }],
+  };
+  const projection = projectLegacyState(state, "account-1", now);
+  assert.equal(projection.tables.exercises[0].kind, "recognition");
+  assert.equal(projection.tables.exercises[0].semantic_kind, "sentence-matching");
+  assert.equal(projection.tables.library_items[0].content_kind, "sentence");
+  const rebuilt = rebuildLegacyState(projection);
+  assert.deepEqual({
+    kind: rebuilt.exercises[0].kind,
+    ids: rebuilt.exercises[0].sentenceItemIds,
+    options: rebuilt.exercises[0].sentenceOptionCount,
+    difficulty: rebuilt.exercises[0].sentenceDifficulty,
+    subject: rebuilt.library[0].subject,
+    verb: rebuilt.library[0].verb,
+  }, { kind: "sentence-matching", ids: ["cat-eats"], options: 4, difficulty: 2, subject: "Il gatto", verb: "mangia" });
+});
+
 test("blocks relational reads when entity identities or revisions differ", () => {
   const state = { schemaVersion: 1, therapists: [], children: [], library: [{ id: "mela", word: "Mela", category: "Cibi" }], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
   const projection = projectLegacyState(state, "account-1", now);

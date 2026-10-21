@@ -23,7 +23,7 @@ export type SessionHistoryItem = {
   id: string;
   exerciseId: string;
   exerciseTitle: string;
-  kind: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
+  kind: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
   presentation?: "images" | "words";
   target?: HistoryImageSnapshot;
   options: HistoryImageSnapshot[];
@@ -48,7 +48,7 @@ export type SessionHistoryRecord = {
 };
 
 export function historyItemUsesArtwork(item: Pick<SessionHistoryItem, "kind" | "presentation">) {
-  return item.kind === "articles" || item.kind === "naming" || (item.kind === "recognition" && item.presentation !== "words");
+  return item.kind === "articles" || item.kind === "naming" || item.kind === "sentence-matching" || (item.kind === "recognition" && item.presentation !== "words");
 }
 
 type HistoryExercise = {

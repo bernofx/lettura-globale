@@ -2,8 +2,9 @@ import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor
 import { availableForRecognition, hasArtwork, type LibraryMediaItem } from "./library-availability.ts";
 import type { SyllableFilter } from "./syllabification.ts";
 import { createQuantityRounds, type QuantityObject, type QuantityObjectSet } from "./quantity-exercise.ts";
+import { createSentenceMatchingRounds, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./sentence-matching.ts";
 
-export type SessionActivity = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
+export type SessionActivity = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
 export type SessionExercise = {
   id: string;
   title: string;
@@ -26,6 +27,9 @@ export type SessionExercise = {
   quantityIdleSeconds?: number;
   quantityTarget?: number;
   quantityObject?: QuantityObject;
+  sentenceItemIds?: string[];
+  sentenceOptionCount?: SentenceOptionCount;
+  sentenceDifficulty?: SentenceDifficulty;
   distractorCount?: 1 | 2 | 3 | 4;
   distractorSource?: "mixed" | "same-category";
   presentation?: "images" | "words";
@@ -42,6 +46,11 @@ export type SessionPlanLibraryItem = LibraryMediaItem & {
   category: string;
   article?: "IL" | "LA" | null;
   syllableCount?: number;
+  contentKind?: "word" | "sentence";
+  phraseStructure?: PhraseStructure;
+  subject?: string;
+  verb?: string;
+  complement?: string;
 };
 
 export function completesSequenceExercise(current: SessionExercise | undefined, next: SessionExercise | undefined) {
@@ -108,6 +117,15 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
     if (kind === "number-quantity") {
       return createQuantityRounds({ rounds: exercise.rounds, min: exercise.quantityMin, max: exercise.quantityMax, objectSet: exercise.quantityObjectSet }, random)
         .map((item, index) => round(index, { quantityTarget: item.target, quantityObject: item.object }));
+    }
+
+    if (kind === "sentence-matching") {
+      return createSentenceMatchingRounds(library, {
+        rounds: exercise.rounds ?? 6,
+        optionCount: exercise.sentenceOptionCount ?? 2,
+        difficulty: exercise.sentenceDifficulty ?? 1,
+        allowedIds: exercise.sentenceItemIds,
+      }, random).map((item, index) => round(index, { promptId: item.promptId, optionIds: item.optionIds }));
     }
 
     const allowedIds = exercise.namingItemIds?.length ? new Set(exercise.namingItemIds) : null;

@@ -12,7 +12,6 @@ export type RemoteHostState = {
   pairingUrl: string;
   pendingAdultName: string;
   error: string;
-  approve: () => Promise<void>;
   refreshPairing: () => Promise<void>;
 };
 
@@ -113,14 +112,5 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
     void fetch(`/api/controller/session/${encodeURIComponent(sessionId)}`, { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "close" }) }).catch(() => undefined);
   }, [enabled, sessionId]);
 
-  const approve = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/controller/session/${encodeURIComponent(sessionId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve" }) });
-      if (!response.ok) throw new Error("Impossibile approvare questo telefono.");
-    } catch (error) {
-      setState((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : "Impossibile approvare questo telefono." }));
-    }
-  }, [sessionId]);
-
-  return { ...state, approve, refreshPairing: createPairing };
+  return { ...state, refreshPairing: createPairing };
 }

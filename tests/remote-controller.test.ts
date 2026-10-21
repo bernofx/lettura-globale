@@ -49,8 +49,8 @@ test("la migrazione conserva un solo controller e rende idempotenti i comandi", 
     VALUES (?, ?, ?, ?, ?, ?, 'connected', ?, 0, '{}', ?, ?)`)
     .run("account-1", "session-1", "child-1", "adult-1", "token-1", 99_999, "phone-1", 1, 1);
 
-  database.prepare("UPDATE remote_controller_sessions SET status = 'pending', controller_key_hash = ?, controller_last_seen_at = NULL WHERE account_id = ? AND session_id = ?")
-    .run("phone-2", "account-1", "session-1");
+  database.prepare("UPDATE remote_controller_sessions SET status = 'connected', controller_key_hash = ?, controller_last_seen_at = ? WHERE account_id = ? AND session_id = ?")
+    .run("phone-2", 2, "account-1", "session-1");
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_sessions WHERE controller_key_hash = ?").get("phone-1")?.count, 0);
   assert.equal(database.prepare("SELECT controller_key_hash FROM remote_controller_sessions WHERE account_id = ? AND session_id = ?").get("account-1", "session-1")?.controller_key_hash, "phone-2");
 

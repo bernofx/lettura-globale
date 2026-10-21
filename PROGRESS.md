@@ -93,6 +93,9 @@
 - [x] Prima fase delle scritture granulari: il browser invia solo entità e preferenze cambiate, con coda seriale, controllo ottimistico della revisione e retry idempotente registrato in D1; lo snapshot resta copia di rollback e alimenta ancora la proiezione relazionale.
 - [x] Cutover delle scritture relazionali: ogni operazione aggiorna direttamente e atomicamente le sole tabelle di dominio coinvolte, insieme a revisione, idempotenza e credenziali; il JSON resta un mirror di rollback e prima inizializzazione.
 - [x] Sincronizzazione della libreria tra dispositivi: salvataggio cloud immediato, recupero degli upload R2 rimasti locali e scritture dell’ordine suddivise entro il limite di parametri D1 anche con oltre 100 parole.
+- [x] Esercizio `Abbina la frase` per frasi semplici soggetto + verbo, con 2/4 immagini, uno o due gradi di libertà, pronuncia automatica, shuffle remoto e tracciamento del primo tentativo.
+- [x] Libreria riorganizzata in immagini singole, frasi e suoni; catalogo iniziale di 20 scene d’azione coerenti per gatto, cane, bimbo e mamma.
+- [x] Pairing QR senza conferma sul PC: l’ultimo telefono autenticato prende il controllo e il pannello QR si chiude alla connessione.
 
 ## Scelte di persistenza e costo
 
@@ -116,7 +119,7 @@
 
 ## Prossimi passi
 
-1. Aggiungere una verifica browser del primo turno di `Numero quantità` sui browser target.
+1. Eseguire QA browser su `Abbina la frase`, pairing QR automatico e primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso Cloudflare, senza deploy di produzione, includendo pairing a sessione iniziata, lease singolo, heartbeat, fallback desktop e replay alla riconnessione.
 4. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.

@@ -8,7 +8,7 @@ import { hasArtwork } from "../../domain/library-availability";
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
   id?: string;
-  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
+  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
   deleted?: boolean;
   promptId?: string;
   optionIds?: string[];
@@ -20,6 +20,7 @@ type SharedExercise = Record<string, unknown> & {
   recognitionSyllables?: SyllableFilter;
   namingItemIds?: string[];
   namingCategories?: string[];
+  sentenceItemIds?: string[];
 };
 type StoredState = {
   library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; image?: unknown; emoji?: unknown; deleted?: boolean }>;
@@ -59,6 +60,10 @@ export async function POST(request: Request) {
     }
     else if (exercise.kind === "number-quantity") {
       // This exercise uses vector objects and needs no library assets.
+    }
+    else if (exercise.kind === "sentence-matching") {
+      if (exercise.sentenceItemIds?.length) exercise.sentenceItemIds.forEach((id) => referencedIds.add(id));
+      else availableLibrary.forEach((item) => { if (item.id && item.contentKind === "sentence") referencedIds.add(item.id); });
     }
     else if (exercise.recognitionMode === "random") {
       if (exercise.promptId) referencedIds.add(exercise.promptId);

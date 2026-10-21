@@ -11,7 +11,7 @@ export type ProgressCsvAttempt = {
 export type ProgressCsvExercise = {
   id: string;
   title: string;
-  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
+  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
   promptId?: string;
 };
 
@@ -25,6 +25,7 @@ const kindLabels: Record<ProgressKind, string> = {
   "word-categories": "Parola nella categoria",
   naming: "Mix and vary",
   "number-quantity": "Numero quantità",
+  "sentence-matching": "Abbina la frase",
 };
 
 function excelSafeText(value: unknown) {
