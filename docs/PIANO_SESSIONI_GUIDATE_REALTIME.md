@@ -1,6 +1,6 @@
-# Piano futuro — Sessioni guidate e console realtime
+# Piano — Sessioni guidate e console realtime
 
-**Stato:** procedura guidata implementata nel prototipo; console realtime e pairing ancora pianificati  
+**Stato:** MVP QR/D1 implementato sul branch `feat/qr-session-controller`, migrazione e deploy non ancora applicati
 **Origine:** audit tecnico Fase 0 del 17 ottobre 2026  
 **Vincolo:** nessun deploy Cloudflare di produzione senza approvazione esplicita
 
@@ -18,14 +18,14 @@ Separare l'interfaccia mostrata al bambino dai controlli dell'adulto. Il PC pres
 - configurazione di turni, distrattori e presentazione, con schermata finale `PRONTI?`;
 - riepilogo al termine e salvataggio facoltativo dell'avvio rapido come sequenza.
 
-Queste funzioni usano ancora lo snapshot D1 corrente. Il modello relazionale, il pairing QR, la console mobile e la separazione completa dei controlli adulto restano oggetto delle fasi successive descritte qui sotto.
+Il branch dell'MVP aggiunge pairing QR autenticato, console mobile, lease con heartbeat, registro ordinato dei comandi e fallback locale. Usa polling breve su D1; lo spike Durable Objects/WebSocket e la migrazione completa dello storico restano fasi successive.
 
 ## Esperienza prevista
 
 1. L'adulto seleziona esplicitamente bambino e attività o sequenza.
 2. Il PC mostra una schermata neutra `PRONTI?`, senza stimoli.
 3. L'adulto sceglie se collegare un telefono o usare i controlli sul PC.
-4. Il collegamento mobile usa un QR con token monouso, scadenza breve e approvazione dal PC.
+4. Il collegamento mobile usa un QR limitato alla singola sessione, con token casuale a scadenza breve e approvazione dal PC.
 5. Durante l'attività il bambino vede soltanto il materiale dell'esercizio.
 6. Quando il telefono è collegato, ogni cambio di turno o attività richiede una conferma esplicita dell'adulto: il PC non avanza automaticamente dopo la risposta del bambino.
 7. La console adulta gestisce aiuti, riascolto, audio, pausa, correzione, riordino delle scelte, navigazione e conclusione.
@@ -56,7 +56,7 @@ I comandi devono essere definiti una sola volta nella state machine condivisa. L
 - Durante tutta la sessione il PC mostra in un angolo un QR discreto per collegare o ricollegare il telefono senza coprire lo stimolo.
 - Accanto al QR compare un indicatore di stato con almeno: non collegato, collegamento in corso, collegato e connessione persa.
 - Un pallino verde indica che la console mobile è collegata e ha il lease di controllo attivo; lo stato non deve basarsi soltanto sull'apertura della pagina, ma su heartbeat e conferma del coordinatore realtime.
-- È ammesso un solo controller mobile attivo per sessione. Un nuovo collegamento richiede conferma e revoca il lease precedente in modo esplicito.
+- È ammesso un solo controller mobile attivo per sessione. Se due telefoni tentano di collegarsi, vince l'ultimo: la nuova richiesta valida revoca immediatamente chiave e lease del controller precedente, viene mostrata sul PC per l'approvazione ed è registrata nell'audit.
 - Il pairing può avvenire prima dell'avvio o durante una sessione già in corso. Il telefono riceve lo snapshot del turno corrente e l'ultimo `server_sequence` confermato.
 - La perdita del collegamento non interrompe né fa avanzare la sessione: il PC rende nuovamente disponibili i controlli locali con il comportamento attuale.
 - Alla riconnessione il telefono esegue il replay degli eventi mancanti, recupera il turno corrente e torna a controllare la sessione senza duplicare comandi già confermati.
@@ -86,7 +86,7 @@ Prima del pairing occorre sostituire l'autorizzazione implicita basata sul propr
 - verifica dell'accesso al bambino su ogni API;
 - password/PIN con algoritmo dedicato, salt, rate limit e revoca delle sessioni;
 - audit delle operazioni amministrative e degli accessi alle sessioni;
-- token di pairing memorizzati solo come hash, monouso e senza dati del bambino nell'URL.
+- token di pairing memorizzati solo come hash, limitati alla singola sessione, a scadenza breve e senza dati del bambino nell'URL; un riuso valido applica la regola “vince l'ultimo” e richiede una nuova approvazione sul PC.
 
 ## Modello dati proposto
 
@@ -123,7 +123,7 @@ Vincoli minimi:
 
 D1 rimane l'archivio durevole e R2 il deposito privato delle immagini. Un coordinatore realtime per sessione serializza i comandi, assegna l'ordine server, salva l'evento prima della conferma e aggiorna PC e telefono. Gestisce inoltre il lease dell'unico controller mobile, l'heartbeat, il passaggio automatico al fallback desktop e il replay alla riconnessione.
 
-La prima opzione da verificare è un Durable Object Cloudflare con WebSocket. Il progetto viene ora distribuito direttamente con Cloudflare Workers Builds da GitHub, ma la configurazione corrente espone soltanto D1 e R2 e non include ancora binding Durable Objects né migrazioni delle relative classi. Prima dell'implementazione serve quindi uno spike tecnico sulla pipeline attuale. Se integrare il coordinatore nello stesso Worker rendesse fragile il deploy dell'applicazione, usare un Worker Cloudflare realtime separato con autenticazione coordinata. Il polling resta soltanto un fallback MVP.
+L'MVP usa polling breve su D1 per non introdurre nuovi binding nel deploy corrente. La prima evoluzione da verificare è un Durable Object Cloudflare con WebSocket. Se integrare il coordinatore nello stesso Worker rendesse fragile il deploy dell'applicazione, usare un Worker Cloudflare realtime separato con autenticazione coordinata.
 
 Il pannello adulto sul PC deve inviare gli stessi comandi della console mobile, evitando due implementazioni diverse della logica di sessione.
 
@@ -145,14 +145,11 @@ Il pannello adulto sul PC deve inviare gli stessi comandi della console mobile, 
 
 ## Ordine di realizzazione
 
-1. Approvare le decisioni di prodotto e gli ADR.
-2. Eseguire lo spike realtime senza deploy di produzione.
-3. Rafforzare autenticazione, autorizzazioni e relazione adulto-bambino.
-4. Introdurre sessioni, trial ed eventi relazionali e idempotenti.
-5. Estrarre una state machine condivisa e aggiungere il nuovo flusso PC.
-6. Implementare pairing QR e console mobile.
-7. Aggiungere riepilogo, statistiche e migrazione dello storico.
-8. Verificare riconnessione, replay, doppio tap, accessibilità e uso con due dispositivi.
+1. Approvare l'ADR 0012 e applicare la migrazione D1 0011 in modo esplicito.
+2. Verificare l'MVP con due browser/dispositivi, inclusi sostituzione del controller, riconnessione, doppio tap e accessibilità.
+3. Eseguire lo spike Durable Objects/WebSocket senza deploy di produzione.
+4. Estrarre una state machine condivisa anche per i controlli locali sul PC.
+5. Aggiungere gli eventi di controllo al riepilogo e completare la migrazione relazionale dello storico.
 
 ## Criteri di completamento
 
@@ -165,7 +162,7 @@ Il pannello adulto sul PC deve inviare gli stessi comandi della console mobile, 
 - ogni comando adulto rilevante è attribuito, ordinato e ricostruibile nello storico tecnico;
 - un terapista può operare soltanto sui bambini assegnati;
 - il primo tentativo rimane unico anche dopo retry, refresh o riconnessione;
-- token scaduti, riutilizzati o appartenenti ad altri utenti vengono rifiutati;
+- token scaduti o appartenenti ad altri utenti vengono rifiutati; il riuso valido nella stessa sessione sostituisce il controller precedente e richiede approvazione;
 - telefono e PC recuperano lo stato corretto dopo una disconnessione;
 - la modalità adulto sul PC e quella mobile producono gli stessi eventi;
 - test unitari, API, sicurezza ed E2E con due browser sono inclusi nella CI;

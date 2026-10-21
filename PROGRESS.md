@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Sul branch `feat/qr-session-controller`, MVP della console adulta da telefono: QR autenticato, approvazione sul PC, heartbeat/lease, comandi ordinati e idempotenti in D1, blocco dell'avanzamento automatico mentre il telefono è connesso, shuffle, aiuti, audio, pausa e navigazione. Un nuovo telefono revoca immediatamente il precedente (“vince l'ultimo”) e la perdita della connessione ripristina i controlli locali senza cambiare turno. Migrazione `0011` e deploy restano da approvare e applicare separatamente.
 - [x] Pronuncia iniziale di `Numero quantità` resa affidabile a motore vocale freddo: attesa di `voiceschanged`, timeout controllato, un solo retry su errore e comando manuale di riascolto conservato.
 - [x] Export CSV compatibile con Excel italiano: UTF-16LE con BOM, separatore dichiarato `;`, righe CRLF, escape completo e neutralizzazione delle formule; nello stesso file include riepiloghi per competenza e parola × competenza, con Valutazione e Insegnamento separate e stato descrittivo basato sui primi tentativi.
 - [x] Aspetto ampliato a sette palette e quattro forme, con sette preset incluso `Lettura Globale`, ispirato al giallo, blu notte e azzurro dell’icona applicativa; migrazione `0010` forward-only per estendere i vincoli delle preferenze D1 già distribuite.
