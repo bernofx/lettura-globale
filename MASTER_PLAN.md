@@ -60,9 +60,9 @@ Configurazione iniziale proposta per la valutazione: OpenAI Images API con model
 - API versionate e convalida degli input al confine server;
 - ambienti dev, staging e prod completamente separati.
 
-La demo è pubblicata tramite ChatGPT Sites su runtime Cloudflare Workers. La pagina iniziale e le anteprime condivise sono pubbliche, mentre pannello e dati privati richiedono la sessione dell'applicazione. D1 conserva lo stato per account, le credenziali dei profili adulto e gli snapshot minimali delle anteprime protetti da token casuali; R2 conserva le immagini e le rende disponibili all’anteprima soltanto tramite il relativo token. Il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i profili adulti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Il terapista consulta le sessioni che ha condotto, mentre genitore e supervisore consultano tutte le sessioni dei bambini associati; l’amministratore ha visibilità completa e, nella fase di prova, può cancellare logicamente gli storici. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
+La demo è pubblicata direttamente su Cloudflare Workers. La pagina iniziale e le anteprime condivise sono pubbliche, mentre pannello e dati privati richiedono la sessione dell'applicazione. D1 conserva lo stato per account, le credenziali dei profili adulto e gli snapshot minimali delle anteprime protetti da token casuali; R2 conserva le immagini e le rende disponibili all’anteprima soltanto tramite il relativo token. Il browser mantiene una copia locale per reattività e migrazione. Il PIN seleziona il profilo adulto all'interno dell'account e non sostituisce l'identità principale. Un amministratore crea i profili adulti e li associa ai bambini; lo stesso bambino può essere condiviso da più terapisti senza duplicarne dati e storico. Il terapista consulta le sessioni che ha condotto, mentre genitore e supervisore consultano tutte le sessioni dei bambini associati; l’amministratore ha visibilità completa e, nella fase di prova, può cancellare logicamente gli storici. Nessun dato reale di minori è ammesso prima della privacy review e del pilot approvato.
 
-La demo viene aggiornata su ChatGPT Sites durante lo sviluppo. La pubblicazione autonoma su Cloudflare resta sospesa fino a quando il prodotto sarà stabile e consolidato; a quel punto Workers, D1 e R2 saranno promossi attraverso ambienti separati e una pipeline approvata. Lo snapshot JSON attuale riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
+La demo è pubblicata direttamente su Cloudflare Workers e gli aggiornamenti applicativi di `main` vengono distribuiti da Cloudflare Workers Builds secondo l'ADR 0011. D1 e R2 esistenti restano collegati al Worker e le migrazioni D1 richiedono un passaggio esplicito separato. La separazione completa staging/produzione e la promozione protetta restano necessarie prima di usare dati reali. Lo snapshot JSON attuale riduce query e costi nella fase iniziale; il passaggio a tabelle relazionali separate avverrà soltanto quando concorrenza, ricerca o volume lo renderanno necessario.
 
 ## Dati essenziali
 
@@ -134,7 +134,7 @@ Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, 
 1. permessi distinti fra terapista e genitore, inviti e recupero accesso;
 2. provider stock e licenze;
 3. pipeline definitiva di resize e varianti immagini;
-4. CI/CD definitiva e promozione fra ambienti Cloudflare;
+4. promozione protetta fra ambienti Cloudflare separati;
 5. tipi di esercizio e catalogo aiuti;
 6. retention, RPO/RTO e backup;
 7. osservabilità e browser supportati;
