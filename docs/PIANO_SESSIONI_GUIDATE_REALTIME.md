@@ -1,6 +1,6 @@
 # Piano — Sessioni guidate e console realtime
 
-**Stato:** MVP QR/D1 implementato sul branch `feat/qr-session-controller`, migrazione e deploy non ancora applicati
+**Stato:** MVP QR/D1 pubblicato; ottimizzazione del polling e feedback dei comandi implementati
 **Origine:** audit tecnico Fase 0 del 17 ottobre 2026  
 **Vincolo:** nessun deploy Cloudflare di produzione senza approvazione esplicita
 
@@ -18,7 +18,7 @@ Separare l'interfaccia mostrata al bambino dai controlli dell'adulto. Il PC pres
 - configurazione di turni, distrattori e presentazione, con schermata finale `PRONTI?`;
 - riepilogo al termine e salvataggio facoltativo dell'avvio rapido come sequenza.
 
-Il branch dell'MVP aggiunge pairing QR autenticato, console mobile, lease con heartbeat, registro ordinato dei comandi e fallback locale. Usa polling breve su D1; lo spike Durable Objects/WebSocket e la migrazione completa dello storico restano fasi successive.
+L'MVP include pairing QR autenticato, console mobile, lease con heartbeat, registro ordinato dei comandi e fallback locale. Usa polling breve su D1: il PC interroga i comandi ogni 450 ms con una sola richiesta e sincronizza lo snapshot soltanto quando cambia; la console aggiorna lo stato ogni 650 ms. I tasti mostrano pressione, invio, conferma ed errore e usano una breve vibrazione sui dispositivi compatibili. Lo spike Durable Objects/WebSocket e la migrazione completa dello storico restano fasi successive.
 
 ## Esperienza prevista
 

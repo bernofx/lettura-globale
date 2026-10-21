@@ -1,5 +1,7 @@
 export const PAIRING_DURATION_MS = 10 * 60 * 1000;
 export const CONTROLLER_LEASE_MS = 8 * 1000;
+export const REMOTE_HOST_POLL_MS = 450;
+export const REMOTE_CONTROLLER_POLL_MS = 650;
 
 export const remoteCommandNames = [
   "next",
@@ -32,6 +34,28 @@ export type RemoteControllerEvent = RemoteCommand & {
   adultId: string;
   createdAt: number;
 };
+
+const remoteCommandLabels: Record<RemoteCommandName, string> = {
+  next: "Passo successivo",
+  previous: "Passo precedente",
+  next_activity: "Tipo successivo",
+  previous_activity: "Tipo precedente",
+  shuffle: "Mischia",
+  speak: "Riascolta",
+  toggle_audio: "Audio",
+  pause: "Pausa",
+  resume: "Riprendi",
+  end: "Interrompi sessione",
+  help: "Aiuto",
+  mark_correct: "Risposta corretta",
+  mark_wrong: "Risposta errata",
+  mark_helped: "Corretta con aiuto",
+  retry: "Riprova",
+};
+
+export function remoteCommandFeedback(command: RemoteCommandName, payload?: { label?: string }) {
+  return command === "help" && payload?.label ? `Aiuto: ${payload.label}` : remoteCommandLabels[command];
+}
 
 export type RemoteSessionSnapshot = {
   sessionId: string;
