@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Stato cloud reso semanticamente corretto: un refresh di sola lettura fallito non mostra più il falso allarme rosso “Non salvato nel cloud” quando la revisione locale coincide con l’ultima confermata; journal esteso con `refresh_failed` e `cloud_load_failed`, stato HTTP e codice errore.
 - [x] Libreria resa compatta per impostazione predefinita: immagini singole e frasi mostrano quattro schede con espansione esplicita, mentre ricerca e filtro mostrano tutti i risultati. Le preferenze dei quattro suoni passano dal solo dispositivo allo stato cloud dell’account, recuperando la configurazione locale storica e mantenendo la coda offline. Verificata inoltre la presenza delle 20 immagini d’azione nell’output distribuito e rinnovata la cache PWA.
 - [x] Console QR resa più reattiva: il PC legge i comandi ogni 450 ms con una sola richiesta, mentre lo snapshot viene scritto soltanto quando cambia; il telefono aggiorna lo stato ogni 650 ms. Ogni tasto offre ora feedback immediato alla pressione, vibrazione quando supportata e stati accessibili di invio, conferma o errore.
 - [x] MVP della console adulta da telefono pubblicato: QR autenticato, approvazione sul PC, heartbeat/lease, comandi ordinati e idempotenti in D1, blocco dell'avanzamento automatico mentre il telefono è connesso, shuffle, aiuti, audio, pausa e navigazione. Un nuovo telefono revoca immediatamente il precedente (“vince l'ultimo”) e la perdita della connessione ripristina i controlli locali senza cambiare turno. Migrazione `0011` applicata in produzione.
