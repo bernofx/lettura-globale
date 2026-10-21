@@ -84,6 +84,7 @@
 - [x] Navigazione avanti/indietro per singolo turno in tutti gli esercizi, feedback verde uniforme per IL/LA e categorie, trascinamento touch anche nelle attività con sole parole.
 - [x] Avvio rapido temporaneo per tutte le tipologie, con elementi casuali, categorie o scelta manuale, turni configurabili e salvataggio facoltativo come sequenza.
 - [x] UI responsive desktop, tablet e smartphone; manifest e service worker PWA.
+- [x] Shell iniziale pre-renderizzata e servita come asset statico su Cloudflare; le API restano dinamiche e il caricamento di `/` non dipende dal limite CPU del Worker.
 - [x] Prima fase della migrazione relazionale D1: schema additivo, proiezione idempotente dello snapshot per account, revisione/checksum, tombstone per riferimenti storici e compatibilità completa con il JSON durante il periodo shadow.
 - [x] Seconda fase della migrazione relazionale: ricostruzione completa del formato applicativo dalle tabelle, conservazione esplicita di opzioni/risposte/aiuti storici e diagnostica autenticata di revisioni e conteggi; letture applicative ancora sullo snapshot fino alla verifica del D1 pubblicato.
 - [x] Cutover controllato delle letture D1: ordine delle raccolte persistito, confronto per revisione e identificativi, uso automatico delle tabelle quando allineate e fallback trasparente allo snapshot in caso di errore o differenza.
