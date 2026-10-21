@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] La pronuncia automatica del primo turno di un esercizio in sequenza attende la chiusura della schermata “Prossimo esercizio”.
+
 - [x] Libreria audio privata per account: upload MP3 categorizzati nei quattro momenti, storage R2 e metadati D1, ascolto/rimozione nella Libreria e scelta contestuale in `Aspetto e suoni`, senza nuovo deploy per aggiungere file. Migrazione 0010 e test di separazione fra account.
 - [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.

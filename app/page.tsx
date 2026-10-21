@@ -25,6 +25,7 @@ import { appendSaveJournal, readSaveJournal } from "./domain/save-journal";
 import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type QuantityAnswerMethod, type QuantityObject, type QuantityObjectSet } from "./domain/quantity-exercise";
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { customSoundChoice, customSoundId, maxSoundBytes, maxSoundDurationSeconds, minSoundBytes, soundCueLabels, type SoundLibraryItem } from "./domain/sound-library";
+import { shouldAutoPronouncePrompt } from "./domain/prompt-audio";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -1288,12 +1289,12 @@ export default function HomePage() {
 
   useEffect(() => {
     const shouldAutoPronounce = currentExercise?.autoPronounce ?? currentPresentation === "words";
-    if (!sessionActive || !currentExercise || exerciseKind(currentExercise) !== "recognition" || !shouldAutoPronounce || !promptWord) return;
+    if (!currentExercise || !promptWord || !shouldAutoPronouncePrompt({ sessionActive, awaitingNextExercise, isRecognition: exerciseKind(currentExercise) === "recognition", enabled: shouldAutoPronounce, promptWord })) return;
     const promptKey = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
     if (spokenPromptKey.current === promptKey) return;
     spokenPromptKey.current = promptKey;
     speakWord(promptWord);
-  }, [sessionActive, currentExercise, currentPresentation, sessionIndex, sessionRunId, promptWord]);
+  }, [sessionActive, awaitingNextExercise, currentExercise, currentPresentation, sessionIndex, sessionRunId, promptWord]);
 
   useEffect(() => {
     if (sessionActive) window.scrollTo({ top: 0, behavior: "auto" });
