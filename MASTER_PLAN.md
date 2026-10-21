@@ -127,7 +127,7 @@ PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettaz
 
 ### M7 — Sessioni guidate e console realtime *(wizard completato; realtime pianificato)*
 
-Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`; la creazione delle sequenze resta nel pannello Configurazione. Restano da realizzare l'interfaccia bambino priva di controlli adulto, la console mobile collegata tramite QR e il fallback adulto protetto sul PC. Queste parti richiedono autorizzazioni server-side granulari, sessioni ed eventi relazionali in D1 e uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
+Il prototipo include ora selezione esplicita del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`; la creazione delle sequenze resta nel pannello Configurazione. Restano da realizzare l'interfaccia bambino priva di controlli adulto, la console mobile collegata tramite QR e il fallback adulto protetto sul PC. Con il telefono collegato l'adulto conferma ogni avanzamento e può navigare fra turni e attività, gestire audio, pausa, conclusione e aiuti e rimescolare le scelte di riconoscimento/categorizzazione; tutte le azioni sono tracciate. Il telefono può collegarsi durante la sessione e, se perde la connessione, il PC torna al comportamento attuale fino alla riconnessione. Queste parti richiedono autorizzazioni server-side granulari, sessioni ed eventi relazionali in D1 e uno spike sul supporto Durable Objects/WebSocket nel flusso Cloudflare. Dettagli e ordine di realizzazione sono in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 
 ## ADR ancora necessari
 

@@ -116,7 +116,7 @@
 
 1. Aggiungere una verifica browser del primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
-3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
+3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso Cloudflare, senza deploy di produzione, includendo pairing a sessione iniziata, lease singolo, heartbeat, fallback desktop e replay alla riconnessione.
 4. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
 5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
