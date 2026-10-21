@@ -2,7 +2,7 @@ export const SAVE_JOURNAL_KEY = "lg-save-journal-v1";
 
 export type SaveJournalEntry = {
   at: string;
-  event: "sequence_changed" | "save_started" | "save_succeeded" | "save_failed" | "save_rebased" | "cloud_loaded";
+  event: "sequence_changed" | "save_started" | "save_succeeded" | "save_failed" | "save_rebased" | "cloud_loaded" | "cloud_load_failed" | "refresh_failed";
   operationId?: string;
   diagnosticId?: string;
   revision?: number;
