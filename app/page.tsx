@@ -425,6 +425,20 @@ function Artwork({ item, compact = false, eager = false }: { item: LibraryItem; 
   return <span className={compact ? "word-only-art compact" : "word-only-art"}><BookOpenCheck aria-hidden="true" /><small>Solo parola</small></span>;
 }
 
+const preloadedArtwork = new Map<string, HTMLImageElement>();
+
+function preloadArtwork(items: LibraryItem[]) {
+  if (typeof window === "undefined") return;
+  items.forEach((item) => {
+    if (!item.image || preloadedArtwork.has(item.image)) return;
+    const image = new window.Image();
+    image.decoding = "async";
+    image.src = item.image;
+    preloadedArtwork.set(item.image, image);
+    void image.decode?.().catch(() => undefined);
+  });
+}
+
 async function hashPin(pin: string) {
   const bytes = new TextEncoder().encode(pin);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -1337,12 +1351,19 @@ export default function HomePage() {
   useEffect(() => {
     const kind = currentExercise ? exerciseKind(currentExercise) : undefined;
     const shouldAutoPronounce = kind === "sentence-matching" || (currentExercise?.autoPronounce ?? currentPresentation === "words");
-    if (!sessionActive || !currentExercise || (kind !== "recognition" && kind !== "sentence-matching") || !shouldAutoPronounce || !promptWord) return;
+    if (!sessionActive || awaitingNextExercise || !currentExercise || (kind !== "recognition" && kind !== "sentence-matching") || !shouldAutoPronounce || !promptWord) return;
     const promptKey = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
     if (spokenPromptKey.current === promptKey) return;
     spokenPromptKey.current = promptKey;
     speakWord(promptWord);
-  }, [sessionActive, currentExercise, currentPresentation, sessionIndex, sessionRunId, promptWord]);
+  }, [sessionActive, awaitingNextExercise, currentExercise, currentPresentation, sessionIndex, sessionRunId, promptWord]);
+
+  useEffect(() => {
+    if (!sessionActive) return;
+    const sentenceArtworkIds = new Set(sessionExercises.flatMap((exercise) => exerciseKind(exercise) === "sentence-matching" ? [exercise.promptId, ...exercise.optionIds] : []).filter((id): id is string => Boolean(id)));
+    if (!sentenceArtworkIds.size) return;
+    preloadArtwork(sessionLibrary.filter((item) => sentenceArtworkIds.has(item.id)));
+  }, [sessionActive, sessionExercises, sessionLibrary]);
 
   useEffect(() => {
     if (sessionActive) window.scrollTo({ top: 0, behavior: "auto" });
@@ -2413,9 +2434,39 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
 
 function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const [sentenceDragOffset, setSentenceDragOffset] = useState({ x: 0, y: 0, active: false });
+  const sentenceDragStart = useRef<{ x: number; y: number } | null>(null);
+  const sentenceDragMoved = useRef(false);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useRemoteComponentCommand((event) => { if (event.command === "shuffle") setOptionIds((current) => shuffled(current)); });
+  const resetSentenceDrag = () => {
+    sentenceDragStart.current = null;
+    setSentenceDragOffset({ x: 0, y: 0, active: false });
+  };
+  const startSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (answerState === "correct") return;
+    sentenceDragMoved.current = false;
+    sentenceDragStart.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!sentenceDragStart.current) return;
+    const x = event.clientX - sentenceDragStart.current.x;
+    const y = event.clientY - sentenceDragStart.current.y;
+    if (!sentenceDragMoved.current && Math.hypot(x, y) < 7) return;
+    sentenceDragMoved.current = true;
+    event.preventDefault();
+    setSentenceDragOffset({ x, y, active: true });
+  };
+  const finishSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const moved = sentenceDragMoved.current;
+    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-answer-id]") : null;
+    const answerId = target?.dataset.answerId;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    resetSentenceDrag();
+    if (moved && answerId) onChoose(answerId);
+  };
   useEffect(() => {
     if (answerState !== "correct" || manualAdvance) return;
     const timer = window.setTimeout(() => onNextRef.current(), 750);
@@ -2428,13 +2479,27 @@ function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, cu
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="session-body">
-      <p className="instruction">Ascolta e tocca l’immagine che corrisponde alla frase.</p>
-      <button type="button" className="sentence-prompt" onClick={() => speakWord(prompt.word)} aria-label={`${prompt.word}. Tocca per ascoltare`}><strong>{prompt.word}</strong><Volume2 /><small>Tocca per riascoltare</small></button>
+      <p className="instruction">Tocca l’immagine corretta oppure trascina la frase sopra l’immagine.</p>
+      <button
+        type="button"
+        className={`sentence-prompt ${sentenceDragOffset.active ? "pointer-dragging" : ""}`}
+        style={sentenceDragOffset.active ? { transform: `translate3d(${sentenceDragOffset.x}px, ${sentenceDragOffset.y}px, 0)` } : undefined}
+        disabled={answerState === "correct"}
+        onClick={(event) => {
+          if (sentenceDragMoved.current) { sentenceDragMoved.current = false; event.preventDefault(); return; }
+          speakWord(prompt.word);
+        }}
+        onPointerDown={startSentenceDrag}
+        onPointerMove={moveSentenceDrag}
+        onPointerUp={finishSentenceDrag}
+        onPointerCancel={() => { sentenceDragMoved.current = false; resetSentenceDrag(); }}
+        aria-label={`${prompt.word}. Trascina la frase sull’immagine corretta oppure tocca per ascoltarla`}
+      ><strong>{prompt.word}</strong><Volume2 /><small>Trascina sulle immagini · tocca per riascoltare</small></button>
       <div className={`answer-grid sentence-answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
         const item = library.find((candidate) => candidate.id === id);
         if (!item) return null;
         const status = answerState === "correct" && id === prompt.id ? "correct" : wrongAnswerId === id ? "wrong" : "";
-        return <button type="button" data-answer-id={id} aria-label={`Immagine: ${item.word}`} className={`answer-card sentence-answer-card ${status}`} disabled={answerState === "correct"} key={id} onClick={() => onChoose(id)}><span className="answer-art"><Artwork item={item} /></span>{status === "correct" && <i><Check /></i>}</button>;
+        return <button type="button" data-answer-id={id} aria-label={`Immagine: ${item.word}`} className={`answer-card sentence-answer-card ${status}`} disabled={answerState === "correct"} key={id} onClick={() => onChoose(id)}><span className="answer-art"><Artwork item={item} eager /></span>{status === "correct" && <i><Check /></i>}</button>;
       })}</div>
       {answerState === "wrong" && <div className="feedback wrong"><strong>Riprova</strong><small>Guarda bene chi compie l’azione e che cosa sta facendo.</small></div>}
       {answerState === "correct" && <div className="feedback correct"><span>Ben fatto!</span>{manualAdvance && <small>Il terapista passa al prossimo turno dal telefono.</small>}</div>}
