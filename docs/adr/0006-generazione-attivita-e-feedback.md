@@ -19,6 +19,7 @@ Configurare un esercizio distinto per ogni parola rendeva rigida la programmazio
 - Gli effetti corretti ed errati sono sintetizzati localmente con Web Audio API. L'adulto può disattivarli; la preferenza resta nel browser. Nella modalità solo parole il suono positivo precede la sintesi vocale per evitare sovrapposizioni.
 - Il formato salvato rimane additivo e compatibile con gli esercizi precedenti. Non sono necessarie nuove tabelle o nuovi oggetti R2.
 - Le quattro scelte audio globali (corretto, errato, fine esercizio nella sequenza, selezione in `Numero quantità`) usano un elenco fisso di asset inclusi e brevi varianti Web Audio. Si salvano nel browser, come l'interruttore dei suoni; il caricamento di asset da libreria richiederà una decisione separata su upload, limiti e sincronizzazione.
+- La sintesi vocale attende il caricamento delle voci del browser al primo utilizzo, conserva il comando manuale per riascoltare e ritenta una sola volta dopo un errore. Una nuova richiesta annulla quella precedente senza far avanzare il turno annullato.
 - La fine di una sequenza regolare attiva una decorazione trasparente CSS non interattiva di sei secondi; i movimenti sono ridotti se il sistema richiede animazioni ridotte.
 
 ## Conseguenze
