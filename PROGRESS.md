@@ -134,6 +134,7 @@
 
 ## Verifiche della versione corrente
 
+- `Abbina la frase` usa contenitori 4:3, accetta il trascinamento della frase sull'immagine, precarica le scene della sessione e avvia la voce del turno successivo solo dopo la conferma della schermata di passaggio.
 - Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.
 - Ogni esercizio `Trova la parola` salva la propria presentazione (`Foto + parole` oppure `Solo parole con voce`), quindi una sequenza può alternare le due modalità; gli esercizi precedenti restano su `Foto + parole`.
