@@ -8,6 +8,9 @@
 
 ## Completato
 
+- [x] Pronuncia iniziale di `Numero quantità` resa affidabile a motore vocale freddo: attesa di `voiceschanged`, timeout controllato, un solo retry su errore e comando manuale di riascolto conservato.
+- [x] Export CSV compatibile con Excel italiano: BOM UTF-8, separatore dichiarato `;`, righe CRLF, escape completo dei campi e neutralizzazione delle formule.
+- [x] Aspetto ampliato a sette palette e quattro forme, con sette preset incluso `Lettura Globale`, ispirato al giallo, blu notte e azzurro dell’icona applicativa; migrazione `0010` forward-only per estendere i vincoli delle preferenze D1 già distribuite.
 - [x] Configurazione Wrangler di produzione versionata e flusso GitHub → Cloudflare Workers Builds definito: build da `main`, deploy sul Worker `lettura-globale`, UUID D1 reale anche nella configurazione generata da Vinext, binding D1/R2 esistenti conservati e migrazioni escluse dal deploy ordinario.
 - [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
@@ -97,7 +100,6 @@
 
 ## Limitazioni note
 
-- La pronuncia automatica del primo prompt di `Numero quantità` può non partire a freddo se il motore `speechSynthesis` non ha ancora caricato le voci. Da affrontare attendendo `voiceschanged`, gestendo `onerror` e prevedendo un solo retry; verificare il primo turno dopo un caricamento completo sui browser target e mantenere il comando manuale “Tocca per riascoltare”.
 - Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
@@ -110,7 +112,7 @@
 
 ## Prossimi passi
 
-1. Rendere affidabile la pronuncia del primo prompt di `Numero quantità` a motore vocale freddo e aggiungere una verifica browser del primo turno.
+1. Aggiungere una verifica browser del primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso ChatGPT Sites, senza deploy di produzione.
 4. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.

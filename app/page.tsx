@@ -24,6 +24,8 @@ import { parsePendingCloudSave, PENDING_CLOUD_SAVE_STORAGE_KEY, serializePending
 import { appendSaveJournal, readSaveJournal } from "./domain/save-journal";
 import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type QuantityAnswerMethod, type QuantityObject, type QuantityObjectSet } from "./domain/quantity-exercise";
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
+import { buildProgressCsv } from "./domain/progress-csv";
+import { waitForSpeechVoices } from "./domain/speech-readiness";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -401,31 +403,53 @@ function shuffled<T>(items: T[]) {
   return result;
 }
 
+let speechRequestId = 0;
+
 function speakWord(word: string, onComplete?: () => void) {
-  if (!("speechSynthesis" in window)) { onComplete?.(); return; }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(`${word}!`);
-  utterance.lang = "it-IT";
-  const italianVoices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLowerCase().startsWith("it"));
-  const preferredVoice = italianVoices.find((voice) => /elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices.find((voice) => voice.localService) ?? italianVoices[0];
-  if (preferredVoice) utterance.voice = preferredVoice;
-  utterance.rate = 0.72;
-  utterance.pitch = 1;
-  utterance.volume = 1;
-  if (onComplete) {
-    let completed = false;
-    let fallback = 0;
-    const finish = () => {
-      if (completed) return;
-      completed = true;
-      window.clearTimeout(fallback);
-      onComplete();
-    };
-    fallback = window.setTimeout(finish, Math.max(3000, Math.min(7000, 1500 + word.length * 300)));
+  if (!("speechSynthesis" in window)) { onComplete?.(); return () => undefined; }
+  const synthesis = window.speechSynthesis;
+  const requestId = ++speechRequestId;
+  synthesis.cancel();
+  let completed = false;
+  let fallback = 0;
+  const finish = () => {
+    if (completed || requestId !== speechRequestId) return;
+    completed = true;
+    window.clearTimeout(fallback);
+    onComplete?.();
+  };
+  const speakAttempt = async (retried: boolean) => {
+    const voices = await waitForSpeechVoices(synthesis, retried ? 250 : 1200);
+    if (completed || requestId !== speechRequestId) return;
+    const utterance = new SpeechSynthesisUtterance(`${word}!`);
+    utterance.lang = "it-IT";
+    const italianVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith("it"));
+    const preferredVoice = italianVoices.find((voice) => /elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices.find((voice) => voice.localService) ?? italianVoices[0];
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.rate = 0.72;
+    utterance.pitch = 1;
+    utterance.volume = 1;
     utterance.onend = finish;
-    utterance.onerror = finish;
-  }
-  window.speechSynthesis.speak(utterance);
+    utterance.onerror = () => {
+      window.clearTimeout(fallback);
+      fallback = 0;
+      if (!retried && requestId === speechRequestId) {
+        window.setTimeout(() => void speakAttempt(true), 160);
+        return;
+      }
+      finish();
+    };
+    if (onComplete) fallback = window.setTimeout(finish, Math.max(3000, Math.min(7000, 1500 + word.length * 300)));
+    synthesis.speak(utterance);
+  };
+  void speakAttempt(false);
+  return () => {
+    if (requestId !== speechRequestId) return;
+    speechRequestId += 1;
+    completed = true;
+    window.clearTimeout(fallback);
+    synthesis.cancel();
+  };
 }
 
 type FeedbackSound = "correct" | "wrong";
@@ -1744,8 +1768,8 @@ function SaveJournalDialog({ onClose }: { onClose: () => void }) {
 
 function AppearanceView({ settings, onChange, sounds, onSoundsChange }: { settings: AppearanceSettings; onChange: (settings: AppearanceSettings) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
   const presetId = appearancePresetId(settings);
-  const palettes: Array<{ id: ThemePalette; label: string }> = [{ id: "violet", label: "Viola" }, { id: "ocean", label: "Mare" }, { id: "forest", label: "Natura" }, { id: "sunset", label: "Arancio" }];
-  const shapes: Array<{ id: ControlShape; label: string; detail: string }> = [{ id: "compact", label: "Compatto", detail: "Angoli più netti" }, { id: "soft", label: "Morbido", detail: "Equilibrato" }, { id: "round", label: "Rotondo", detail: "Controlli più curvi" }];
+  const palettes: Array<{ id: ThemePalette; label: string }> = [{ id: "violet", label: "Viola" }, { id: "brand", label: "Icona" }, { id: "ocean", label: "Mare" }, { id: "forest", label: "Natura" }, { id: "sunset", label: "Arancio" }, { id: "berry", label: "Bacca" }, { id: "slate", label: "Ardesia" }];
+  const shapes: Array<{ id: ControlShape; label: string; detail: string }> = [{ id: "square", label: "Geometrico", detail: "Angoli quasi netti" }, { id: "compact", label: "Compatto", detail: "Angoli definiti" }, { id: "soft", label: "Morbido", detail: "Equilibrato" }, { id: "round", label: "Rotondo", detail: "Controlli più curvi" }];
   return <div className="page appearance-page"><section className="page-title-row"><div><span className="eyebrow">PERSONALIZZAZIONE</span><h1>Aspetto e suoni</h1><p>Personalizza l’aspetto e scegli i suoni degli esercizi.</p></div></section><section className="appearance-layout"><div className="appearance-controls"><section className="panel"><div className="panel-heading"><div><span className="eyebrow">TEMI PREDEFINITI</span><h2>Scegli una combinazione</h2></div></div><div className="theme-preset-grid">{appearancePresets.map((preset) => <button type="button" key={preset.id} className={presetId === preset.id ? "selected" : ""} onClick={() => onChange(preset.settings)} aria-pressed={presetId === preset.id}><span className={`theme-swatch palette-${preset.settings.palette}`}><i /><i /><i /></span><strong>{preset.name}</strong><small>{preset.description}</small>{presetId === preset.id && <Check />}</button>)}</div></section><section className="panel"><div className="panel-heading"><div><span className="eyebrow">PERSONALIZZA</span><h2>Colori e forme</h2></div></div><span className="choice-label">Palette</span><div className="palette-picker">{palettes.map((palette) => <button type="button" key={palette.id} className={`${palette.id} ${settings.palette === palette.id ? "selected" : ""}`} onClick={() => onChange({ ...settings, palette: palette.id })} aria-pressed={settings.palette === palette.id}><i />{palette.label}</button>)}</div><span className="choice-label shape-label">Forma dei controlli</span><div className="shape-picker">{shapes.map((shape) => <button type="button" key={shape.id} className={`${shape.id} ${settings.shape === shape.id ? "selected" : ""}`} onClick={() => onChange({ ...settings, shape: shape.id })} aria-pressed={settings.shape === shape.id}><span /><strong>{shape.label}</strong><small>{shape.detail}</small></button>)}</div></section><SoundSettingsPanel sounds={sounds} onChange={onSoundsChange} /></div><aside className="panel appearance-preview"><span className="eyebrow">ANTEPRIMA DAL VIVO</span><h2>Trova la parola</h2><p>Quale parola corrisponde all’immagine?</p><div className="preview-word-card"><span aria-hidden="true">🍎</span><strong>MELA</strong></div><div className="preview-actions"><button className="primary-button" type="button"><Volume2 />Ascolta</button><button className="ghost-button" type="button">Continua</button></div><small>Aspetto sincronizzato con l’account; suoni salvati su questo dispositivo.</small></aside></section></div>;
 }
 
@@ -1971,7 +1995,7 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
   }, [itemId, judgement, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow]);
   const completeRoundRef = useRef(completeRound);
   useEffect(() => { completeRoundRef.current = completeRound; }, [completeRound]);
-  useEffect(() => { speakPrompt(); }, [speakPrompt]);
+  useEffect(() => speakPrompt(), [speakPrompt]);
   useEffect(() => {
     const decision = judgement ? null : quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3);
     if (!decision) return;
@@ -2700,5 +2724,5 @@ function ContentDeleteDialog({ title, detail, onCancel, onConfirm }: { title: st
 }
 
 function downloadCsv(attempts: Attempt[]) {
-  const header = "data,esercizio,risposta,corretto,primo_tentativo,modalita"; const rows = attempts.map((item) => [item.createdAt, item.exerciseId, item.answerId, item.correct, item.firstAttempt, item.mode].join(",")); const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "lettura-globale-progressi.csv"; link.click(); URL.revokeObjectURL(url);
+  const blob = new Blob([buildProgressCsv(attempts)], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "lettura-globale-progressi.csv"; link.click(); URL.revokeObjectURL(url);
 }
