@@ -7,11 +7,12 @@ export type QuickCandidate = {
 };
 
 export type QuickFilterConfig = {
-  activity: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity";
+  activity: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
   selection: "all" | "categories" | "items";
   categoryNames: string[];
   itemIds: string[];
   distractorCount?: 1 | 2 | 3 | 4;
+  sentenceOptionCount?: 2 | 4;
   recognitionSyllables?: SyllableFilter;
 };
 
@@ -24,6 +25,7 @@ export function filterQuickCandidates<T extends QuickCandidate>(candidates: T[],
 export function quickStartIsValid(config: QuickFilterConfig, candidateCount: number) {
   if (config.activity === "number-quantity") return true;
   if (config.activity === "recognition") return candidateCount >= (config.distractorCount ?? 3) + 1;
+  if (config.activity === "sentence-matching") return candidateCount >= (config.sentenceOptionCount ?? 2);
   if (config.activity === "articles") return candidateCount >= 1;
   if (config.activity === "naming") return candidateCount >= 1;
   return config.categoryNames.length >= 2 && config.categoryNames.length <= 4 && candidateCount >= 1;
