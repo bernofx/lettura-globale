@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
 - [x] `Numero quantità`: timer anche nei link condivisi, errore dopo cinque secondi di inattività in insegnamento, esiti ripetuti conservati, spunta verde e avanzamento solo con `Continua`; in valutazione conferma adulta immediata senza timer.
 - [x] Documentata la causa del `state_change_failed_batch` per lo storico di `Numero quantità` e aggiunta una verifica obbligatoria dei vincoli `CHECK` D1 storici quando si introducono nuove tipologie.
@@ -95,6 +96,7 @@
 
 ## Limitazioni note
 
+- Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.

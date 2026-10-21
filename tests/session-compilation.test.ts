@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compileSessionPlan, type SessionExercise } from "../app/domain/session-compilation.ts";
+import { compileSessionPlan, completesSequenceExercise, type SessionExercise } from "../app/domain/session-compilation.ts";
 
 const library = [
   { id: "mela", word: "Mela", category: "Cibi", image: "/mela.png", article: "LA" as const },
@@ -34,6 +34,15 @@ test("ogni turno di tutti i tipi diventa uno step navigabile", () => {
   assert.ok(plan.filter((item) => item.kind === "articles").every((item) => item.articleItemIds?.length === 1));
   assert.ok(plan.filter((item) => item.kind === "word-categories").every((item) => item.categoryItemIds?.length === 1));
   assert.ok(plan.filter((item) => item.kind === "naming").every((item) => item.namingItemIds?.length === 1));
+});
+
+test("la pausa fra esercizi non interrompe i turni dello stesso esercizio", () => {
+  const first = { ...exercises[0], id: "first-round", sourceExerciseId: "first" };
+  const second = { ...exercises[0], id: "second-round", sourceExerciseId: "first" };
+  const next = { ...exercises[1], id: "next-round", sourceExerciseId: "next" };
+  assert.equal(completesSequenceExercise(first, second), false);
+  assert.equal(completesSequenceExercise(second, next), true);
+  assert.equal(completesSequenceExercise(next, undefined), true);
 });
 
 test("gli esercizi che richiedono immagini escludono gli elementi solo testuali", () => {

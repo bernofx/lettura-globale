@@ -44,6 +44,11 @@ export type SessionPlanLibraryItem = LibraryMediaItem & {
   syllableCount?: number;
 };
 
+export function completesSequenceExercise(current: SessionExercise | undefined, next: SessionExercise | undefined) {
+  if (!current) return false;
+  return !next || (current.sourceExerciseId ?? current.id) !== (next.sourceExerciseId ?? next.id);
+}
+
 type CompileOptions<T extends SessionPlanLibraryItem> = {
   articleFor: (item: T) => "IL" | "LA" | null | undefined;
   random?: () => number;
