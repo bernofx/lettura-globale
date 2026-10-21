@@ -1,11 +1,14 @@
-export type SoundCue = "wrong" | "correct" | "finish" | "select";
+import { customSoundId, type SoundCue, type SoundLibraryItem } from "./sound-library.ts";
+export type { SoundCue } from "./sound-library.ts";
 
-export type SoundPreferences = {
+type BuiltinSoundPreferences = {
   wrong: "classic" | "naaa" | "soft";
   correct: "classic" | "chime" | "bright";
   finish: "applause" | "classic" | "fanfare";
   select: "plin" | "select" | "soft";
 };
+
+export type SoundPreferences = { [K in SoundCue]: BuiltinSoundPreferences[K] | `custom:${string}` };
 
 export const defaultSoundPreferences: SoundPreferences = {
   wrong: "classic",
@@ -14,7 +17,7 @@ export const defaultSoundPreferences: SoundPreferences = {
   select: "plin",
 };
 
-export const soundOptions: { [K in SoundCue]: Array<{ id: SoundPreferences[K]; label: string }> } = {
+export const soundOptions: { [K in SoundCue]: Array<{ id: BuiltinSoundPreferences[K]; label: string }> } = {
   wrong: [
     { id: "classic", label: "Attuale" },
     { id: "naaa", label: "Naaa" },
@@ -42,15 +45,16 @@ export function hydrateSoundPreferences(value: unknown): SoundPreferences {
   const result = { ...defaultSoundPreferences };
   for (const cue of Object.keys(soundOptions) as SoundCue[]) {
     const choice = raw[cue];
-    if (typeof choice === "string" && soundOptions[cue].some((option) => option.id === choice)) {
-      // A sound option is selected only from this fixed, bundled allowlist.
+    if (typeof choice === "string" && (soundOptions[cue].some((option) => option.id === choice) || customSoundId(choice))) {
       (result as Record<SoundCue, string>)[cue] = choice;
     }
   }
   return result;
 }
 
-export function soundAsset(cue: SoundCue, choice: string): string | null {
+export function soundAsset(cue: SoundCue, choice: string, catalog: SoundLibraryItem[] = []): string | null {
+  const id = customSoundId(choice);
+  if (id) return catalog.some((item) => item.id === id && item.cue === cue) ? `/api/sounds/${id}` : null;
   if (cue === "wrong") return choice === "classic" ? "/audio/wrong.mp3" : choice === "naaa" ? "/audio/naaa.mp3" : null;
   if (cue === "correct") return choice === "classic" ? "/audio/correct.mp3" : null;
   if (cue === "finish") return choice === "applause" ? "/audio/applausi.mp3" : choice === "classic" ? "/audio/correct.mp3" : null;

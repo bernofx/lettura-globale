@@ -7,6 +7,24 @@
 .sound-setting-actions { display: flex; align-items: center; gap: 8px; }
 .sound-setting-actions select { min-width: 145px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--control-radius); background: #fff; color: var(--ink); font: inherit; }
 .sound-setting-actions button { min-height: 40px; padding: 0 10px; gap: 5px; }
+.sound-settings-library-link { margin-top: 18px !important; }
+.sound-library { margin: 0 0 24px; }
+.sound-library > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.sound-upload-form { display: grid; grid-template-columns: 1.2fr 1.2fr 1.2fr auto; align-items: end; gap: 12px; margin: 18px 0; }
+.sound-upload-form label { display: grid; gap: 7px; min-width: 0; font-size: 12px; font-weight: 700; }
+.sound-upload-form input, .sound-upload-form select { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--control-radius); background: #fff; color: var(--ink); font: inherit; }
+.sound-upload-form input[type="file"] { padding: 8px 4px; font-size: 11px; }
+.sound-upload-form button { min-height: 42px; }
+.sound-library-items { display: grid; gap: 7px; margin-top: 14px; }
+.sound-library-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--control-radius); background: #faf9ff; }
+.sound-library-item > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.sound-library-item strong { overflow-wrap: anywhere; }
+.sound-library-item small { color: var(--muted); }
+.sound-library-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.sound-library-actions button { min-height: 38px; }
+.sound-library-error { color: #a62f31 !important; }
+@media (max-width: 900px) { .sound-upload-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .sound-upload-form { grid-template-columns: 1fr; } .sound-library-item { align-items: stretch; flex-direction: column; } .sound-library-actions { justify-content: flex-end; } }
 @media (max-width: 600px) { .sound-setting { align-items: stretch; flex-direction: column; } .sound-setting-actions select { flex: 1; min-width: 0; } }
 
 .sequence-celebration { position: fixed; inset: 0; z-index: 110; overflow: hidden; pointer-events: none; background: rgba(255, 255, 255, .13); animation: celebration-fade 6s linear both; }

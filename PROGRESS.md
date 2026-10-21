@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Libreria audio privata per account: upload MP3 categorizzati nei quattro momenti, storage R2 e metadati D1, ascolto/rimozione nella Libreria e scelta contestuale in `Aspetto e suoni`, senza nuovo deploy per aggiungere file. Migrazione 0010 e test di separazione fra account.
 - [x] Preferenze audio globali del dispositivo per risposta corretta, errata, completamento di ciascun esercizio nella sequenza e selezione in `Numero quantità`; aggiunti tre MP3 forniti e varianti sintetizzate, con ascolto di prova. Pausa con tasto `Prossimo esercizio` ai confini della sequenza; palloncini e coriandoli CSS per sei secondi al termine delle sequenze regolari.
 - [x] `Numero quantità`: barra neutra del tempo di inattività, durata configurabile uguale per esiti corretti ed errati, scelta `Riprova` o `Continua` anche dopo un errore in insegnamento.
 - [x] `Numero quantità`: timer anche nei link condivisi, errore dopo cinque secondi di inattività in insegnamento, esiti ripetuti conservati, spunta verde e avanzamento solo con `Continua`; in valutazione conferma adulta immediata senza timer.
@@ -96,7 +97,7 @@
 
 ## Limitazioni note
 
-- Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
+- Le preferenze audio attive sono locali al dispositivo, come l'interruttore degli effetti sonori; i file caricati nella libreria audio sono sincronizzati nel cloud per account.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.

@@ -79,6 +79,18 @@ export const mediaAssets = sqliteTable("media_assets", {
   accountId: text("account_id").notNull(), id: text("id").notNull(), r2ObjectId: text("r2_object_id"), localPath: text("local_path"), imagePath: text("image_path"), imageKey: text("image_key"), emoji: text("emoji"), sourceName: text("source_name").notNull(), sourceUrl: text("source_url"), licenseName: text("license_name").notNull(), licenseUrl: text("license_url"), author: text("author").notNull(), isPrivateUpload: integer("is_private_upload", { mode: "boolean" }).notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
+export const soundAssets = sqliteTable("sound_assets", {
+  accountId: text("account_id").notNull(),
+  id: text("id").notNull(),
+  name: text("name").notNull(),
+  cue: text("cue").notNull(),
+  contentType: text("content_type").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  r2Key: text("r2_key").notNull(),
+  createdAt: integer("created_at").notNull(),
+  deletedAt: integer("deleted_at"),
+}, (table) => [primaryKey({ columns: [table.accountId, table.id] }), index("sound_assets_account_cue_idx").on(table.accountId, table.cue)]);
+
 export const libraryItems = sqliteTable("library_items", {
   accountId: text("account_id").notNull(), id: text("id").notNull(), word: text("word").notNull(), normalizedWord: text("normalized_word").notNull(), categoryName: text("category_name").notNull(), article: text("article"), syllabification: text("syllabification"), syllableCount: integer("syllable_count"), syllableStatus: text("syllable_status"), mediaAssetId: text("media_asset_id"), sourceName: text("source_name").notNull(), sourceUrl: text("source_url"), licenseName: text("license_name").notNull(), licenseUrl: text("license_url"), author: text("author").notNull(), position: integer("position").notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
