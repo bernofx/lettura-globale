@@ -391,7 +391,8 @@ async function backendResponseError(response: Response, fallback: string) {
 function saveErrorDetails(error: unknown) {
   if (error && typeof error === "object") {
     const candidate = error as { status?: unknown; code?: unknown; name?: unknown; diagnosticId?: unknown };
-    return { httpStatus: typeof candidate.status === "number" ? candidate.status : undefined, errorCode: typeof candidate.code === "string" ? candidate.code : candidate.name === "AbortError" ? "timeout" : "network_error", diagnosticId: typeof candidate.diagnosticId === "string" ? candidate.diagnosticId : undefined };
+    const message = error instanceof Error && /^[a-z0-9_]{1,64}$/.test(error.message) ? error.message : undefined;
+    return { httpStatus: typeof candidate.status === "number" ? candidate.status : undefined, errorCode: typeof candidate.code === "string" ? candidate.code : candidate.name === "AbortError" ? "timeout" : message ?? "network_error", diagnosticId: typeof candidate.diagnosticId === "string" ? candidate.diagnosticId : undefined };
   }
   return { errorCode: "unknown_error" };
 }
@@ -901,7 +902,7 @@ export default function HomePage() {
     const refresh = async () => {
       await backendSaveQueue.current.catch(() => undefined);
       const response = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
-      if (!response.ok) throw new Error("backend_refresh_failed");
+      if (!response.ok) throw await backendResponseError(response, "backend_refresh_failed");
       const result = await response.json() as { state: BackendState | null; revision: number };
       if (cancelled || !result.state || result.revision <= backendRevision.current) return;
       const saved = result.state;
@@ -931,7 +932,13 @@ export default function HomePage() {
       setToast("Dati aggiornati dal cloud");
       window.setTimeout(() => setToast(null), 2600);
     };
-    void refresh().catch(() => { if (!cancelled) setBackendStatus("error"); });
+    void refresh().catch((error) => {
+      if (cancelled) return;
+      appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "refresh_failed", revision: backendRevision.current, ...saveErrorDetails(error) });
+      // This effect only runs when the local snapshot matches the last confirmed
+      // cloud revision. A failed read therefore does not mean that data is unsaved.
+      setBackendStatus("ready");
+    });
     return () => { cancelled = true; };
   }, [backendRefreshKey, backendInitialized, backendStatus, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
@@ -1047,8 +1054,9 @@ export default function HomePage() {
       setBackendInitialized(true);
       setBackendStatus("ready");
     };
-    initializeBackend().catch(() => {
+    initializeBackend().catch((error) => {
       if (cancelled) return;
+      appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_load_failed", ...saveErrorDetails(error) });
       localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
       backendHydrating.current = false;
       setBackendStatus("local");
