@@ -134,6 +134,7 @@
 
 ## Verifiche della versione corrente
 
+- `Avvio rapido` espone tutte le sei tipologie disponibili, incluse `Abbina la frase` e `Numero quantità`, con i rispettivi parametri e controlli di validità.
 - `Abbina la frase` usa contenitori 4:3, accetta il trascinamento della frase sull'immagine, precarica le scene della sessione e avvia la voce del turno successivo solo dopo la conferma della schermata di passaggio.
 - Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.
 - L’origine dei distrattori è configurabile: per impostazione predefinita vengono estratti da tutte le parole selezionate; il vincolo alla stessa categoria è opzionale ed esplicito.

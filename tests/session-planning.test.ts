@@ -50,3 +50,15 @@ test("mix and vary richiede almeno un'immagine", () => {
   assert.equal(quickStartIsValid(config, 0), false);
   assert.equal(quickStartIsValid(config, 1), true);
 });
+
+test("numero quantità non dipende dalla libreria", () => {
+  assert.equal(quickStartIsValid({ activity: "number-quantity", selection: "all", categoryNames: [], itemIds: [] }, 0), true);
+});
+
+test("abbina la frase richiede almeno il numero di scene mostrate", () => {
+  const base = { activity: "sentence-matching" as const, selection: "all" as const, categoryNames: [], itemIds: [] };
+  assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 2 }, 1), false);
+  assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 2 }, 2), true);
+  assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 4 }, 3), false);
+  assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 4 }, 4), true);
+});
