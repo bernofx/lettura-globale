@@ -674,7 +674,7 @@ export default function HomePage() {
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
     window.addEventListener("keydown", prime, { capture: true, once: true });
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").then((registration) => registration.update()).catch(() => undefined);
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     }
     const authTimer = window.setTimeout(() => {
       const legacyLaunch = parseSharedLaunch(window.location.search);
