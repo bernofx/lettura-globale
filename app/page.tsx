@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronLeft, ChevronRight, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Sparkles, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronLeft, ChevronRight, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, QrCode, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
 import { ChangeEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
@@ -26,6 +26,8 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type Quant
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
+import { parseControllerToken, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -45,6 +47,35 @@ type ChildProfile = { id: string; firstName: string; lastName: string; birthYear
 type BackendState = { schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings };
 type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 type SharedPreviewPayload = { schemaVersion: 1; kind: "exercise" | "sequence"; title: string; exercises: Exercise[]; library: LibraryItem[] };
+
+const REMOTE_COMPONENT_EVENT = "lg:remote-controller-command";
+
+function emitRemoteComponentCommand(event: RemoteControllerEvent) {
+  window.dispatchEvent(new CustomEvent<RemoteControllerEvent>(REMOTE_COMPONENT_EVENT, { detail: event }));
+}
+
+function useRemoteComponentCommand(handler: (event: RemoteControllerEvent) => void) {
+  const handlerRef = useRef(handler);
+  useEffect(() => { handlerRef.current = handler; }, [handler]);
+  useEffect(() => {
+    const listener = (event: Event) => handlerRef.current((event as CustomEvent<RemoteControllerEvent>).detail);
+    window.addEventListener(REMOTE_COMPONENT_EVENT, listener);
+    return () => window.removeEventListener(REMOTE_COMPONENT_EVENT, listener);
+  }, []);
+}
+
+function useLocalFallbackAdvance(manualAdvance: boolean, pending: boolean, advance: () => void, delayMs: number) {
+  const wasManual = useRef(manualAdvance);
+  const advanceRef = useRef(advance);
+  useEffect(() => { advanceRef.current = advance; }, [advance]);
+  useEffect(() => {
+    const controllerDisconnected = wasManual.current && !manualAdvance;
+    wasManual.current = manualAdvance;
+    if (!controllerDisconnected || !pending) return;
+    const timer = window.setTimeout(() => advanceRef.current(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [delayMs, manualAdvance, pending]);
+}
 
 function syllableFilterLabel(filter?: SyllableFilter) {
   if (!filter || filter === "all") return "tutte le sillabe";
@@ -585,6 +616,7 @@ export default function HomePage() {
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [controllerToken, setControllerToken] = useState<string | null>(null);
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
   const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
   const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, hydrateSequences);
@@ -642,6 +674,7 @@ export default function HomePage() {
   const [sessionActive, setSessionActive] = useState(false);
   const [sessionWizardKey, setSessionWizardKey] = useState(0);
   const [sessionComplete, setSessionComplete] = useState(false);
+  const [sessionPaused, setSessionPaused] = useState(false);
   const [awaitingNextExercise, setAwaitingNextExercise] = useState(false);
   const [quickExerciseToSave, setQuickExerciseToSave] = useState<Exercise | null>(null);
   const [sessionFromSharedLink, setSessionFromSharedLink] = useState(false);
@@ -679,6 +712,7 @@ export default function HomePage() {
     const authTimer = window.setTimeout(() => {
       const legacyLaunch = parseSharedLaunch(window.location.search);
       const publicPreview = parseSharedPreview(window.location.search);
+      setControllerToken(parseControllerToken(window.location.search));
       setPendingSharedLaunch(legacyLaunch);
       setPendingSharedPreviewToken(publicPreview?.token ?? null);
       const persistentTherapistId = parsePersistentTherapistSession(localStorage.getItem(THERAPIST_SESSION_STORAGE_KEY));
@@ -1396,6 +1430,7 @@ export default function HomePage() {
     setSessionIsTrial(saved.isTrial);
     setSessionFromSharedLink(false);
     setSessionComplete(false);
+    setSessionPaused(false);
     setAnswerState("idle");
     setWrongAnswerId(null);
     setRecoveryCandidate(null);
@@ -1405,7 +1440,7 @@ export default function HomePage() {
     setView("session");
   };
   const compileSession = (selectedExercises: Exercise[]) => compileExercises(selectedExercises, visibleLibrary);
-  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setAwaitingNextExercise(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
+  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setSessionPaused(false); setAwaitingNextExercise(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
   const startSequenceById = (sequenceId: string) => {
     const sequence = visibleSequences.find((item) => item.id === sequenceId);
     if (!sequence) return;
@@ -1476,6 +1511,7 @@ export default function HomePage() {
     setSessionActive(false);
     setAwaitingNextExercise(false);
     setSessionComplete(false);
+    setSessionPaused(false);
     setSessionFromSharedLink(false);
     setSessionIsTrial(false);
     setSharedPreview(null);
@@ -1538,6 +1574,104 @@ export default function HomePage() {
     const sessionItemId = `${sessionRunId}:${exerciseId}:${itemId}`;
     setAttempts((current) => appendAttempt(current, { id: crypto.randomUUID(), sessionId: sessionRunId, sessionItemId, exerciseId, wordId: itemId, answerId: answer, correct, mode: sessionMode, createdAt: new Date().toISOString(), childId: sessionChildId || activeChild?.id, therapistId: therapist?.id }).events);
   };
+
+  const jumpToSessionIndex = (nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= sessionExercises.length) return;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSessionFurthestIndex((current) => Math.max(current, nextIndex));
+    setSessionIndex(nextIndex);
+    setAnswerState("idle");
+    setWrongAnswerId(null);
+    setAwaitingNextExercise(false);
+  };
+  const jumpActivity = (direction: -1 | 1) => {
+    const sourceAt = (index: number) => sessionExercises[index]?.sourceExerciseId ?? sessionExercises[index]?.id;
+    const currentSource = sourceAt(sessionIndex);
+    if (direction === 1) {
+      const next = sessionExercises.findIndex((_, index) => index > sessionIndex && sourceAt(index) !== currentSource);
+      if (next >= 0) jumpToSessionIndex(next); else nextExercise();
+      return;
+    }
+    let currentStart = sessionIndex;
+    while (currentStart > 0 && sourceAt(currentStart - 1) === currentSource) currentStart -= 1;
+    if (currentStart === 0) return;
+    const previousSource = sourceAt(currentStart - 1);
+    let previousStart = currentStart - 1;
+    while (previousStart > 0 && sourceAt(previousStart - 1) === previousSource) previousStart -= 1;
+    jumpToSessionIndex(previousStart);
+  };
+  const handleRemoteCommand = (event: RemoteControllerEvent) => {
+    const command = event.command;
+    if (command === "next") { nextExercise(); return; }
+    if (command === "previous") { navigateReachedExercise(-1); return; }
+    if (command === "next_activity") { jumpActivity(1); return; }
+    if (command === "previous_activity") { jumpActivity(-1); return; }
+    if (command === "pause") { setSessionPaused(true); return; }
+    if (command === "resume") { setSessionPaused(false); return; }
+    if (command === "toggle_audio") {
+      setSoundEffects((current) => {
+        if (current && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        return !current;
+      });
+      return;
+    }
+    if (command === "speak") {
+      const kind = currentExercise ? exerciseKind(currentExercise) : "recognition";
+      if (kind === "number-quantity") {
+        const target = currentExercise?.quantityTarget ?? currentExercise?.quantityMin ?? 1;
+        const object = currentExercise?.quantityObject ?? (currentExercise?.quantityObjectSet === "mixed" || !currentExercise?.quantityObjectSet ? "candy" : currentExercise.quantityObjectSet);
+        speakWord(`Tocca ${target} ${quantityObjectLabel(object, target)}`);
+      } else if (promptWord) speakWord(promptWord);
+      return;
+    }
+    if (command === "help" && event.payload?.label && helpTypes.includes(event.payload.label)) { addHelp(event.payload.label); return; }
+    if (command === "shuffle") {
+      setAnswerState("idle");
+      setWrongAnswerId(null);
+      emitRemoteComponentCommand(event);
+      return;
+    }
+    if (command === "mark_correct" || command === "mark_wrong" || command === "mark_helped" || command === "retry") { emitRemoteComponentCommand(event); return; }
+    if (command === "end") closeActiveSession();
+  };
+  const currentKind = currentExercise ? exerciseKind(currentExercise) : "recognition";
+  const currentContentId = currentKind === "articles" ? currentExercise?.articleItemIds?.[0]
+    : currentKind === "word-categories" ? currentExercise?.categoryItemIds?.[0]
+      : currentKind === "naming" ? currentExercise?.namingItemIds?.[0] : currentExercise?.promptId;
+  const currentContentWord = sessionLibrary.find((item) => item.id === currentContentId)?.word ?? "";
+  const remotePrompt = currentKind === "number-quantity"
+    ? `Tocca ${currentExercise?.quantityTarget ?? currentExercise?.quantityMin ?? 1} ${quantityObjectLabel(currentExercise?.quantityObject ?? "candy", currentExercise?.quantityTarget ?? currentExercise?.quantityMin ?? 1)}`
+    : promptWord ?? currentContentWord;
+  const remoteSnapshot: RemoteSessionSnapshot | null = sessionActive && sessionRunId && activeChild && currentExercise ? {
+    sessionId: sessionRunId,
+    childName: activeChild.firstName,
+    sessionTitle: sessionDescriptor.title,
+    exerciseTitle: currentExercise.title,
+    exerciseKind: currentKind,
+    prompt: remotePrompt,
+    currentIndex: sessionIndex,
+    total: sessionExercises.length,
+    answerState,
+    soundEffects,
+    paused: sessionPaused,
+    updatedAt: 0,
+  } : null;
+  const remoteHost = useRemoteSessionHost({
+    enabled: Boolean(sessionActive && !sessionFromSharedLink && !sessionIsTrial && therapist && activeChild),
+    sessionId: sessionRunId,
+    childId: sessionChildId || activeChild?.id || "",
+    snapshot: remoteSnapshot,
+    onCommand: handleRemoteCommand,
+  });
+  const remoteConnected = remoteHost.status === "connected";
+  const remoteWasConnected = useRef(false);
+
+  useEffect(() => {
+    if (remoteWasConnected.current && !remoteConnected) setSessionPaused(false);
+    remoteWasConnected.current = remoteConnected;
+    document.body.classList.toggle("lg-remote-controller-active", remoteConnected);
+    return () => document.body.classList.remove("lg-remote-controller-active");
+  }, [remoteConnected]);
 
   const saveExercise = (exercise: Exercise) => {
     const exists = exercises.some((item) => item.id === exercise.id);
@@ -1645,6 +1779,7 @@ export default function HomePage() {
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration />}</>;
+  if (controllerToken) return <RemoteControllerConsole token={controllerToken} therapist={therapist} onLogout={logout} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
@@ -1655,7 +1790,9 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={() => setShowUpload(true)} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && (awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />)}
+        {view === "session" && (awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />)}
+        {view === "session" && sessionActive && !sessionFromSharedLink && !sessionIsTrial && <RemoteHostBadge host={remoteHost} />}
+        {view === "session" && sessionActive && sessionPaused && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
@@ -1702,6 +1839,133 @@ function SessionRecoveryDialog({ saved, childName, onResume, onDiscard }: { save
 
 function PublicPreviewError() {
   return <main className="auth-page public-preview-error"><section className="login-card"><div className="auth-icon"><AlertTriangle /></div><span className="eyebrow">ANTEPRIMA</span><h1>Link non disponibile</h1><p>Questa anteprima non esiste più oppure il collegamento non è valido.</p><button className="primary-button large" onClick={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }}>Torna alla home</button></section></main>;
+}
+
+/* QRCode generates an in-memory data URL; Next Image cannot optimize this transient asset. */
+/* eslint-disable @next/next/no-img-element */
+function RemoteHostBadge({ host }: { host: RemoteHostState }) {
+  const [expanded, setExpanded] = useState(false);
+  const statusLabel = host.status === "connected" ? "Telefono collegato"
+    : host.status === "lost" ? "Connessione persa · controlli sul PC"
+      : host.status === "pending" ? "Telefono in attesa di approvazione"
+        : host.status === "creating" ? "Creazione QR…"
+          : host.status === "error" ? "Controller non disponibile"
+            : "Scansiona per collegare il telefono";
+  return <aside className={`remote-host-badge remote-${host.status}`} aria-label={statusLabel}>
+    <button type="button" className="remote-host-summary" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
+      {host.qrDataUrl ? <img src={host.qrDataUrl} alt="QR per collegare il telefono" /> : <QrCode />}
+      <span className="remote-status-dot" aria-hidden="true" />
+      <strong>{statusLabel}</strong>
+    </button>
+    {(expanded || host.status === "pending" || host.status === "error") && <div className="remote-host-panel">
+      {host.qrDataUrl && <img src={host.qrDataUrl} alt="QR per aprire la console adulta sul telefono" />}
+      <div><strong>{statusLabel}</strong><p>{host.status === "connected" ? "L’avanzamento è controllato dal telefono." : host.status === "lost" ? "La sessione continua con i controlli locali finché il telefono non torna online." : "Apri il QR da un telefono e accedi con il profilo adulto."}</p></div>
+      {host.status === "pending" && <button className="primary-button" type="button" onClick={() => void host.approve()}><Check />Approva {host.pendingAdultName || "telefono"}</button>}
+      {host.status === "error" && <><small>{host.error}</small><button className="ghost-button" type="button" onClick={() => void host.refreshPairing()}><RefreshCw />Riprova</button></>}
+      {(host.status === "waiting" || host.status === "lost" || host.status === "connected") && <button className="ghost-button" type="button" onClick={() => {
+        if (host.status !== "connected" || window.confirm("Generare un nuovo QR? Il telefono collegato verrà disconnesso.")) void host.refreshPairing();
+      }}><RefreshCw />{host.status === "connected" ? "Sostituisci telefono" : "Genera nuovo QR"}</button>}
+    </div>}
+  </aside>;
+}
+/* eslint-enable @next/next/no-img-element */
+
+type ControllerConsoleState = { status: "joining" | "pending" | "connected" | "lost" | "error"; sessionId: string; controllerKey: string; snapshot: RemoteSessionSnapshot | null; error: string };
+
+function browserRandomHex(bytes = 32) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function RemoteControllerConsole({ token, therapist, onLogout }: { token: string; therapist: Therapist; onLogout: () => void }) {
+  const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
+  const sendQueue = useRef<Promise<void>>(Promise.resolve());
+  const storageKey = `lg-controller:${token}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    const connect = async () => {
+      try {
+        const saved = sessionStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved) as { sessionId?: unknown; controllerKey?: unknown };
+          if (typeof parsed.sessionId === "string" && typeof parsed.controllerKey === "string") {
+            if (!cancelled) setState((current) => ({ ...current, sessionId: parsed.sessionId as string, controllerKey: parsed.controllerKey as string }));
+            return;
+          }
+        }
+        const controllerKey = browserRandomHex();
+        const response = await fetch("/api/controller/pairing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "join", token, controllerKey }) });
+        if (!response.ok) throw new Error(response.status === 404 ? "Il QR è scaduto. Generane uno nuovo dal PC." : response.status === 403 ? "Questo profilo non può controllare la sessione." : "Collegamento non riuscito.");
+        const result = await response.json() as { sessionId: string };
+        sessionStorage.setItem(storageKey, JSON.stringify({ sessionId: result.sessionId, controllerKey }));
+        if (!cancelled) setState((current) => ({ ...current, status: "pending", sessionId: result.sessionId, controllerKey }));
+      } catch (error) {
+        if (!cancelled) setState((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : "Collegamento non riuscito." }));
+      }
+    };
+    void connect();
+    return () => { cancelled = true; };
+  }, [storageKey, token]);
+
+  useEffect(() => {
+    if (!state.sessionId || !state.controllerKey) return;
+    let cancelled = false;
+    let polling = false;
+    const poll = async () => {
+      if (polling || cancelled) return;
+      polling = true;
+      try {
+        const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { headers: { "x-controller-key": state.controllerKey }, cache: "no-store" });
+        if (response.status === 403) throw new Error("Un altro telefono ha preso il controllo della sessione.");
+        if (!response.ok) throw new Error("Connessione al PC non disponibile.");
+        const result = await response.json() as { status: string; connected: boolean; snapshot?: RemoteSessionSnapshot };
+        if (!cancelled) setState((current) => ({ ...current, status: result.connected ? "connected" : result.status === "pending" ? "pending" : "lost", snapshot: result.snapshot ?? current.snapshot, error: "" }));
+      } catch (error) {
+        if (!cancelled) setState((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : "Connessione persa." }));
+      } finally { polling = false; }
+    };
+    void poll();
+    const timer = window.setInterval(poll, 1_250);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [state.controllerKey, state.sessionId]);
+
+  const send = (command: RemoteCommandName, payload?: { label?: string }) => {
+    if (state.status !== "connected") return;
+    sendQueue.current = sendQueue.current.then(async () => {
+      const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: crypto.randomUUID(), command, payload } }) });
+      if (!response.ok) throw new Error("command_failed");
+    }).catch(() => setState((current) => ({ ...current, status: "lost", error: "Comando non inviato. Il PC userà i controlli locali." })));
+  };
+  const snapshot = state.snapshot;
+  const connected = state.status === "connected";
+  const supportsShuffle = snapshot?.exerciseKind === "recognition" || snapshot?.exerciseKind === "word-categories";
+  const supportsJudgement = snapshot?.exerciseKind === "naming" || snapshot?.exerciseKind === "number-quantity";
+
+  return <main className="remote-controller-page">
+    <header><div><span className="brand-mark brand-logo" aria-hidden="true" /><span><small>CONSOLE ADULTA</small><strong>{therapist.firstName} {therapist.lastName}</strong></span></div><button type="button" onClick={onLogout}><LogOut />Esci</button></header>
+    <section className="remote-controller-status"><span className={`remote-status-dot ${connected ? "connected" : ""}`} />
+      <div><strong>{connected ? "Collegato al PC" : state.status === "pending" ? "Attendi l’approvazione sul PC" : state.status === "joining" ? "Collegamento…" : "Non collegato"}</strong><small>{state.error || (connected ? "I comandi vengono registrati nella sessione." : "I controlli restano disponibili sul PC.")}</small></div>
+      {state.error.startsWith("Un altro telefono") && <button type="button" onClick={() => { sessionStorage.removeItem(storageKey); window.location.reload(); }}><RefreshCw />Riprendi il controllo</button>}
+    </section>
+    {snapshot ? <>
+      <section className="remote-now-card"><span>{snapshot.childName} · {snapshot.currentIndex + 1} di {snapshot.total}</span><h1>{snapshot.exerciseTitle}</h1><p>{snapshot.prompt || snapshot.sessionTitle}</p><div><small>{snapshot.answerState === "correct" ? "Risposta corretta" : snapshot.answerState === "wrong" ? "Risposta errata" : "In attesa della risposta"}</small>{snapshot.paused && <strong>IN PAUSA</strong>}</div></section>
+      <section className="remote-command-grid">
+        <button type="button" disabled={!connected || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
+        <button type="button" className="primary" disabled={!connected} onClick={() => send("next")}>Passo successivo<ChevronRight /></button>
+        <button type="button" disabled={!connected} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
+        <button type="button" disabled={!connected} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
+      </section>
+      <section className="remote-command-row">
+        <button type="button" disabled={!connected} onClick={() => send("speak")}><Volume2 />Riascolta</button>
+        <button type="button" disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
+        {supportsShuffle && <button type="button" disabled={!connected} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
+        <button type="button" disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
+      </section>
+      {supportsJudgement && <section className="remote-judgement"><button disabled={!connected} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button disabled={!connected} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button disabled={!connected} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button disabled={!connected} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
+      <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" disabled={!connected} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
+      <button className="remote-end-button" type="button" disabled={!connected} onClick={() => { if (window.confirm("Interrompere la sessione sul PC?")) send("end"); }}><Square />Interrompi sessione</button>
+    </> : <section className="remote-waiting"><Wifi /><h1>{state.status === "error" ? "Collegamento non disponibile" : "Connessione alla sessione"}</h1><p>{state.error || "Approva questo telefono dal PC per iniziare."}</p></section>}
+  </main>;
 }
 
 function PublicLanding({ onLogin }: { onLogin: () => void }) {
@@ -1824,9 +2088,9 @@ function ExercisesView({ exercises, sequences, activeSequence, therapists, showS
 }
 
 type SessionNavigationProps = { canPrevious: boolean; canForward: boolean; onPrevious: () => void; onForward: () => void };
-type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string) => void; onStartQuick: (config: QuickStartConfig) => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
+type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; remoteConnected?: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string) => void; onStartQuick: (config: QuickStartConfig) => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
 
-function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
+function SessionView({ active, complete, fromSharedLink, isTrial, remoteConnected = false, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
   const [step, setStep] = useState<"choose" | "quick" | "review" | "ready">("choose");
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
@@ -1859,12 +2123,12 @@ function SessionView({ active, complete, fromSharedLink, isTrial, mode, setMode,
   if (!active && step === "quick") return <div className="page session-wizard"><WizardBack onClick={() => setStep("choose")} /><div className="wizard-heading compact"><div><span className="eyebrow">AVVIO RAPIDO</span><h1>Configura l’attività</h1><p>Questa configurazione non verrà salvata automaticamente.</p></div></div><section className="wizard-panel"><span className="choice-label">Tipologia</span><div className="mode-picker activity-picker wizard-activity-picker"><button className={quick.activity === "recognition" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "recognition", itemIds: [] }))}><BookOpenCheck /><strong>Trova la parola</strong><small>Parola e distrattori casuali</small></button><button className={quick.activity === "articles" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "articles", itemIds: [] }))}><Library /><strong>Articolo IL / LA</strong><small>Classifica una foto alla volta</small></button><button className={quick.activity === "word-categories" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "word-categories", selection: "categories", itemIds: [] }))}><FolderHeart /><strong>Parola nella categoria</strong><small>Scegli la categoria corretta</small></button><button className={quick.activity === "naming" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "naming", itemIds: [] }))}><MousePointer2 /><strong>Mix and vary</strong><small>Nomina una foto alla volta</small></button></div></section><section className="wizard-panel"><span className="choice-label">Parole e immagini</span><div className="selection-tabs">{(["all", "categories", "items"] as QuickSelection[]).map((selection) => <button key={selection} type="button" className={quick.selection === selection ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, selection, itemIds: selection === "items" ? current.itemIds : [] }))}>{selection === "all" ? "Tutta la libreria" : selection === "categories" ? "Per categoria" : "Scelta manuale"}</button>)}</div>{(quick.selection === "categories" || quick.activity === "word-categories") && <><div className="builder-label">Categorie <span>{quick.categoryNames.length} scelte{quick.activity === "word-categories" ? " · minimo 2, massimo 4" : ""}</span></div><div className="filter-chips">{categoryNames.map((category) => <button type="button" key={category} className={quick.categoryNames.includes(category) ? "selected" : ""} onClick={() => toggleQuickCategory(category)}>{category}</button>)}</div></>}{quick.selection === "items" && <><div className="builder-label">Elementi <span>{quick.itemIds.length} scelti</span></div>{quickSearchField}<div className="builder-grid compact-words quick-item-grid">{filteredQuickSelectable.map((item) => <button type="button" key={item.id} className={quick.itemIds.includes(item.id) ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, itemIds: current.itemIds.includes(item.id) ? current.itemIds.filter((id) => id !== item.id) : [...current.itemIds, item.id] }))}><strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong><span>{item.category}{quick.activity === "articles" ? ` · ${articleFor(item)}` : ""}</span>{quick.itemIds.includes(item.id) && <i><Check /></i>}</button>)}</div></>}</section><section className="wizard-panel wizard-settings"><label>Numero di turni<input type="number" min={1} max={50} value={quick.rounds} onChange={(event) => setQuick((current) => ({ ...current, rounds: Math.max(1, Number(event.target.value)) }))} /></label>{quick.activity === "recognition" && <><RecognitionRandomParameterFields distractorCount={quick.distractorCount} distractorSource={quick.distractorSource} syllables={quick.recognitionSyllables} onDistractorCountChange={(distractorCount) => setQuick((current) => ({ ...current, distractorCount }))} onDistractorSourceChange={(distractorSource) => setQuick((current) => ({ ...current, distractorSource }))} onSyllablesChange={(recognitionSyllables) => setQuick((current) => ({ ...current, recognitionSyllables }))} /><RecognitionPresentationFields presentation={quick.presentation} autoPronounce={quick.autoPronounce} onPresentationChange={(next) => { setQuick((current) => ({ ...current, presentation: next })); setPresentation(next); }} onAutoPronounceChange={(autoPronounce) => setQuick((current) => ({ ...current, autoPronounce }))} /></>}</section>{!quickValid && <p className="wizard-error">Scegli abbastanza elementi e categorie per avviare questa attività.</p>}<div className="wizard-footer"><button className="ghost-button" onClick={() => setStep("choose")}>Annulla</button><button className="primary-button" disabled={!quickValid} onClick={() => { setSource("quick"); setStep("review"); }}><ChevronRight />Continua</button></div></div>;
   if (!active && step === "review") return <div className="page session-wizard review-step"><WizardBack onClick={() => setStep(source === "quick" ? "quick" : "choose")} /><span className="eyebrow">RIEPILOGO</span><h1>{reviewTitle}</h1><div className="review-card"><div><span>Bambino</span><strong>{activeChild.firstName} {activeChild.lastName}</strong></div><div><span>Contenuto</span><strong>{source === "quick" ? `${reviewCount} turni` : `${reviewCount} esercizi`}</strong></div><div><span>Origine</span><strong>{source === "quick" ? "Avvio rapido" : "Sequenza salvata"}</strong></div></div><section className="wizard-panel"><span className="choice-label">Modalità della sessione</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Valutazione</strong><small>Misura il primo tentativo</small></button></div></section><div className="wizard-footer"><button className="ghost-button" onClick={() => setStep(source === "quick" ? "quick" : "choose")}>Indietro</button><button className="primary-button large" disabled={!reviewCount} onClick={() => setStep("ready")}><ChevronRight />Continua</button></div></div>;
   if (!active && step === "ready") return <div className="page ready-screen"><span className="ready-cloud"><Cloud /></span><span className="eyebrow">{activeChild.firstName.toLocaleUpperCase("it-IT")}</span><h1>PRONTI?</h1><p>{reviewTitle} · {mode === "test" ? "Valutazione" : "Insegnamento"}</p><div><button className="ghost-button" onClick={() => setStep("review")}>Indietro</button><button className="primary-button large" onClick={beginReviewed}><Play fill="currentColor" />Inizia</button></div></div>;
-  if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
-  if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
-  if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
-  if (exercise && exerciseKind(exercise) === "number-quantity") return <NumberQuantitySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} mode={mode} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  if (exercise && exerciseKind(exercise) === "number-quantity") return <NumberQuantitySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (!exercise || !prompt) return null;
-  return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
+  return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} manualAdvance={remoteConnected} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
 }
 
 function WizardBack({ onClick }: { onClick: () => void }) {
@@ -1906,7 +2170,7 @@ function ProtectedExitButton({ onComplete }: { onComplete: () => void }) {
   return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label="Tieni premuto per 4 secondi per terminare"><span>{holding ? "Continua a premere…" : "Termina"}</span><i aria-hidden="true" /></button>;
 }
 
-function NamingSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+function NamingSession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const candidates = useMemo(() => {
     const allowedIds = exercise.namingItemIds?.length ? new Set(exercise.namingItemIds) : null;
     const categories = exercise.namingCategories?.length ? new Set(exercise.namingCategories) : null;
@@ -1932,12 +2196,20 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
   const currentId = remainingIds[0];
   const currentItem = library.find((item) => item.id === currentId);
   const completed = remainingIds.length === 0;
+  useLocalFallbackAdvance(manualAdvance, Boolean(judgement), () => {
+    if (remainingIds.length <= 1) onComplete();
+    else {
+      setRemainingIds((current) => current.filter((id) => id !== currentId));
+      setJudgement(null);
+    }
+  }, 650);
   const judge = (correct: boolean, withHelp = false) => {
     if (!currentId || judgement) return;
     onAttempt(currentId, withHelp ? "CORRETTO_CON_AIUTO" : correct ? "CORRETTO" : "ERRATO", correct);
     if (withHelp) onHelp("Risposta aiutata", currentId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     setJudgement(correct ? "correct" : "wrong");
+    if (manualAdvance) return;
     advanceTimer.current = window.setTimeout(() => {
       if (remainingIds.length <= 1) onComplete();
       else {
@@ -1946,6 +2218,11 @@ function NamingSession({ previewLabel, exercise, library, mode, currentIndex, to
       }
     }, 650);
   };
+  useRemoteComponentCommand((event) => {
+    if (event.command === "mark_correct") judge(true);
+    if (event.command === "mark_wrong") judge(false);
+    if (event.command === "mark_helped") judge(true, true);
+  });
   return <div className="session-screen naming-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div>
@@ -1972,7 +2249,7 @@ function QuantityObjectIcon({ object }: { object: QuantityObject }) {
   return <Circle fill="currentColor" />;
 }
 
-function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const target = exercise.quantityTarget ?? exercise.quantityMin ?? 1;
   const object = exercise.quantityObject ?? (exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "candy" : exercise.quantityObjectSet);
   const itemId = `quantity:${exercise.id}:${target}`;
@@ -1990,11 +2267,12 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
     resolving.current = true;
     onAttempt(itemId, quantityAnswerId(target, selected.size, method, crypto.randomUUID()), correct);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
-    if (!teachingFlow) { onComplete(); return; }
+    if (!teachingFlow && !manualAdvance) { onComplete(); return; }
     setJudgement(correct ? "correct" : "wrong");
-  }, [itemId, judgement, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow]);
+  }, [itemId, judgement, manualAdvance, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow]);
   const completeRoundRef = useRef(completeRound);
   useEffect(() => { completeRoundRef.current = completeRound; }, [completeRound]);
+  useLocalFallbackAdvance(manualAdvance, Boolean(judgement) && !teachingFlow, onComplete, 250);
   useEffect(() => speakPrompt(), [speakPrompt]);
   useEffect(() => {
     const decision = judgement ? null : quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3);
@@ -2029,6 +2307,11 @@ function NumberQuantitySession({ previewLabel, exercise, mode, currentIndex, tot
     setJudgement(null);
     resolving.current = false;
   };
+  useRemoteComponentCommand((event) => {
+    if (event.command === "mark_correct") completeRound(true, "adult");
+    if (event.command === "mark_wrong") completeRound(false, "adult");
+    if (event.command === "retry") retry();
+  });
   const toggle = (index: number) => {
     if (judgement) return;
     const willSelect = !selected.has(index);
@@ -2072,13 +2355,16 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
   return <span ref={labelRef}>{word.toLocaleUpperCase("it-IT")}</span>;
 }
 
-function RecognitionSession({ previewLabel, mode, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
-  const [optionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+function RecognitionSession({ previewLabel, mode, manualAdvance = false, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+  const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
   const [wordDragOffset, setWordDragOffset] = useState({ x: 0, y: 0, active: false });
   const wordDragStart = useRef<{ x: number; y: number } | null>(null);
   const wordDragMoved = useRef(false);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
+  useRemoteComponentCommand((event) => {
+    if (event.command === "shuffle") setOptionIds((current) => shuffled(current));
+  });
   const resetWordDrag = () => {
     wordDragStart.current = null;
     setWordDragOffset({ x: 0, y: 0, active: false });
@@ -2108,6 +2394,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
   };
   useEffect(() => {
     if (answerState !== "correct") return;
+    if (manualAdvance) return;
     let cancelled = false;
     let completionTimer: number | null = null;
     const timer = window.setTimeout(() => {
@@ -2125,7 +2412,7 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
       window.clearTimeout(timer);
       if (completionTimer) window.clearTimeout(completionTimer);
     };
-  }, [answerState, presentation, prompt.word, soundEffects]);
+  }, [answerState, manualAdvance, presentation, prompt.word, soundEffects]);
   return <div className="session-screen recognition-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div>
@@ -2157,13 +2444,13 @@ function RecognitionSession({ previewLabel, mode, presentation, currentIndex, to
         return <button key={id} data-answer-id={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<AnswerLabel word={item.word} wordOnly={presentation === "words"} />{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>;
       })}</div>
       {answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}
-      {answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}
+      {answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{manualAdvance ? "Risposta registrata. Attendi l’adulto." : currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}
     </div>
     {!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}
   </div>;
 }
 
-function ArticleSortSession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [initialIds] = useState(() => shuffled((exercise.articleItemIds ?? []).filter((id) => library.some((item) => item.id === id && articleFor(item)))).slice(0, Math.max(1, exercise.rounds ?? 6)));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -2203,6 +2490,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
       setCorrectId(itemId);
       setCorrectArticle(article);
       setFeedback("Giusto! L’immagine è stata abbinata.");
+      if (manualAdvance) return;
       advanceTimer.current = window.setTimeout(() => {
         if (remainingIds.length <= 1) onComplete();
         else setRemainingIds((current) => current.filter((id) => id !== itemId));
@@ -2219,6 +2507,14 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   const completed = remainingIds.length === 0;
   const currentId = remainingIds[0];
   const currentItem = library.find((entry) => entry.id === currentId);
+  useLocalFallbackAdvance(manualAdvance, Boolean(correctId), () => {
+    if (remainingIds.length <= 1) onComplete();
+    else {
+      setRemainingIds((current) => current.filter((id) => id !== correctId));
+      setCorrectId(null);
+      setCorrectArticle(null);
+    }
+  }, 750);
   const resetPointerDrag = () => {
     pointerStart.current = null;
     setPointerOffset({ x: 0, y: 0, active: false });
@@ -2288,8 +2584,9 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, currentInde
   </div>;
 }
 
-function WordCategorySession({ previewLabel, exercise, library, mode, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+function WordCategorySession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const categories = useMemo(() => exercise.categoryNames ?? [], [exercise.categoryNames]);
+  const [categoryOrder, setCategoryOrder] = useState(() => shuffled(categories));
   const candidates = useMemo(() => library.filter((item) => categories.includes(item.category)), [library, categories]);
   const [initialIds] = useState(() => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
   const [remainingIds, setRemainingIds] = useState(initialIds);
@@ -2308,6 +2605,20 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
   const currentId = remainingIds[0];
   const currentItem = candidates.find((item) => item.id === currentId);
   const completed = remainingIds.length === 0;
+  useLocalFallbackAdvance(manualAdvance, Boolean(correctId), () => {
+    if (remainingIds.length <= 1) onComplete();
+    else {
+      setRemainingIds((current) => current.filter((id) => id !== correctId));
+      setCorrectId(null);
+      setCorrectCategory(null);
+    }
+  }, 750);
+  useRemoteComponentCommand((event) => {
+    if (event.command !== "shuffle") return;
+    setCategoryOrder((current) => shuffled(current));
+    setSelectedId(null); setDraggedId(null); setWrongId(null); setWrongCategory(null); setCorrectId(null); setCorrectCategory(null);
+    setFeedback("Le categorie sono state rimescolate. Prova ancora.");
+  });
   const place = (category: string, explicitId?: string) => {
     if (correctId) return;
     const itemId = explicitId ?? draggedId ?? selectedId ?? currentId;
@@ -2320,6 +2631,7 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
       setSelectedId(null); setDraggedId(null); setWrongId(null); setWrongCategory(null);
       setCorrectId(itemId); setCorrectCategory(category);
       setFeedback("Giusto! La parola è nella categoria corretta.");
+      if (manualAdvance) return;
       advanceTimer.current = window.setTimeout(() => {
         if (remainingIds.length <= 1) onComplete();
         else setRemainingIds((current) => current.filter((id) => id !== itemId));
@@ -2359,7 +2671,7 @@ function WordCategorySession({ previewLabel, exercise, library, mode, currentInd
     resetPointerDrag();
     if (moved && category) place(category, currentId);
   };
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`} style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined} onClick={(event) => { if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={finishPointerDrag} onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}>{currentItem.word.toLocaleUpperCase("it-IT")}{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categories.length}`}>{categories.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}><span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`} style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined} onClick={(event) => { if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={finishPointerDrag} onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}>{currentItem.word.toLocaleUpperCase("it-IT")}{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categoryOrder.length}`}>{categoryOrder.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}><span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {

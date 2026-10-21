@@ -9,6 +9,7 @@ export type ChatGPTUser = {
   displayName: string;
   email: string;
   fullName: string | null;
+  adultProfileId?: string;
 };
 
 const USER_EMAIL_HEADER = "oai-authenticated-user-email";
@@ -32,7 +33,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     const rows = await getDb().select().from(authSessions).where(and(eq(authSessions.tokenHash, await hashText(token)), gt(authSessions.expiresAt, Date.now()))).limit(1);
     const saved = rows[0];
     if (!saved) return null;
-    return { userId: saved.userId, displayName: saved.displayName, email: saved.email, fullName: saved.displayName };
+    return { userId: saved.userId, displayName: saved.displayName, email: saved.email, fullName: saved.displayName, adultProfileId: saved.adultProfileId ?? undefined };
   }
   const userId = requestHeaders.get(USER_ID_HEADER) ?? await stableEmailId(email);
 

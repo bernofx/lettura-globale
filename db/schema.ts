@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const userStates = sqliteTable("user_states", {
   userId: text("user_id").primaryKey(),
@@ -142,3 +142,11 @@ export const sessionItemResponses = sqliteTable("session_item_responses", {
 export const sessionItemHelpLabels = sqliteTable("session_item_help_labels", {
   accountId: text("account_id").notNull(), sessionItemId: text("session_item_id").notNull(), position: integer("position").notNull(), labelSnapshot: text("label_snapshot").notNull(),
 }, (table) => [primaryKey({ columns: [table.accountId, table.sessionItemId, table.position] })]);
+
+export const remoteControllerSessions = sqliteTable("remote_controller_sessions", {
+  accountId: text("account_id").notNull(), sessionId: text("session_id").notNull(), childId: text("child_id").notNull(), ownerAdultId: text("owner_adult_id").notNull(), pairingTokenHash: text("pairing_token_hash").notNull(), pairingExpiresAt: integer("pairing_expires_at").notNull(), status: text("status").notNull().default("waiting"), pendingAdultId: text("pending_adult_id"), pendingAdultName: text("pending_adult_name"), controllerKeyHash: text("controller_key_hash"), controllerLastSeenAt: integer("controller_last_seen_at"), latestSequence: integer("latest_sequence").notNull().default(0), snapshotJson: text("snapshot_json").notNull().default("{}"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.accountId, table.sessionId] }), uniqueIndex("remote_controller_sessions_pairing_token_unique").on(table.pairingTokenHash), index("remote_controller_sessions_pairing_idx").on(table.pairingTokenHash, table.pairingExpiresAt)]);
+
+export const remoteControllerEvents = sqliteTable("remote_controller_events", {
+  accountId: text("account_id").notNull(), sessionId: text("session_id").notNull(), serverSequence: integer("server_sequence").notNull(), clientEventId: text("client_event_id").notNull(), adultId: text("adult_id").notNull(), origin: text("origin").notNull(), command: text("command").notNull(), payloadJson: text("payload_json").notNull().default("{}"), createdAt: integer("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.accountId, table.sessionId, table.serverSequence] }), uniqueIndex("remote_controller_events_client_unique").on(table.accountId, table.sessionId, table.clientEventId), index("remote_controller_events_session_idx").on(table.accountId, table.sessionId, table.serverSequence)]);
