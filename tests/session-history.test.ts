@@ -28,6 +28,7 @@ test("mostra immagini nel riepilogo soltanto per le attività che le prevedevano
   assert.equal(historyItemUsesArtwork({ kind: "articles" }), true);
   assert.equal(historyItemUsesArtwork({ kind: "naming" }), true);
   assert.equal(historyItemUsesArtwork({ kind: "number-quantity" }), false);
+  assert.equal(historyItemUsesArtwork({ kind: "sentence-matching" }), true);
 });
 
 test("rende leggibile il risultato numerico nello storico", () => {
