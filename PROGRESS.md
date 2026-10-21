@@ -9,7 +9,7 @@
 ## Completato
 
 - [x] Pronuncia iniziale di `Numero quantità` resa affidabile a motore vocale freddo: attesa di `voiceschanged`, timeout controllato, un solo retry su errore e comando manuale di riascolto conservato.
-- [x] Export CSV compatibile con Excel italiano: BOM UTF-8, separatore dichiarato `;`, righe CRLF, escape completo dei campi e neutralizzazione delle formule.
+- [x] Export CSV compatibile con Excel italiano: UTF-16LE con BOM, separatore dichiarato `;`, righe CRLF, escape completo e neutralizzazione delle formule; nello stesso file include riepiloghi per competenza e parola × competenza, con Valutazione e Insegnamento separate e stato descrittivo basato sui primi tentativi.
 - [x] Aspetto ampliato a sette palette e quattro forme, con sette preset incluso `Lettura Globale`, ispirato al giallo, blu notte e azzurro dell’icona applicativa; migrazione `0010` forward-only per estendere i vincoli delle preferenze D1 già distribuite.
 - [x] Aggiornamento PWA dei nuovi temi reso esplicito: cache applicativa `v17` e controllo del service worker senza riuso della cache HTTP, così una riapertura carica il pannello Aspetto corrente.
 - [x] Configurazione Wrangler di produzione versionata e flusso GitHub → Cloudflare Workers Builds definito: build da `main`, deploy sul Worker `lettura-globale`, UUID D1 reale anche nella configurazione generata da Vinext, binding D1/R2 esistenti conservati e migrazioni escluse dal deploy ordinario.

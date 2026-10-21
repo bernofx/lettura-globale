@@ -12,6 +12,9 @@ La precedente pagina Progressi offriva viste separate per parola, parola più es
 - `test` è presentata come **Valutazione** ed è la vista predefinita per acquisizione e mantenimento. Considera il primo tentativo prima delle correzioni.
 - `teaching` è presentata come **Insegnamento** e descrive la pratica guidata. Accuratezza e aiuti restano visibili, ma separati dalla misura di valutazione.
 - Ogni nuovo aiuto conserva `wordId` e modalità. I record precedenti restano leggibili; quando possibile la parola viene ricavata dall'esercizio associato.
+- L'export Excel contiene nello stesso file un riepilogo per competenza e per coppia parola × competenza, seguito dal dettaglio dei tentativi. I riepiloghi contano soltanto il primo tentativo e mantengono colonne separate per Valutazione e Insegnamento.
+- Lo stato descrittivo nell'export usa soltanto la Valutazione: con meno di cinque prove indica `Dati insufficienti`; da cinque prove indica `Acquisita` con accuratezza almeno 80%, `In consolidamento` dal 50% al 79% e `Da esercitare` sotto il 50%. È un supporto alla lettura dei dati, non una valutazione clinica automatica.
+- Il file viene codificato UTF-16 little-endian con BOM e separatore dichiarato `;`, per impedire che Excel interpreti `Sì` e altri caratteri italiani con una codifica errata.
 
 ## Motivazione
 
