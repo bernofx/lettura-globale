@@ -2,13 +2,30 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerSessionView, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
+import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerSessionView, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, remoteCommandNames, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
 
 test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123456", command: "shuffle" }), { clientEventId: "event-123456", command: "shuffle" });
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123457", command: "help", payload: { label: "Gesto" } }), { clientEventId: "event-123457", command: "help", payload: { label: "Gesto" } });
   assert.equal(parseRemoteCommand({ clientEventId: "short", command: "next" }), null);
   assert.equal(parseRemoteCommand({ clientEventId: "event-123456", command: "delete" }), null);
+});
+
+test("la pausa impedisce di modificare il turno anche con comandi già in coda", () => {
+  const allowedDuringPause = new Set(["pause", "resume", "end", "toggle_audio"]);
+  for (const command of remoteCommandNames) {
+    assert.equal(remoteCommandDisposition(command, true), allowedDuringPause.has(command) ? "execute" : "ignore", command);
+    assert.equal(remoteCommandDisposition(command, false), "execute", command);
+  }
+  assert.equal(remoteCommandDisposition("next", true, true), "ignore", "la pausa prevale anche sulla conferma di una transizione");
+});
+
+test("il telefono conferma la transizione senza saltare il primo turno dell'esercizio", () => {
+  assert.equal(remoteCommandDisposition("next", false, true), "continue");
+  assert.equal(remoteCommandDisposition("next_activity", false, true), "continue");
+  assert.equal(remoteCommandDisposition("previous", false, true), "execute");
+  const snapshot = sanitizeRemoteSnapshot({ sessionId: "session-1", childName: "Demo", sessionTitle: "Sequenza", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: false, awaitingNextExercise: true, updatedAt: 1 });
+  assert.equal(snapshot?.awaitingNextExercise, true, "lo stato della transizione arriva alla console");
 });
 
 test("la presenza del controller scade dopo il lease", () => {

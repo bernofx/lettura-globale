@@ -26,7 +26,7 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type Quant
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
-import { controllerSessionView, parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { controllerSessionView, parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
@@ -739,6 +739,7 @@ export default function HomePage() {
   const [sessionWizardKey, setSessionWizardKey] = useState(0);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [sessionPaused, setSessionPaused] = useState(false);
+  const sessionPausedRef = useRef(false);
   const [awaitingNextExercise, setAwaitingNextExercise] = useState(false);
   const [quickExerciseToSave, setQuickExerciseToSave] = useState<Exercise | null>(null);
   const [sessionFromSharedLink, setSessionFromSharedLink] = useState(false);
@@ -754,6 +755,7 @@ export default function HomePage() {
   const handledSharedLaunch = useRef("");
 
   const effectiveSoundVolume = soundEffects ? soundVolume : 0;
+  useEffect(() => { sessionPausedRef.current = sessionPaused; }, [sessionPaused]);
   const changeSoundVolume = useCallback((nextVolume: number) => {
     const volume = Math.min(100, Math.max(0, Math.round(nextVolume)));
     setSoundVolume(volume);
@@ -1657,7 +1659,8 @@ export default function HomePage() {
     window.history.replaceState({ lgView: "session" }, "", window.location.pathname);
     setView("session");
   };
-  const nextExercise = () => {
+  const nextExercise = (options?: { skipTransition?: boolean }) => {
+    if (sessionPausedRef.current) return;
     const itemKey = `${sessionRunId}:${sessionIndex}`;
     if (lastAdvancedSessionItem.current === itemKey) return;
     lastAdvancedSessionItem.current = itemKey;
@@ -1677,9 +1680,10 @@ export default function HomePage() {
     const nextIndex = sessionIndex + 1;
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
     setSessionIndex(nextIndex); setAnswerState("idle"); setWrongAnswerId(null);
-    if (sessionDescriptor.source === "sequence" && completesExercise) setAwaitingNextExercise(true);
+    setAwaitingNextExercise(sessionDescriptor.source === "sequence" && completesExercise && options?.skipTransition !== true);
   };
   const navigateReachedExercise = (direction: -1 | 1) => {
+    if (sessionPausedRef.current) return;
     const nextIndex = sessionIndex + direction;
     if (nextIndex < 0 || nextIndex > sessionFurthestIndex) return;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -1690,6 +1694,7 @@ export default function HomePage() {
     setSessionIndex(nextIndex);
     setAnswerState("idle");
     setWrongAnswerId(null);
+    setAwaitingNextExercise(false);
   };
   const recordClassificationAttempt = (itemId: string, answer: string, correct: boolean) => {
     if (!currentExercise || !shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
@@ -1699,6 +1704,7 @@ export default function HomePage() {
   };
 
   const jumpToSessionIndex = (nextIndex: number) => {
+    if (sessionPausedRef.current) return;
     if (nextIndex < 0 || nextIndex >= sessionExercises.length) return;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
@@ -1712,7 +1718,7 @@ export default function HomePage() {
     const currentSource = sourceAt(sessionIndex);
     if (direction === 1) {
       const next = sessionExercises.findIndex((_, index) => index > sessionIndex && sourceAt(index) !== currentSource);
-      if (next >= 0) jumpToSessionIndex(next); else nextExercise();
+      if (next >= 0) jumpToSessionIndex(next); else nextExercise({ skipTransition: true });
       return;
     }
     let currentStart = sessionIndex;
@@ -1725,12 +1731,20 @@ export default function HomePage() {
   };
   const handleRemoteCommand = (event: RemoteControllerEvent) => {
     const command = event.command;
-    if (command === "next") { nextExercise(); return; }
+    const disposition = remoteCommandDisposition(command, sessionPausedRef.current, awaitingNextExercise);
+    if (disposition === "ignore") return;
+    if (disposition === "continue") { setAwaitingNextExercise(false); return; }
+    if (command === "next") { nextExercise({ skipTransition: true }); return; }
     if (command === "previous") { navigateReachedExercise(-1); return; }
     if (command === "next_activity") { jumpActivity(1); return; }
     if (command === "previous_activity") { jumpActivity(-1); return; }
-    if (command === "pause") { setSessionPaused(true); return; }
-    if (command === "resume") { setSessionPaused(false); return; }
+    if (command === "pause") {
+      sessionPausedRef.current = true;
+      setSessionPaused(true);
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      return;
+    }
+    if (command === "resume") { sessionPausedRef.current = false; setSessionPaused(false); return; }
     if (command === "toggle_audio") {
       setSoundEffects((current) => {
         if (current && "speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -1777,6 +1791,7 @@ export default function HomePage() {
     answerState,
     soundEffects,
     paused: sessionPaused,
+    awaitingNextExercise,
     updatedAt: 0,
   } : null;
   const remoteHost = useRemoteSessionHost({
@@ -2104,7 +2119,7 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
   };
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
-    if (state.status !== "connected") return;
+    if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false) === "ignore") return;
     const id = crypto.randomUUID();
     const key = `${command}:${payload?.label ?? ""}`;
     const label = remoteCommandFeedback(command, payload);
@@ -2130,6 +2145,7 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
   const feedbackFor = (command: RemoteCommandName, payload?: { label?: string }) => commandFeedback?.key === `${command}:${payload?.label ?? ""}` ? commandFeedback.phase : undefined;
   const snapshot = state.snapshot;
   const connected = state.status === "connected";
+  const exerciseControlsEnabled = connected && !snapshot?.paused;
   const supportsShuffle = snapshot?.exerciseKind === "recognition" || snapshot?.exerciseKind === "sentence-matching" || snapshot?.exerciseKind === "word-categories";
   const supportsJudgement = snapshot?.exerciseKind === "naming" || snapshot?.exerciseKind === "number-quantity";
 
@@ -2146,19 +2162,19 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
     {snapshot ? <>
       <section className="remote-now-card"><span>{snapshot.childName} · {snapshot.currentIndex + 1} di {snapshot.total}</span><h1>{snapshot.exerciseTitle}</h1><p>{snapshot.prompt || snapshot.sessionTitle}</p><div><small>{snapshot.answerState === "correct" ? "Risposta corretta" : snapshot.answerState === "wrong" ? "Risposta errata" : "In attesa della risposta"}</small>{snapshot.paused && <strong>IN PAUSA</strong>}</div></section>
       <section className="remote-command-grid">
-        <button type="button" data-feedback={feedbackFor("previous")} disabled={!connected || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
-        <button type="button" className="primary" data-feedback={feedbackFor("next")} disabled={!connected} onClick={() => send("next")}>Passo successivo<ChevronRight /></button>
-        <button type="button" data-feedback={feedbackFor("previous_activity")} disabled={!connected} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
-        <button type="button" data-feedback={feedbackFor("next_activity")} disabled={!connected} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
+        <button type="button" data-feedback={feedbackFor("previous")} disabled={!exerciseControlsEnabled || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
+        <button type="button" className="primary" data-feedback={feedbackFor("next")} disabled={!exerciseControlsEnabled} onClick={() => send("next")}>{snapshot.awaitingNextExercise ? "Avvia esercizio" : "Passo successivo"}<ChevronRight /></button>
+        <button type="button" data-feedback={feedbackFor("previous_activity")} disabled={!exerciseControlsEnabled} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
+        <button type="button" data-feedback={feedbackFor("next_activity")} disabled={!exerciseControlsEnabled} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
       </section>
       <section className="remote-command-row">
-        <button type="button" data-feedback={feedbackFor("speak")} disabled={!connected} onClick={() => send("speak")}><Volume2 />Riascolta</button>
+        <button type="button" data-feedback={feedbackFor("speak")} disabled={!exerciseControlsEnabled} onClick={() => send("speak")}><Volume2 />Riascolta</button>
         <button type="button" data-feedback={feedbackFor("toggle_audio")} disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
-        {supportsShuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!connected} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
+        {supportsShuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!exerciseControlsEnabled} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
         <button type="button" data-feedback={feedbackFor(snapshot.paused ? "resume" : "pause")} disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
       </section>
-      {supportsJudgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!connected} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button data-feedback={feedbackFor("mark_helped")} disabled={!connected} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!connected} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button data-feedback={feedbackFor("retry")} disabled={!connected} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
-      <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" data-feedback={feedbackFor("help", { label })} disabled={!connected} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
+      {supportsJudgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button data-feedback={feedbackFor("mark_helped")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button data-feedback={feedbackFor("retry")} disabled={!exerciseControlsEnabled} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
+      <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" data-feedback={feedbackFor("help", { label })} disabled={!exerciseControlsEnabled} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
       <button className="remote-end-button" data-feedback={feedbackFor("end")} type="button" disabled={!connected} onClick={() => { if (window.confirm("Interrompere la sessione sul PC?")) send("end"); }}><Square />Interrompi sessione</button>
     </> : <section className="remote-waiting"><Wifi /><h1>{state.status === "error" ? "Collegamento non disponibile" : "Connessione alla sessione"}</h1><p>{state.error || "Il collegamento si completa automaticamente."}</p></section>}
   </main>;

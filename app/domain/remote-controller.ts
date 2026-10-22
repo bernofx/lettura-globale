@@ -24,6 +24,12 @@ export const remoteCommandNames = [
 
 export type RemoteCommandName = typeof remoteCommandNames[number];
 
+export function remoteCommandDisposition(command: RemoteCommandName, paused: boolean, awaitingNextExercise = false) {
+  if (paused && command !== "resume" && command !== "pause" && command !== "end" && command !== "toggle_audio") return "ignore";
+  if (awaitingNextExercise && (command === "next" || command === "next_activity")) return "continue";
+  return "execute";
+}
+
 export type RemoteCommand = {
   clientEventId: string;
   command: RemoteCommandName;
@@ -70,6 +76,7 @@ export type RemoteSessionSnapshot = {
   answerState: "idle" | "wrong" | "correct";
   soundEffects: boolean;
   paused: boolean;
+  awaitingNextExercise?: boolean;
   updatedAt: number;
 };
 
@@ -118,6 +125,7 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
     answerState: input.answerState as RemoteSessionSnapshot["answerState"],
     soundEffects: input.soundEffects,
     paused: input.paused,
+    awaitingNextExercise: input.awaitingNextExercise === true,
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : Date.now(),
   };
 }

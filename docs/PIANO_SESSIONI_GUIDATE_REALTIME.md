@@ -121,6 +121,10 @@ Vincoli minimi:
 
 ## Architettura realtime proposta
 
+Prima di cambiare trasporto consolidare le regole di esecuzione: pausa che blocca i comandi modificativi anche in batch e conferma delle transizioni da telefono. Il Durable Object non sostituisce questi controlli applicativi.
+
+Il passaggio va verificato in tre fasi: spike di build/deploy con binding Durable Objects e WebSocket in ambiente di prova; integrazione del trasporto conservando identificativi idempotenti, ordine e audit D1; QA con PC e due telefoni su pausa, cambio attività, riconnessione, sospensione dello smartphone, logout e chiusura della sessione. Abilitare il nuovo trasporto per nuove sessioni selezionate, mantenendo il polling ripristinabile senza cambiare trasporto a metà sessione. Nessuna migrazione realtime di produzione viene eseguita con queste correzioni.
+
 D1 rimane l'archivio durevole e R2 il deposito privato delle immagini. Un coordinatore realtime per sessione serializza i comandi, assegna l'ordine server, salva l'evento prima della conferma e aggiorna PC e telefono. Gestisce inoltre il lease dell'unico controller mobile, l'heartbeat, il passaggio automatico al fallback desktop e il replay alla riconnessione.
 
 L'MVP usa polling breve su D1 per non introdurre nuovi binding nel deploy corrente. La prima evoluzione da verificare è un Durable Object Cloudflare con WebSocket. Se integrare il coordinatore nello stesso Worker rendesse fragile il deploy dell'applicazione, usare un Worker Cloudflare realtime separato con autenticazione coordinata.
