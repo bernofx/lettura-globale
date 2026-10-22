@@ -734,6 +734,8 @@ export default function HomePage() {
   const [sessionStartedAt, setSessionStartedAt] = useState("");
   const [sessionDescriptor, setSessionDescriptor] = useState<{ title: string; source: "sequence" | "quick" }>({ title: "Sessione", source: "sequence" });
   const [sessionActive, setSessionActive] = useState(false);
+  const sessionActiveRef = useRef(false);
+  const pendingAppReload = useRef(false);
   const [sessionWizardKey, setSessionWizardKey] = useState(0);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [sessionPaused, setSessionPaused] = useState(false);
@@ -763,6 +765,11 @@ export default function HomePage() {
     currentAudioVolume = effectiveSoundVolume / 100;
     Object.values(feedbackAudioPlayers).forEach((player) => { if (player) player.volume = currentAudioVolume; });
   }, [effectiveSoundVolume]);
+
+  useEffect(() => {
+    sessionActiveRef.current = sessionActive;
+    if (!sessionActive && pendingAppReload.current) window.location.reload();
+  }, [sessionActive]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
@@ -779,8 +786,16 @@ export default function HomePage() {
   useEffect(() => {
     preloadFeedbackSounds();
     const prime = () => primeFeedbackSounds();
+    const receiveServiceWorkerUpdate = (event: MessageEvent) => {
+      const version = typeof event.data?.version === "string" ? event.data.version : "";
+      if (event.data?.type !== "lettura-globale:update-ready" || !version || sessionStorage.getItem("lg-active-app-version") === version) return;
+      sessionStorage.setItem("lg-active-app-version", version);
+      if (sessionActiveRef.current) pendingAppReload.current = true;
+      else window.location.reload();
+    };
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
     window.addEventListener("keydown", prime, { capture: true, once: true });
+    navigator.serviceWorker?.addEventListener("message", receiveServiceWorkerUpdate);
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     }
@@ -804,6 +819,7 @@ export default function HomePage() {
       window.clearTimeout(authTimer);
       window.removeEventListener("pointerdown", prime, true);
       window.removeEventListener("keydown", prime, true);
+      navigator.serviceWorker?.removeEventListener("message", receiveServiceWorkerUpdate);
     };
   }, []);
 
@@ -1959,8 +1975,8 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
         : host.status === "creating" ? "Creazione QR…"
           : host.status === "error" ? "Controller non disponibile"
             : "Scansiona per collegare il telefono";
-  return <aside className={`remote-host-badge remote-${host.status}`} aria-label={statusLabel}>
-    <button type="button" className="remote-host-summary" onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
+  return <aside className={`remote-host-badge remote-${host.status}`} aria-label={statusLabel} style={{ width: 28, minWidth: 28, maxWidth: 28, height: 28, minHeight: 28, maxHeight: 28, flex: "0 0 28px", alignSelf: "center" }}>
+    <button type="button" className="remote-host-summary" style={{ width: 28, minWidth: 28, maxWidth: 28, height: 28, minHeight: 28, maxHeight: 28, padding: 0, border: 0, background: "transparent", boxShadow: "none" }} onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
       <span className="remote-status-dot" aria-hidden="true" />
       <strong>{statusLabel}</strong>
     </button>

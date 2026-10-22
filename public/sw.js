@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v21";
+const CACHE_NAME = "lettura-globale-v22";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png"];
 
 async function fetchWithTimeout(request, timeoutMs = 5000) {
@@ -31,9 +31,12 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then((clients) => clients.forEach((client) => client.postMessage({ type: "lettura-globale:update-ready", version: CACHE_NAME }))),
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
