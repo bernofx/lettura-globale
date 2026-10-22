@@ -5,6 +5,8 @@ import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
+import { CELEBRATION_DURATION_MS } from "./domain/celebration";
+import { SequenceCelebration } from "./components/sequence-celebration";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
@@ -853,7 +855,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!celebratingSequence) return;
-    const timeout = window.setTimeout(() => setCelebratingSequence(false), 6000);
+    const timeout = window.setTimeout(() => setCelebratingSequence(false), CELEBRATION_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [celebratingSequence]);
 
@@ -2303,12 +2305,6 @@ function SoundSettingsPanel({ sounds, onChange }: { sounds: SoundPreferences; on
     { id: "select", label: "Selezione in Numero quantità", detail: "Quando un oggetto viene selezionato o deselezionato" },
   ];
   return <section className="panel sound-settings"><div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h2>Suoni degli esercizi</h2></div></div><p>Scegli un suono per ogni momento. Le scelte vengono salvate nel cloud e restano disponibili sugli altri dispositivi.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}</div></section>;
-}
-
-function SequenceCelebration() {
-  const balloonColors = ["#f77c8b", "#f3b854", "#73c9c2", "#9583e5", "#79a9ed", "#ed95d5", "#9ccc71", "#efaa77"];
-  const confettiColors = ["#ee6f8b", "#ffc65f", "#80cbb1", "#9c8de6", "#76b8ed"];
-  return <div className="sequence-celebration" aria-hidden="true"><div className="celebration-glow" />{balloonColors.map((color, index) => <span key={`balloon-${index}`} className="celebration-balloon" style={{ left: `${5 + index * 12}%`, backgroundColor: color, animationDelay: `${index * 0.24}s` }} />)}{Array.from({ length: 36 }, (_, index) => <span key={`confetti-${index}`} className="celebration-confetti" style={{ left: `${(index * 37) % 97}%`, backgroundColor: confettiColors[index % confettiColors.length], animationDelay: `${(index * 13) % 23 / 10}s`, animationDuration: `${3.1 + (index % 5) * 0.48}s` }} />)}</div>;
 }
 
 function SequenceTransition({ title, onContinue }: { title: string; onContinue: () => void }) {
