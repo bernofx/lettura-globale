@@ -9,7 +9,7 @@ import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibra
 import { feedbackStartOffset } from "./domain/feedback-audio";
 import { buildSessionHistoryItems, historyItemUsesArtwork, type HistoryImageSnapshot, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
-import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access";
+import { canAccessSequence, canViewAllSequences, discardForeignNewSequences } from "./domain/sequence-access";
 import { analyzeItalianSyllables, countSyllables, hydrateSyllables, matchesSyllableFilter, type SyllableFilter, type SyllableStatus } from "./domain/syllabification";
 import { wordOnlyCatalog } from "./domain/word-catalog";
 import { availableForRecognition, hasArtwork } from "./domain/library-availability";
@@ -324,10 +324,21 @@ function remapExerciseLibraryIds(exercise: Exercise, replacements: Map<string, s
 }
 
 function hydrateSequences(items: Sequence[]) {
-  return mergeById(items, initialSequences).map((sequence) => ({
+  return items.map((sequence) => ({
     ...sequence,
     therapistId: sequence.therapistId || initialAdministrator.id,
   }));
+}
+
+function discardUnauthorizedNewSequences(baseline: BackendState, candidate: BackendState, therapistId: string | null) {
+  const role = candidate.therapists.find((item) => item.id === therapistId)?.role
+    ?? baseline.therapists.find((item) => item.id === therapistId)?.role;
+  const sequences = discardForeignNewSequences(baseline.sequences, candidate.sequences, therapistId ?? undefined, role);
+  if (sequences === candidate.sequences) return candidate;
+  const activeSequenceId = candidate.activeSequenceId && sequences.some((sequence) => sequence.id === candidate.activeSequenceId)
+    ? candidate.activeSequenceId
+    : sequences[0]?.id;
+  return { ...candidate, sequences, activeSequenceId };
 }
 
 function libraryForStorage(items: LibraryItem[]) {
@@ -1060,7 +1071,9 @@ export default function HomePage() {
         if (pendingSave) {
           try {
             restoredState = rebaseStateChange(savedBaseline, pendingSave.change, crypto.randomUUID(), result.revision).state as BackendState;
-            recoveredPendingSave = true;
+            restoredState = discardUnauthorizedNewSequences(savedBaseline, restoredState, loggedInTherapistId);
+            recoveredPendingSave = Boolean(buildStateChange(savedBaseline, restoredState, crypto.randomUUID(), result.revision));
+            if (!recoveredPendingSave) clearPendingCloudSave();
           } catch {
             clearPendingCloudSave();
           }
@@ -1118,7 +1131,7 @@ export default function HomePage() {
       setBackendStatus("local");
     });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, loggedInTherapistId, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
@@ -1131,10 +1144,12 @@ export default function HomePage() {
   }, [backendInitialized, backendStatus, backendRetryKey]);
 
   const enqueueBackendSave = useCallback((snapshot: BackendState) => {
+    const requestedSnapshot = snapshot;
     let attemptedOperationId = "";
     const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
         const previous = lastSyncedBackendState.current;
         if (!previous) throw new Error("missing_sync_baseline");
+        snapshot = discardUnauthorizedNewSequences(previous, snapshot, loggedInTherapistId);
         const operationId = crypto.randomUUID();
         attemptedOperationId = operationId;
         const change = buildStateChange(previous, snapshot, operationId, backendRevision.current);
@@ -1177,7 +1192,7 @@ export default function HomePage() {
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = syncedSnapshot;
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_succeeded", operationId, revision: result.revision, httpStatus: response.status, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: syncedSnapshot.sequences.length });
-        if (syncedSnapshot !== snapshot) {
+        if (syncedSnapshot !== requestedSnapshot) {
           backendHydrating.current = true;
           setTherapists(mergeById(syncedSnapshot.therapists ?? [], [initialAdministrator]));
           setChildren(syncedSnapshot.children?.length ? syncedSnapshot.children : initialChildren);
@@ -1193,7 +1208,9 @@ export default function HomePage() {
           setSoundPreferences(hydrateSoundPreferences(syncedSnapshot.soundPreferences));
           backendHydrating.current = false;
         }
-        const currentSnapshot = backendStateForStorage(localBootstrapSnapshot.current);
+        const currentSnapshot = syncedSnapshot !== requestedSnapshot
+          ? syncedSnapshot
+          : backendStateForStorage(localBootstrapSnapshot.current);
         const stillDirty = Boolean(buildStateChange(syncedSnapshot, currentSnapshot, crypto.randomUUID(), result.revision));
         if (stillDirty) setBackendStatus("syncing");
         else {
@@ -1206,7 +1223,7 @@ export default function HomePage() {
       });
     backendSaveQueue.current = task;
     return task;
-  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [loggedInTherapistId, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (backendHydrating.current) return;
