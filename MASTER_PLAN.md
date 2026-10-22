@@ -51,6 +51,24 @@ Vincoli previsti:
 
 Configurazione iniziale proposta per la valutazione: OpenAI Images API con modello rapido/economico, qualità bassa, immagine quadrata e tetto di spesa configurabile. La scelta del provider resta aperta fino all'approvazione dell'ADR; l'abbonamento ChatGPT personale non viene considerato una credenziale API dell'applicazione.
 
+### Opzione futura — Storie sociali personalizzabili
+
+La creazione di storie sociali dovrà poter funzionare anche senza AI. L'adulto sceglie uno dei tre percorsi: composizione interamente manuale, procedura guidata con domande pertinenti alla situazione oppure generazione di una bozza modificabile. In tutti i casi il controllo editoriale resta all'adulto.
+
+Ogni scena è indipendente e consente di:
+
+- scrivere liberamente il proprio testo, accettare un suggerimento AI oppure modificare il testo generato;
+- caricare una propria immagine, sceglierla dalla libreria o generarne una, combinando liberamente le tre fonti nella stessa storia;
+- sostituire, ritagliare o rigenerare soltanto l'immagine della scena;
+- usare sintesi vocale, registrazione personale o nessun audio;
+- riordinare, duplicare, aggiungere ed eliminare scene;
+- applicare una modifica alla singola scena oppure, quando pertinente, all'intera storia;
+- rivedere lo storyboard prima della generazione delle immagini ed esportarlo in un formato stampabile/PDF.
+
+Il flusso guidato non usa un questionario fisso: parte dalla descrizione libera e pone soltanto le domande mancanti rilevanti, per esempio persone presenti, luogo reale, sequenza degli eventi, sensibilità sensoriali, passaggio difficile, aiuti e conclusione rassicurante. Personaggi, ambienti e stile devono restare coerenti tra le scene, senza impedire l'uso di fotografie reali.
+
+Prima dell'implementazione serve un ADR dedicato a consenso e immagini di minori o terzi, trattamento dei prompt e delle fotografie, conservazione e cancellazione, provider AI, moderazione, costi e divieto di usare i contenuti per addestramento. Le storie e i relativi asset seguono il principio cloud-first dell'app, con coda locale soltanto in assenza di rete.
+
 ## Architettura target
 
 - React + TypeScript strict, PWA responsive;
