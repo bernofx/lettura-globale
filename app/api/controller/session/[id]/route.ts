@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { controllerIsConnected, parseRemoteCommand, sanitizeRemoteSnapshot, type RemoteControllerEvent } from "../../../../domain/remote-controller";
+import { CONTROLLER_HEARTBEAT_WRITE_MS, controllerIsConnected, parseRemoteCommand, sanitizeRemoteSnapshot, type RemoteControllerEvent } from "../../../../domain/remote-controller";
 import { hashText } from "../../../../chatgpt-auth";
 import { adultCanAccessChild, authenticatedAdult, loadControllerSession, noStoreJson, readJson, validateController } from "../../_shared";
 
@@ -16,7 +16,7 @@ export async function GET(request: Request, context: RouteContext) {
   if (controllerKey) {
     if (!await validateController(row, user, controllerKey)) return noStoreJson({ error: "forbidden" }, { status: 403 });
     const now = Date.now();
-    if (row.status === "connected") {
+    if (row.status === "connected" && (!row.controller_last_seen_at || row.controller_last_seen_at <= now - CONTROLLER_HEARTBEAT_WRITE_MS)) {
       const heartbeat = await env.DB.prepare("UPDATE remote_controller_sessions SET controller_last_seen_at = ?, updated_at = ? WHERE account_id = ? AND session_id = ? AND controller_key_hash = ?")
         .bind(now, now, row.account_id, row.session_id, await hashText(controllerKey)).run();
       if (!heartbeat.meta.changes) return noStoreJson({ error: "forbidden" }, { status: 403 });

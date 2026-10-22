@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, QrCode, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
-import { ChangeEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
@@ -28,6 +28,7 @@ import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
 import { parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
+import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
 import { isSimpleSentenceScene, sentenceMatchingAvailability, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./domain/sentence-matching";
 
@@ -426,11 +427,19 @@ function Artwork({ item, compact = false, eager = false }: { item: LibraryItem; 
 }
 
 const preloadedArtwork = new Map<string, HTMLImageElement>();
+const MAX_PRELOADED_ARTWORK = 80;
 
 function preloadArtwork(items: LibraryItem[]) {
   if (typeof window === "undefined") return;
   items.forEach((item) => {
     if (!item.image || preloadedArtwork.has(item.image)) return;
+    while (preloadedArtwork.size >= MAX_PRELOADED_ARTWORK) {
+      const oldest = preloadedArtwork.keys().next().value as string | undefined;
+      if (!oldest) break;
+      const discarded = preloadedArtwork.get(oldest);
+      if (discarded) discarded.src = "";
+      preloadedArtwork.delete(oldest);
+    }
     const image = new window.Image();
     image.decoding = "async";
     image.src = item.image;
@@ -1057,7 +1066,7 @@ export default function HomePage() {
         migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
       }
       const migrated: BackendState = { ...local, library: migratedLibrary };
-      const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
+      const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(result.revision) }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
       if (!saveResponse.ok) throw new Error("backend_migration_failed");
       const saveResult = await saveResponse.json() as { revision: number };
       if (cancelled) return;
@@ -1101,7 +1110,7 @@ export default function HomePage() {
         setBackendStatus("syncing");
         let response: Response;
         if (granularWritesUnavailable.current) {
-          response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
+          response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
         } else {
           const body = JSON.stringify(change);
           response = await retryOperation(async () => {
@@ -1111,7 +1120,7 @@ export default function HomePage() {
           }, { attempts: 2, delayMs: 400 });
           if ([404, 405, 501].includes(response.status)) {
             granularWritesUnavailable.current = true;
-            response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) }, 6500);
+            response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
           }
         }
         let syncedSnapshot = snapshot;
@@ -1224,7 +1233,7 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, [backendInitialized, backendRefreshKey, backendStatus, library, enqueueBackendSave, setLibrary]);
 
-  const therapist = therapists.find((item) => item.id === loggedInTherapistId);
+  const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
   const associatedChildren = useMemo(() => therapist?.role === "Amministratore" ? children : children.filter((child) => therapist?.childIds.includes(child.id)), [children, therapist]);
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
@@ -1260,16 +1269,17 @@ export default function HomePage() {
       }));
     } catch { /* localStorage può non essere disponibile */ }
   }, [sessionActive, sessionFromSharedLink, sessionPlan, sessionRunId, sessionChildId, sessionStartedAt, sessionDescriptor, sessionMode, sessionPresentation, sessionIndex, sessionFurthestIndex, sessionIsTrial, therapist]);
-  const visibleLibrary = library.filter((item) => !item.deleted);
-  const visibleIds = new Set(visibleLibrary.map((item) => item.id));
-  const visibleExercises: Exercise[] = exercises.filter((exercise) => !exercise.deleted).map((exercise): Exercise => ({
+  const visibleLibrary = useMemo(() => library.filter((item) => !item.deleted), [library]);
+  const visibleLibraryById = useMemo(() => new Map(visibleLibrary.map((item) => [item.id, item])), [visibleLibrary]);
+  const visibleIds = useMemo(() => new Set(visibleLibraryById.keys()), [visibleLibraryById]);
+  const visibleExercises: Exercise[] = useMemo(() => exercises.filter((exercise) => !exercise.deleted).map((exercise): Exercise => ({
     ...exercise,
-    optionIds: exercise.optionIds.filter((id) => { const item = visibleLibrary.find((candidate) => candidate.id === id); return Boolean(item && (exercise.presentation === "words" || hasArtwork(item))); }),
-    articleItemIds: exercise.articleItemIds?.filter((id) => { const item = visibleLibrary.find((candidate) => candidate.id === id); return Boolean(item && hasArtwork(item) && articleFor(item)); }),
+    optionIds: exercise.optionIds.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && (exercise.presentation === "words" || hasArtwork(item))); }),
+    articleItemIds: exercise.articleItemIds?.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && hasArtwork(item) && articleFor(item)); }),
     categoryItemIds: exercise.categoryItemIds?.filter((id) => visibleIds.has(id)),
     recognitionItemIds: exercise.recognitionItemIds?.filter((id) => visibleIds.has(id)),
     sentenceItemIds: exercise.sentenceItemIds?.filter((id) => visibleIds.has(id)),
-    namingItemIds: exercise.namingItemIds?.filter((id) => { const item = visibleLibrary.find((candidate) => candidate.id === id); return Boolean(item && hasArtwork(item)); }),
+    namingItemIds: exercise.namingItemIds?.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && hasArtwork(item)); }),
   })).filter((exercise) => {
     const kind = exerciseKind(exercise);
     if (kind === "number-quantity") return true;
@@ -1286,25 +1296,28 @@ export default function HomePage() {
       const categories = exercise.recognitionCategories?.length ? new Set(exercise.recognitionCategories) : null;
       return visibleLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!allowed || allowed.has(item.id)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, exercise.recognitionSyllables)).length >= 2;
     }
-    return Boolean(exercise.promptId && visibleIds.has(exercise.promptId) && (exercise.presentation === "words" || hasArtwork(visibleLibrary.find((item) => item.id === exercise.promptId))) && exercise.optionIds.length >= 2);
-  });
-  const visibleSequences = sequences.filter((sequence) => !sequence.deleted && canAccessSequence(sequence.therapistId, therapist?.id, therapist?.role));
-  const activeSequence = visibleSequences.find((sequence) => sequence.id === activeSequenceId) ?? visibleSequences[0];
-  const sequenceExercises = activeSequence?.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [];
+    const prompt = visibleLibraryById.get(exercise.promptId ?? "");
+    return Boolean(prompt && (exercise.presentation === "words" || hasArtwork(prompt)) && exercise.optionIds.length >= 2);
+  }), [exercises, visibleIds, visibleLibrary, visibleLibraryById]);
+  const visibleExerciseById = useMemo(() => new Map(visibleExercises.map((exercise) => [exercise.id, exercise])), [visibleExercises]);
+  const visibleSequences = useMemo(() => sequences.filter((sequence) => !sequence.deleted && canAccessSequence(sequence.therapistId, therapist?.id, therapist?.role)), [sequences, therapist]);
+  const activeSequence = useMemo(() => visibleSequences.find((sequence) => sequence.id === activeSequenceId) ?? visibleSequences[0], [activeSequenceId, visibleSequences]);
+  const sequenceExercises = useMemo(() => activeSequence?.exerciseIds.map((id) => visibleExerciseById.get(id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [], [activeSequence, visibleExerciseById]);
   const sessionExercises = sessionPlan;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
   const currentPresentation = currentExercise?.presentation ?? sessionPresentation;
-  const sessionLibrary = sessionFromSharedLink && sharedPreview ? sharedPreview.library.filter((item) => !item.deleted) : visibleLibrary;
-  const promptItem = sessionLibrary.find((item) => item.id === currentExercise?.promptId);
+  const sessionLibrary = useMemo(() => sessionFromSharedLink && sharedPreview ? sharedPreview.library.filter((item) => !item.deleted) : visibleLibrary, [sessionFromSharedLink, sharedPreview, visibleLibrary]);
+  const sessionLibraryById = useMemo(() => new Map(sessionLibrary.map((item) => [item.id, item])), [sessionLibrary]);
+  const promptItem = sessionLibraryById.get(currentExercise?.promptId ?? "");
   const promptWord = promptItem?.word;
-  const childAttempts = attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id);
-  const childHelps = helps.filter((help) => !help.childId || help.childId === activeChild?.id);
-  const childSessionHistory = sessionHistory.filter((record) => !record.deletedAt && record.childId === activeChild?.id && (
+  const childAttempts = useMemo(() => attempts.filter((attempt) => !attempt.childId || attempt.childId === activeChild?.id), [activeChild?.id, attempts]);
+  const childHelps = useMemo(() => helps.filter((help) => !help.childId || help.childId === activeChild?.id), [activeChild?.id, helps]);
+  const childSessionHistory = useMemo(() => sessionHistory.filter((record) => !record.deletedAt && record.childId === activeChild?.id && (
     therapist?.role === "Amministratore" || therapist?.role === "Genitore" || therapist?.role === "Supervisore" || record.therapistId === therapist?.id
-  ));
-  const completedSessionRecord = sessionHistory.find((record) => record.id === sessionRunId && !record.deletedAt);
-  const firstAttempts = childAttempts.filter((attempt) => attempt.firstAttempt);
-  const firstCorrect = firstAttempts.filter((attempt) => attempt.correct).length;
+  )), [activeChild?.id, sessionHistory, therapist]);
+  const completedSessionRecord = useMemo(() => sessionHistory.find((record) => record.id === sessionRunId && !record.deletedAt), [sessionHistory, sessionRunId]);
+  const firstAttempts = useMemo(() => childAttempts.filter((attempt) => attempt.firstAttempt), [childAttempts]);
+  const firstCorrect = useMemo(() => firstAttempts.filter((attempt) => attempt.correct).length, [firstAttempts]);
   const accuracy = firstAttempts.length ? Math.round((firstCorrect / firstAttempts.length) * 100) : 0;
 
   useEffect(() => {
@@ -1788,7 +1801,14 @@ export default function HomePage() {
     const nextTherapist = therapists.find((item) => item.id === therapistId);
     if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
   };
-  const logout = () => { localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY); sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY); setLoggedInTherapistId(null); setShowTherapistLogin(false); setView("home"); };
+  const logout = () => {
+    void fetch("/api/logout", { method: "POST", keepalive: true }).catch(() => undefined);
+    localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+    setLoggedInTherapistId(null);
+    setShowTherapistLogin(false);
+    setView("home");
+  };
   const confirmDelete = () => {
     if (!pendingDelete) return;
     if (pendingDelete.kind === "therapist") {
@@ -1967,9 +1987,18 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
         if (response.status === 403) throw new Error("Un altro telefono ha preso il controllo della sessione.");
         if (!response.ok) throw new Error("Connessione al PC non disponibile.");
         const result = await response.json() as { status: string; connected: boolean; snapshot?: RemoteSessionSnapshot };
-        if (!cancelled) setState((current) => ({ ...current, status: result.connected ? "connected" : result.status === "pending" ? "pending" : "lost", snapshot: result.snapshot ?? current.snapshot, error: "" }));
+        if (!cancelled) setState((current) => {
+          const status = result.connected ? "connected" : result.status === "pending" ? "pending" : "lost";
+          const snapshot = result.snapshot ?? current.snapshot;
+          return current.status === status && !current.error && JSON.stringify(current.snapshot) === JSON.stringify(snapshot)
+            ? current
+            : { ...current, status, snapshot, error: "" };
+        });
       } catch (error) {
-        if (!cancelled) setState((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : "Connessione persa." }));
+        if (!cancelled) setState((current) => {
+          const message = error instanceof Error ? error.message : "Connessione persa.";
+          return current.status === "error" && current.error === message ? current : { ...current, status: "error", error: message };
+        });
       } finally { polling = false; }
     };
     void poll();
@@ -2437,39 +2466,10 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
 
 function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
-  const [sentenceDragOffset, setSentenceDragOffset] = useState({ x: 0, y: 0, active: false });
-  const sentenceDragStart = useRef<{ x: number; y: number } | null>(null);
-  const sentenceDragMoved = useRef(false);
+  const sentenceDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useRemoteComponentCommand((event) => { if (event.command === "shuffle") setOptionIds((current) => shuffled(current)); });
-  const resetSentenceDrag = () => {
-    sentenceDragStart.current = null;
-    setSentenceDragOffset({ x: 0, y: 0, active: false });
-  };
-  const startSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (answerState === "correct") return;
-    sentenceDragMoved.current = false;
-    sentenceDragStart.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const moveSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!sentenceDragStart.current) return;
-    const x = event.clientX - sentenceDragStart.current.x;
-    const y = event.clientY - sentenceDragStart.current.y;
-    if (!sentenceDragMoved.current && Math.hypot(x, y) < 7) return;
-    sentenceDragMoved.current = true;
-    event.preventDefault();
-    setSentenceDragOffset({ x, y, active: true });
-  };
-  const finishSentenceDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const moved = sentenceDragMoved.current;
-    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-answer-id]") : null;
-    const answerId = target?.dataset.answerId;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    resetSentenceDrag();
-    if (moved && answerId) onChoose(answerId);
-  };
   useEffect(() => {
     if (answerState !== "correct" || manualAdvance) return;
     const timer = window.setTimeout(() => onNextRef.current(), 750);
@@ -2485,17 +2485,17 @@ function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, cu
       <p className="instruction">Tocca l’immagine corretta oppure trascina la frase sopra l’immagine.</p>
       <button
         type="button"
-        className={`sentence-prompt ${sentenceDragOffset.active ? "pointer-dragging" : ""}`}
-        style={sentenceDragOffset.active ? { transform: `translate3d(${sentenceDragOffset.x}px, ${sentenceDragOffset.y}px, 0)` } : undefined}
+        className={`sentence-prompt ${sentenceDrag.offset.active ? "pointer-dragging" : ""}`}
+        style={sentenceDrag.offset.active ? { transform: `translate3d(${sentenceDrag.offset.x}px, ${sentenceDrag.offset.y}px, 0)` } : undefined}
         disabled={answerState === "correct"}
         onClick={(event) => {
-          if (sentenceDragMoved.current) { sentenceDragMoved.current = false; event.preventDefault(); return; }
+          if (sentenceDrag.consumeDraggedClick()) { event.preventDefault(); return; }
           speakWord(prompt.word);
         }}
-        onPointerDown={startSentenceDrag}
-        onPointerMove={moveSentenceDrag}
-        onPointerUp={finishSentenceDrag}
-        onPointerCancel={() => { sentenceDragMoved.current = false; resetSentenceDrag(); }}
+        onPointerDown={sentenceDrag.onPointerDown}
+        onPointerMove={sentenceDrag.onPointerMove}
+        onPointerUp={sentenceDrag.onPointerUp}
+        onPointerCancel={sentenceDrag.onPointerCancel}
         aria-label={`${prompt.word}. Trascina la frase sull’immagine corretta oppure tocca per ascoltarla`}
       ><strong>{prompt.word}</strong><Volume2 /><small>Trascina sulle immagini · tocca per riascoltare</small></button>
       <div className={`answer-grid sentence-answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
@@ -2513,41 +2513,12 @@ function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, cu
 
 function RecognitionSession({ previewLabel, mode, manualAdvance = false, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
-  const [wordDragOffset, setWordDragOffset] = useState({ x: 0, y: 0, active: false });
-  const wordDragStart = useRef<{ x: number; y: number } | null>(null);
-  const wordDragMoved = useRef(false);
+  const wordDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useRemoteComponentCommand((event) => {
     if (event.command === "shuffle") setOptionIds((current) => shuffled(current));
   });
-  const resetWordDrag = () => {
-    wordDragStart.current = null;
-    setWordDragOffset({ x: 0, y: 0, active: false });
-  };
-  const startWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (answerState === "correct") return;
-    wordDragMoved.current = false;
-    wordDragStart.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const moveWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!wordDragStart.current) return;
-    const x = event.clientX - wordDragStart.current.x;
-    const y = event.clientY - wordDragStart.current.y;
-    if (!wordDragMoved.current && Math.hypot(x, y) < 7) return;
-    wordDragMoved.current = true;
-    event.preventDefault();
-    setWordDragOffset({ x, y, active: true });
-  };
-  const finishWordDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const moved = wordDragMoved.current;
-    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-answer-id]") : null;
-    const answerId = target?.dataset.answerId;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    resetWordDrag();
-    if (moved && answerId) onChoose(answerId);
-  };
   useEffect(() => {
     if (answerState !== "correct") return;
     if (manualAdvance) return;
@@ -2579,18 +2550,18 @@ function RecognitionSession({ previewLabel, mode, manualAdvance = false, present
       <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Tocca la parola corretta oppure trascina la parola nel box."}</p>
       <button
         type="button"
-        className={`draggable-word-prompt ${wordDragOffset.active ? "pointer-dragging" : ""}`}
-        style={wordDragOffset.active ? { transform: `translate3d(${wordDragOffset.x}px, ${wordDragOffset.y}px, 0)` } : undefined}
+        className={`draggable-word-prompt ${wordDrag.offset.active ? "pointer-dragging" : ""}`}
+        style={wordDrag.offset.active ? { transform: `translate3d(${wordDrag.offset.x}px, ${wordDrag.offset.y}px, 0)` } : undefined}
         aria-label={`${prompt.word}. Trascina la parola sul box corretto oppure tocca per ascoltarla`}
         disabled={answerState === "correct"}
         onClick={(event) => {
-          if (wordDragMoved.current) { wordDragMoved.current = false; event.preventDefault(); return; }
+          if (wordDrag.consumeDraggedClick()) { event.preventDefault(); return; }
           speakWord(prompt.word);
         }}
-        onPointerDown={startWordDrag}
-        onPointerMove={moveWordDrag}
-        onPointerUp={finishWordDrag}
-        onPointerCancel={() => { wordDragMoved.current = false; resetWordDrag(); }}
+        onPointerDown={wordDrag.onPointerDown}
+        onPointerMove={wordDrag.onPointerMove}
+        onPointerUp={wordDrag.onPointerUp}
+        onPointerCancel={wordDrag.onPointerCancel}
       ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>{presentation === "images" ? "Trascina sulle immagini" : "Trascina sulle parole · tocca per ascoltare"}</small></button>
       <div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
         const item = library.find((entry) => entry.id === id);
@@ -2609,16 +2580,12 @@ function RecognitionSession({ previewLabel, mode, manualAdvance = false, present
 function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [initialIds] = useState(() => shuffled((exercise.articleItemIds ?? []).filter((id) => library.some((item) => item.id === id && articleFor(item)))).slice(0, Math.max(1, exercise.rounds ?? 6)));
   const [remainingIds, setRemainingIds] = useState(initialIds);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [wrongArticle, setWrongArticle] = useState<Article | null>(null);
   const [correctId, setCorrectId] = useState<string | null>(null);
   const [correctArticle, setCorrectArticle] = useState<Article | null>(null);
   const [feedback, setFeedback] = useState("Tocca IL o LA, oppure trascina l’immagine nel box.");
-  const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0, active: false });
-  const pointerStart = useRef<{ x: number; y: number } | null>(null);
-  const pointerMoved = useRef(false);
   const advanceTimer = useRef<number | null>(null);
   useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   useEffect(() => {
@@ -2632,7 +2599,7 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
   }, [remainingIds, library]);
   const place = (article: Article, explicitId?: string) => {
     if (correctId) return;
-    const itemId = explicitId ?? draggedId ?? selectedId ?? currentId;
+    const itemId = explicitId ?? selectedId ?? currentId;
     if (!itemId) return;
     const item = library.find((entry) => entry.id === itemId);
     const correct = Boolean(item && articleFor(item) === article);
@@ -2640,7 +2607,6 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (correct) {
       setSelectedId(null);
-      setDraggedId(null);
       setWrongId(null);
       setWrongArticle(null);
       setCorrectId(itemId);
@@ -2655,7 +2621,6 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
       setWrongId(itemId);
       setWrongArticle(article);
       setSelectedId(null);
-      setDraggedId(null);
       setFeedback("Non è il box giusto: l’immagine torna al suo posto.");
       window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongArticle((current) => current === article ? null : current); }, 900);
     }
@@ -2663,6 +2628,9 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
   const completed = remainingIds.length === 0;
   const currentId = remainingIds[0];
   const currentItem = library.find((entry) => entry.id === currentId);
+  const articleDrag = usePointerDrop(!currentId || Boolean(correctId), (article) => {
+    if (article === "IL" || article === "LA") place(article, currentId);
+  }, { selector: "[data-article]", dataKey: "article" });
   useLocalFallbackAdvance(manualAdvance, Boolean(correctId), () => {
     if (remainingIds.length <= 1) onComplete();
     else {
@@ -2671,35 +2639,6 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
       setCorrectArticle(null);
     }
   }, 750);
-  const resetPointerDrag = () => {
-    pointerStart.current = null;
-    setPointerOffset({ x: 0, y: 0, active: false });
-    setDraggedId(null);
-  };
-  const startPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!currentId || correctId) return;
-    pointerMoved.current = false;
-    pointerStart.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDraggedId(currentId);
-  };
-  const movePointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!pointerStart.current) return;
-    const x = event.clientX - pointerStart.current.x;
-    const y = event.clientY - pointerStart.current.y;
-    if (!pointerMoved.current && Math.hypot(x, y) < 7) return;
-    pointerMoved.current = true;
-    event.preventDefault();
-    setPointerOffset({ x, y, active: true });
-  };
-  const finishPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const moved = pointerMoved.current;
-    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-article]") : null;
-    const article = target?.dataset.article;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    resetPointerDrag();
-    if (moved && (article === "IL" || article === "LA")) place(article, currentId);
-  };
   return <div className="session-screen article-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div>
@@ -2716,16 +2655,16 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
             draggable={false}
             aria-pressed={selectedId === currentId}
             aria-label={`Immagine ${currentItem.word}. Scegli IL o LA, oppure trascinala nel box${wrongId === currentId ? ". Scelta errata" : ""}`}
-            className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`}
-            style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined}
+            className={`article-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${articleDrag.offset.active ? "pointer-dragging" : ""}`}
+            style={articleDrag.offset.active ? { transform: `translate3d(${articleDrag.offset.x}px, ${articleDrag.offset.y}px, 0)` } : undefined}
             onClick={(event) => {
-              if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; }
+              if (articleDrag.consumeDraggedClick()) { event.preventDefault(); return; }
               setSelectedId((current) => current === currentId ? null : currentId);
             }}
-            onPointerDown={startPointerDrag}
-            onPointerMove={movePointerDrag}
-            onPointerUp={finishPointerDrag}
-            onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}
+            onPointerDown={articleDrag.onPointerDown}
+            onPointerMove={articleDrag.onPointerMove}
+            onPointerUp={articleDrag.onPointerUp}
+            onPointerCancel={articleDrag.onPointerCancel}
           >
             <div className="article-art"><Artwork key={currentItem.id} item={currentItem} eager /></div>
             <strong>{currentItem.word.toLocaleUpperCase("it-IT")}</strong>
@@ -2747,15 +2686,11 @@ function WordCategorySession({ previewLabel, exercise, library, mode, manualAdva
   const [initialIds] = useState(() => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [wrongCategory, setWrongCategory] = useState<string | null>(null);
   const [correctId, setCorrectId] = useState<string | null>(null);
   const [correctCategory, setCorrectCategory] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("Tocca la categoria corretta oppure trascina la parola nel box.");
-  const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0, active: false });
-  const pointerStart = useRef<{ x: number; y: number } | null>(null);
-  const pointerMoved = useRef(false);
   const advanceTimer = useRef<number | null>(null);
   useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   const currentId = remainingIds[0];
@@ -2772,19 +2707,19 @@ function WordCategorySession({ previewLabel, exercise, library, mode, manualAdva
   useRemoteComponentCommand((event) => {
     if (event.command !== "shuffle") return;
     setCategoryOrder((current) => shuffled(current));
-    setSelectedId(null); setDraggedId(null); setWrongId(null); setWrongCategory(null); setCorrectId(null); setCorrectCategory(null);
+    setSelectedId(null); setWrongId(null); setWrongCategory(null); setCorrectId(null); setCorrectCategory(null);
     setFeedback("Le categorie sono state rimescolate. Prova ancora.");
   });
   const place = (category: string, explicitId?: string) => {
     if (correctId) return;
-    const itemId = explicitId ?? draggedId ?? selectedId ?? currentId;
+    const itemId = explicitId ?? selectedId ?? currentId;
     if (!itemId) return;
     const item = candidates.find((candidate) => candidate.id === itemId);
     const correct = item?.category === category;
     onAttempt(itemId, category, correct);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (correct) {
-      setSelectedId(null); setDraggedId(null); setWrongId(null); setWrongCategory(null);
+      setSelectedId(null); setWrongId(null); setWrongCategory(null);
       setCorrectId(itemId); setCorrectCategory(category);
       setFeedback("Giusto! La parola è nella categoria corretta.");
       if (manualAdvance) return;
@@ -2793,41 +2728,13 @@ function WordCategorySession({ previewLabel, exercise, library, mode, manualAdva
         else setRemainingIds((current) => current.filter((id) => id !== itemId));
       }, 750);
     } else {
-      setSelectedId(null); setDraggedId(null); setWrongId(itemId); setWrongCategory(category);
+      setSelectedId(null); setWrongId(itemId); setWrongCategory(category);
       setFeedback("Questa non è la categoria giusta. Riprova.");
       window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongCategory((current) => current === category ? null : current); }, 900);
     }
   };
-  const resetPointerDrag = () => {
-    pointerStart.current = null;
-    setPointerOffset({ x: 0, y: 0, active: false });
-    setDraggedId(null);
-  };
-  const startPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!currentId || correctId) return;
-    pointerMoved.current = false;
-    pointerStart.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDraggedId(currentId);
-  };
-  const movePointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!pointerStart.current) return;
-    const x = event.clientX - pointerStart.current.x;
-    const y = event.clientY - pointerStart.current.y;
-    if (!pointerMoved.current && Math.hypot(x, y) < 7) return;
-    pointerMoved.current = true;
-    event.preventDefault();
-    setPointerOffset({ x, y, active: true });
-  };
-  const finishPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const moved = pointerMoved.current;
-    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-category]") : null;
-    const category = target?.dataset.category;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    resetPointerDrag();
-    if (moved && category) place(category, currentId);
-  };
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${pointerOffset.active ? "pointer-dragging" : ""}`} style={pointerOffset.active ? { transform: `translate3d(${pointerOffset.x}px, ${pointerOffset.y}px, 0)` } : undefined} onClick={(event) => { if (pointerMoved.current) { pointerMoved.current = false; event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={finishPointerDrag} onPointerCancel={() => { pointerMoved.current = false; resetPointerDrag(); }}>{currentItem.word.toLocaleUpperCase("it-IT")}{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categoryOrder.length}`}>{categoryOrder.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}><span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  const categoryDrag = usePointerDrop(!currentId || Boolean(correctId), (category) => place(category, currentId), { selector: "[data-category]", dataKey: "category" });
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${categoryDrag.offset.active ? "pointer-dragging" : ""}`} style={categoryDrag.offset.active ? { transform: `translate3d(${categoryDrag.offset.x}px, ${categoryDrag.offset.y}px, 0)` } : undefined} onClick={(event) => { if (categoryDrag.consumeDraggedClick()) { event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={categoryDrag.onPointerDown} onPointerMove={categoryDrag.onPointerMove} onPointerUp={categoryDrag.onPointerUp} onPointerCancel={categoryDrag.onPointerCancel}>{currentItem.word.toLocaleUpperCase("it-IT")}{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categoryOrder.length}`}>{categoryOrder.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}><span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
@@ -2860,6 +2767,7 @@ function LearningProgressChart({ points, word }: { points: MonthlyProgress[]; wo
     { key: "articles" as const, label: "Articolo IL / LA", color: "#33a37a" },
     { key: "word-categories" as const, label: "Parola → categoria", color: "#e19445" },
     { key: "naming" as const, label: "Mix and vary", color: "#d15b8f" },
+    { key: "number-quantity" as const, label: "Numero quantità", color: "#a45ad1" },
     { key: "sentence-matching" as const, label: "Abbina la frase", color: "#2f82a5" },
   ];
   const coordinates = (key: ProgressKind) => points.flatMap((point, index) => point[key] === undefined ? [] : [`${x(index)},${y(point[key]!)}`]).join(" ");

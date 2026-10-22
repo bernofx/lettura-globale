@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { applyStateChange, parseStateChangeRequest } from "../../../domain/state-changes";
+import { authorizeStateTransition } from "../../../domain/state-authorization";
 import { getDb } from "../../../../db";
 import { therapistCredentials, userStates } from "../../../../db/schema";
 import { loadRelationalProjection, prepareRelationalChange, relationalMigrationInfo, relationalShadowMatches, stateChecksum } from "../../../../db/relational-state";
@@ -69,6 +70,9 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
 
   let state: unknown;
   try { state = applyStateChange(JSON.parse(current.payload), change); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
+  if (!user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
+  const authorization = authorizeStateTransition(JSON.parse(current.payload), state, user.adultProfileId);
+  if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
   const rawState = JSON.stringify(state);
   if (new TextEncoder().encode(rawState).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
 

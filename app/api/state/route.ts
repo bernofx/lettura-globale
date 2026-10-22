@@ -5,6 +5,7 @@ import { getDb } from "../../../db";
 import { therapistCredentials, userStates } from "../../../db/schema";
 import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
 import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
+import { authorizeStateTransition } from "../../domain/state-authorization";
 
 const MAX_STATE_BYTES = 4_000_000;
 
@@ -63,6 +64,12 @@ export async function PUT(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
 
+  const rawBaseRevision = request.headers.get("x-base-revision");
+  const baseRevision = rawBaseRevision === null ? Number.NaN : Number(rawBaseRevision);
+  if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) return Response.json({ error: "base_revision_required" }, { status: 428 });
+  if (!env.DB) return Response.json({ error: "database_unavailable" }, { status: 503 });
+  const database = env.DB;
+
   const raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
 
@@ -86,11 +93,37 @@ export async function PUT(request: Request) {
     const existingCredential = (await db.select({ ownerUserId: therapistCredentials.ownerUserId }).from(therapistCredentials).where(eq(therapistCredentials.loginEmail, item.loginEmail)).limit(1))[0];
     if (existingCredential && existingCredential.ownerUserId !== user.userId) return Response.json({ error: "therapist_email_unavailable" }, { status: 409 });
   }
-  const existing = await db.select({ revision: userStates.revision, createdAt: userStates.createdAt }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
-  const revision = (existing[0]?.revision ?? 0) + 1;
-  await db.insert(userStates).values({ userId: user.userId, email: user.email, payload: raw, schemaVersion: 1, revision, createdAt: existing[0]?.createdAt ?? now, updatedAt: now }).onConflictDoUpdate({ target: userStates.userId, set: { email: user.email, payload: raw, schemaVersion: 1, revision, updatedAt: now } });
-  await db.delete(therapistCredentials).where(eq(therapistCredentials.ownerUserId, user.userId));
-  for (const credential of credentials) await db.insert(therapistCredentials).values(credential);
+  const existing = await db.select({ revision: userStates.revision, payload: userStates.payload }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
+  const currentRevision = existing[0]?.revision ?? 0;
+  if (currentRevision !== baseRevision) return Response.json({ error: "revision_conflict", currentRevision }, { status: 409 });
+  // The account owner may initialize an empty account before selecting an adult
+  // profile. Every replacement of an existing state requires an adult session.
+  if (currentRevision > 0 && !user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
+  if (existing[0]?.payload && user.adultProfileId) {
+    const authorization = authorizeStateTransition(JSON.parse(existing[0].payload), state, user.adultProfileId);
+    if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
+  }
+  const revision = baseRevision + 1;
+  const stateExists = "EXISTS (SELECT 1 FROM user_states WHERE user_id = ? AND revision = ? AND payload = ?)";
+  const statements = [
+    database.prepare(`INSERT INTO user_states (user_id, email, payload, schema_version, revision, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, payload = excluded.payload, schema_version = 1,
+        revision = excluded.revision, updated_at = excluded.updated_at
+      WHERE user_states.revision = ?`)
+      .bind(user.userId, user.email, raw, revision, now, now, baseRevision),
+    database.prepare(`DELETE FROM therapist_credentials WHERE owner_user_id = ? AND ${stateExists}`)
+      .bind(user.userId, user.userId, revision, raw),
+    ...credentials.map((credential) => database.prepare(`INSERT INTO therapist_credentials
+      (login_email, owner_user_id, therapist_id, pin_hash, display_name, updated_at)
+      SELECT ?, ?, ?, ?, ?, ? WHERE ${stateExists}`)
+      .bind(credential.loginEmail, credential.ownerUserId, credential.therapistId, credential.pinHash, credential.displayName, credential.updatedAt, user.userId, revision, raw)),
+  ];
+  const results = await database.batch(statements);
+  if (!results[0]?.meta.changes) {
+    const latest = await db.select({ revision: userStates.revision }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
+    return Response.json({ error: "revision_conflict", currentRevision: latest[0]?.revision ?? 0 }, { status: 409 });
+  }
   let relational: Awaited<ReturnType<typeof persistRelationalShadow>> | null = null;
   try {
     if (env.DB) relational = await persistRelationalShadow({ database: env.DB, accountId: user.userId, email: user.email, displayName: user.displayName, rawState: raw, state, sourceRevision: revision, now });

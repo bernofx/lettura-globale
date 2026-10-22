@@ -90,14 +90,15 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
           latestSequence.current = event.serverSequence;
         }
         latestSequence.current = Math.max(latestSequence.current, result.latestSequence ?? 0);
-        setState((current) => ({
-          ...current,
-          status: result.status === "pending" ? "pending" : result.connected ? "connected" : result.status === "connected" ? "lost" : "waiting",
-          pendingAdultName: result.pendingAdultName ?? "",
-          error: "",
-        }));
+        setState((current) => {
+          const status = result.status === "pending" ? "pending" : result.connected ? "connected" : result.status === "connected" ? "lost" : "waiting";
+          const pendingAdultName = result.pendingAdultName ?? "";
+          return current.status === status && current.pendingAdultName === pendingAdultName && !current.error
+            ? current
+            : { ...current, status, pendingAdultName, error: "" };
+        });
       } catch {
-        setState((current) => ({ ...current, status: current.status === "connected" ? "lost" : current.status }));
+        setState((current) => current.status === "connected" ? { ...current, status: "lost" } : current);
       } finally {
         polling = false;
       }
