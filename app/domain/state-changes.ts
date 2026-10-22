@@ -40,6 +40,27 @@ function sameValue(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function mergePartialOrder(current: Entity[], nextById: Map<string, Entity>, requestedOrder: string[]) {
+  if (requestedOrder.some((id) => !nextById.has(id))) throw new Error("invalid_collection_order");
+  const requested = [...requestedOrder];
+  const requestedIds = new Set(requestedOrder);
+  const result: string[] = [];
+
+  // A role-filtered client does not know the IDs hidden from it. Reuse the
+  // existing visible slots for its requested order and leave every unmentioned
+  // entity in place. Explicit deletions are represented by removedIds.
+  for (const item of current) {
+    if (!nextById.has(item.id)) continue;
+    if (requestedIds.has(item.id)) {
+      const replacement = requested.shift();
+      if (replacement) result.push(replacement);
+    } else result.push(item.id);
+  }
+  for (const id of requested) if (!result.includes(id)) result.push(id);
+  for (const id of nextById.keys()) if (!result.includes(id)) result.push(id);
+  return result;
+}
+
 export function buildStateChange(previousValue: unknown, nextValue: unknown, operationId: string, baseRevision: number): StateChangeRequest | null {
   const previous = document(previousValue);
   const next = document(nextValue);
@@ -100,8 +121,8 @@ export function applyStateChange(stateValue: unknown, requestValue: unknown) {
     const removed = new Set(change.removedIds);
     const byId = new Map(current.filter((item) => !removed.has(item.id)).map((item) => [item.id, item]));
     for (const item of change.upserts) byId.set(item.id, item);
-    if (change.order.length !== byId.size || change.order.some((id) => !byId.has(id))) throw new Error("invalid_collection_order");
-    next[key] = change.order.map((id) => byId.get(id)!);
+    const order = mergePartialOrder(current, byId, change.order);
+    next[key] = order.map((id) => byId.get(id)!);
   }
   for (const [key, value] of Object.entries(request.values)) {
     if (value === null && (key === "activeSequenceId" || key === "appearance" || key === "soundPreferences")) delete next[key];

@@ -37,9 +37,17 @@ test("persists sequence creation, title and exercise order", () => {
   assert.deepEqual(applyStateChange(previous, change), next);
 });
 
-test("rejects an order that does not cover the resulting collection", () => {
+test("preserves entities omitted from a role-filtered collection order", () => {
+  const state = { schemaVersion: 1, sequences: [{ id: "own", title: "Prima" }, { id: "hidden", title: "Altrui" }] };
+  const change = { schemaVersion: 1, operationId: "12345678-1234-1234-1234-123456789abc", baseRevision: 1, collections: { sequences: { upserts: [{ id: "new", title: "Nuova" }, { id: "own", title: "Modificata" }], removedIds: [], order: ["new", "own"] } }, values: {} };
+  const next = applyStateChange(state, change) as typeof state;
+  assert.deepEqual(next.sequences.map((item) => item.id), ["new", "hidden", "own"]);
+  assert.equal(next.sequences.find((item) => item.id === "hidden")?.title, "Altrui");
+});
+
+test("rejects collection orders that reference unknown entities", () => {
   const state = { schemaVersion: 1, library: [{ id: "a" }] };
-  const change = { schemaVersion: 1, operationId: "12345678-1234-1234-1234-123456789abc", baseRevision: 1, collections: { library: { upserts: [], removedIds: [], order: [] } }, values: {} };
+  const change = { schemaVersion: 1, operationId: "12345678-1234-1234-1234-123456789abc", baseRevision: 1, collections: { library: { upserts: [], removedIds: [], order: ["missing"] } }, values: {} };
   assert.throws(() => applyStateChange(state, change), /invalid_collection_order/);
 });
 
