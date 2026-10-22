@@ -39,6 +39,14 @@ Ridurre i rischi di sicurezza e perdita dati prima del pilot, quindi diminuire i
    - test delle route, concorrenza, autorizzazioni e principali flussi browser;
    - lint, typecheck, test e build a ogni blocco.
 
+## Stato al 22 ottobre 2026
+
+- Completati i punti 1, 2, 3 e 5.
+- Il punto 4 include scadenza, revoca, interfaccia e pulizia opportunistica; resta da definire la retention globale prima del pilot.
+- Il punto 6 include memoizzazione, cache limitata e timer delle notifiche centralizzato.
+- Il punto 7 include hook drag-and-drop e prima estrazione dei componenti statistici; sincronizzazione, runner, builder e registry unico restano interventi incrementali.
+- Il punto 8 copre le policy di autorizzazione, visibilità, PIN, rate limit e migrazioni; E2E browser e concorrenza reale restano aperti.
+
 ## Decisioni che richiedono ADR
 
 - formato e parametri del nuovo hash dei PIN, rate limit e recupero accesso;

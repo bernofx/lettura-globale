@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 21 ottobre 2026
+**Aggiornato:** 22 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -8,6 +8,10 @@
 
 ## Completato
 
+- [x] Secondo blocco di hardening: PIN nuovi in PBKDF2 versionato con compatibilità SHA-256, rate limit D1 per email e rete (5 errori/15 minuti con blocco progressivo), rimozione del fallback in chiaro e migrazione `0014` forward-only.
+- [x] Link pubblici con scadenza a 30 giorni, revoca dal pannello Configurazione, controllo uniforme anche sui media, cache disabilitata e pulizia opportunistica degli snapshot non più attivi.
+- [x] Letture dello stato ridotte per profilo: PIN altrui rimossi, bambini e dati operativi limitati alle associazioni, storico del terapista limitato alle sessioni condotte e fallback completo riservato all’amministratore.
+- [x] Ulteriore riduzione del debito client: grafico e celle dei progressi estratti in un componente dedicato e notifiche temporizzate centralizzate con cancellazione dei timer precedenti.
 - [x] Primo blocco di hardening successivo alla code review: revoca server-side al logout, autorizzazione delle modifiche per profilo adulto, tentativi/aiuti append-only, proprietà delle sequenze e accesso ai bambini verificati anche nelle API; fallback `PUT` protetto da revisione e batch atomico per snapshot e credenziali.
 - [x] Confine upload rafforzato con verifica dei byte reali PNG/JPEG/WebP, lettura delle dimensioni, limiti in pixel e lato massimo e metadati tecnici R2; validazione del formato login resa esplicita.
 - [x] Controller QR alleggerito senza ridurre la frequenza percepita: heartbeat D1 limitato a uno ogni tre secondi e aggiornamenti React ignorati quando stato e snapshot non cambiano.
@@ -113,14 +117,14 @@
 
 ## Limitazioni note
 
-- Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
+- Le preferenze audio sono sincronizzate nel cloud; l'interruttore rapido degli effetti sonori resta locale al dispositivo e il caricamento di suoni personalizzati nella libreria resta un intervento futuro.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
 - L'ottimizzazione dell'immagine avviene nel browser; il server verifica formato reale e dimensioni, mentre ricodifica e varianti server-side restano da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
 - Le scritture applicano ora una prima matrice server-side deny-by-default; la matrice definitiva per genitore/supervisore, inviti e recupero accesso resta subordinata all'ADR di identità.
 - Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
 - La modalità protetta è un controllo dell'interfaccia web: Chrome/PWA non può impedire la chiusura dell'app, i gesti del sistema operativo o altri comandi del dispositivo.
-- La durata di conservazione dei soli metadati tecnici in `state_operations` deve essere inclusa nella policy di retention prima del pilot.
+- La durata di conservazione dei soli metadati tecnici in `state_operations` e `login_rate_limits` deve essere inclusa nella policy di retention prima del pilot.
 - Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi

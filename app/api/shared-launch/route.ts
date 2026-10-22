@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sharedLaunches, userStates } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
 import { hasArtwork } from "../../domain/library-availability";
+import { sharedLaunchExpiresAt } from "../../domain/shared-launch-policy";
 
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
@@ -27,6 +28,28 @@ type StoredState = {
   exercises?: SharedExercise[];
   sequences?: Array<{ id?: string; title?: string; exerciseIds?: string[]; deleted?: boolean }>;
 };
+
+export async function GET() {
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
+  const rows = await getDb().select({
+    token: sharedLaunches.token,
+    kind: sharedLaunches.kind,
+    contentId: sharedLaunches.contentId,
+    payload: sharedLaunches.payload,
+    createdAt: sharedLaunches.createdAt,
+    expiresAt: sharedLaunches.expiresAt,
+  }).from(sharedLaunches).where(and(
+    eq(sharedLaunches.ownerUserId, user.userId),
+    isNull(sharedLaunches.revokedAt),
+    gt(sharedLaunches.expiresAt, Date.now()),
+  ));
+  return Response.json({ links: rows.map(({ payload, ...row }) => {
+    let title = row.kind === "sequence" ? "Sequenza condivisa" : "Esercizio condiviso";
+    try { title = String((JSON.parse(payload) as { title?: unknown }).title ?? title); } catch { /* keep the safe fallback */ }
+    return { ...row, title };
+  }).sort((left, right) => right.createdAt - left.createdAt) });
+}
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
@@ -84,6 +107,13 @@ export async function POST(request: Request) {
     library: availableLibrary.filter((item) => item.id && referencedIds.has(item.id)),
   });
   const now = Date.now();
-  await db.insert(sharedLaunches).values({ token, ownerUserId: user.userId, kind: input.kind, contentId: input.id, payload, createdAt: now, updatedAt: now });
-  return Response.json({ token }, { status: 201 });
+  // The media remain owned by the private library, so cleanup only removes the
+  // obsolete public snapshot. Revoked rows are kept briefly for diagnostics.
+  await db.delete(sharedLaunches).where(and(
+    eq(sharedLaunches.ownerUserId, user.userId),
+    or(lte(sharedLaunches.expiresAt, now), and(isNotNull(sharedLaunches.revokedAt), lte(sharedLaunches.revokedAt, now - 7 * 24 * 60 * 60 * 1000))),
+  ));
+  const expiresAt = sharedLaunchExpiresAt(now);
+  await db.insert(sharedLaunches).values({ token, ownerUserId: user.userId, kind: input.kind, contentId: input.id, payload, expiresAt, revokedAt: null, createdAt: now, updatedAt: now });
+  return Response.json({ token, expiresAt }, { status: 201 });
 }

@@ -41,15 +41,25 @@ export const therapistCredentials = sqliteTable("therapist_credentials", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const loginRateLimits = sqliteTable("login_rate_limits", {
+  keyHash: text("key_hash").primaryKey(),
+  windowStartedAt: integer("window_started_at").notNull(),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  blockedUntil: integer("blocked_until"),
+  updatedAt: integer("updated_at").notNull(),
+}, (table) => [index("login_rate_limits_updated_idx").on(table.updatedAt)]);
+
 export const sharedLaunches = sqliteTable("shared_launches", {
   token: text("token").primaryKey(),
   ownerUserId: text("owner_user_id").notNull(),
   kind: text("kind").notNull(),
   contentId: text("content_id").notNull(),
   payload: text("payload").notNull(),
+  expiresAt: integer("expires_at"),
+  revokedAt: integer("revoked_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
-});
+}, (table) => [index("shared_launches_expiry_idx").on(table.expiresAt, table.revokedAt)]);
 
 export const accounts = sqliteTable("accounts", {
   id: text("id").primaryKey(), email: text("email").notNull(), displayName: text("display_name").notNull().default(""), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),

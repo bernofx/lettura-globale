@@ -31,6 +31,8 @@ import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
 import { isSimpleSentenceScene, sentenceMatchingAvailability, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./domain/sentence-matching";
+import { hashPinForStorage, verifyStoredPin } from "./domain/pin-credentials";
+import { LearningProgressChart, ProgressScore, type MonthlyProgress, type ProgressCell, type ProgressKind } from "./components/progress-visuals";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
 type Mode = SessionMode;
@@ -78,6 +80,18 @@ function useLocalFallbackAdvance(manualAdvance: boolean, pending: boolean, advan
     const timer = window.setTimeout(() => advanceRef.current(), delayMs);
     return () => window.clearTimeout(timer);
   }, [delayMs, manualAdvance, pending]);
+}
+
+function useToastMessage() {
+  const [message, setMessage] = useState<string | null>(null);
+  const timer = useRef<number | null>(null);
+  const notify = useCallback((next: string, durationMs = 2600) => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    setMessage(next);
+    timer.current = window.setTimeout(() => { setMessage(null); timer.current = null; }, durationMs);
+  }, []);
+  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  return [message, notify] as const;
 }
 
 function syllableFilterLabel(filter?: SyllableFilter) {
@@ -448,11 +462,8 @@ function preloadArtwork(items: LibraryItem[]) {
   });
 }
 
-async function hashPin(pin: string) {
-  const bytes = new TextEncoder().encode(pin);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+// Kept as a local alias until the profile editor is split out of this page.
+const hashPin = hashPinForStorage;
 
 function shuffled<T>(items: T[]) {
   const result = [...items];
@@ -655,7 +666,7 @@ export default function HomePage() {
   const [sessionHistory, setSessionHistory, sessionHistoryLoaded] = useStoredState<SessionHistoryRecord[]>("lg-session-history", []);
   const [appearance, setAppearance, appearanceLoaded] = useStoredState<AppearanceSettings>("lg-appearance", defaultAppearance, hydrateAppearance);
   const [search, setSearch] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, notify] = useToastMessage();
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [saveJournalOpen, setSaveJournalOpen] = useState(false);
@@ -877,8 +888,7 @@ export default function HomePage() {
       const nextView = (["home", "library", "exercises", "session", "stats", "profiles", "appearance"] as View[]).includes(event.state?.lgView) ? event.state.lgView as View : "home";
       if (sessionActive) {
         window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
-        setToast("Per uscire tieni premuto Termina per 4 secondi");
-        window.setTimeout(() => setToast(null), 3200);
+        notify("Per uscire tieni premuto Termina per 4 secondi", 3200);
         return;
       }
       setView(nextView);
@@ -887,7 +897,7 @@ export default function HomePage() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [sessionActive]);
+  }, [notify, sessionActive]);
 
   useEffect(() => {
     let cancelled = false;
@@ -904,9 +914,9 @@ export default function HomePage() {
         return restored.has(item.id) ? { ...item, image: restored.get(item.id), imageKey: item.imageKey ?? (legacyItem ? `library-image-${item.id}` : undefined) } : item;
       }));
     };
-    restoreImages().catch(() => { setToast("Non è stato possibile recuperare una foto salvata"); window.setTimeout(() => setToast(null), 2600); });
+    restoreImages().catch(() => notify("Non è stato possibile recuperare una foto salvata"));
     return () => { cancelled = true; };
-  }, [library, setLibrary]);
+  }, [library, notify, setLibrary]);
 
   const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded;
   const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences });
@@ -952,8 +962,7 @@ export default function HomePage() {
       if (saved.soundPreferences) setSoundPreferences(hydrateSoundPreferences(saved.soundPreferences));
       backendHydrating.current = false;
       setBackendStatus("ready");
-      setToast("Dati aggiornati dal cloud");
-      window.setTimeout(() => setToast(null), 2600);
+      notify("Dati aggiornati dal cloud");
     };
     void refresh().catch((error) => {
       if (cancelled) return;
@@ -963,7 +972,7 @@ export default function HomePage() {
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, notify, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (!backendInitialized || sessionActive) return;
@@ -1221,17 +1230,15 @@ export default function HomePage() {
       await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
       if (cancelled) return;
       const labels = candidates.filter((item) => uploaded.has(item.id)).map((item) => item.word).join(", ");
-      setToast(`${labels}: immagini recuperate nel cloud`);
-      window.setTimeout(() => setToast(null), 3200);
+      notify(`${labels}: immagini recuperate nel cloud`, 3200);
     };
     void repair().catch(() => {
       if (!cancelled) {
-        setToast("Le immagini locali non sono ancora state sincronizzate");
-        window.setTimeout(() => setToast(null), 3200);
+        notify("Le immagini locali non sono ancora state sincronizzate", 3200);
       }
     }).finally(() => { localMediaRepairing.current = false; });
     return () => { cancelled = true; };
-  }, [backendInitialized, backendRefreshKey, backendStatus, library, enqueueBackendSave, setLibrary]);
+  }, [backendInitialized, backendRefreshKey, backendStatus, library, notify, enqueueBackendSave, setLibrary]);
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
@@ -1338,8 +1345,7 @@ export default function HomePage() {
       window.history.replaceState({}, "", window.location.pathname);
       setPendingSharedLaunch(null);
       if (!selectedExercises.length) {
-        setToast("Il contenuto condiviso non è più disponibile");
-        window.setTimeout(() => setToast(null), 3200);
+        notify("Il contenuto condiviso non è più disponibile", 3200);
         setView("home");
         return;
       }
@@ -1359,7 +1365,7 @@ export default function HomePage() {
       setView("session");
     }, 0);
     return () => window.clearTimeout(launchTimer);
-  }, [activeChild, backendInitialized, backendStatus, pendingSharedLaunch, setActiveSequenceId, therapist, visibleExercises, visibleLibrary, visibleSequences]);
+  }, [activeChild, backendInitialized, backendStatus, notify, pendingSharedLaunch, setActiveSequenceId, therapist, visibleExercises, visibleLibrary, visibleSequences]);
 
   useEffect(() => {
     const kind = currentExercise ? exerciseKind(currentExercise) : undefined;
@@ -1424,7 +1430,6 @@ export default function HomePage() {
     });
   }, [attempts, helps, library, sessionChildId, sessionComplete, sessionDescriptor, sessionFromSharedLink, sessionIsTrial, sessionMode, sessionPlan, sessionPresentation, sessionRunId, sessionStartedAt, setSessionHistory, therapist]);
 
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
   const persistLibraryImmediately = async (nextLibrary: LibraryItem[]) => {
     setLibrary(nextLibrary);
     if (!backendInitialized || backendStatus === "local") return "local" as const;
@@ -1442,10 +1447,11 @@ export default function HomePage() {
     try {
       const response = await fetch("/api/shared-launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(launch) });
       if (!response.ok) throw new Error("share_create_failed");
-      const { token } = await response.json() as { token: string };
+      const { token, expiresAt } = await response.json() as { token: string; expiresAt: number };
       url = buildSharedPreviewUrl(window.location.origin, token);
+      const expiryLabel = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric" }).format(expiresAt);
       if (navigator.share) {
-        await navigator.share({ title: `Lettura Globale · ${title}`, text: `Prova “${title}” senza registrare risultati`, url });
+        await navigator.share({ title: `Lettura Globale · ${title}`, text: `Prova “${title}” senza registrare risultati. Link valido fino al ${expiryLabel}.`, url });
         notify("Link condiviso");
       } else {
         await navigator.clipboard.writeText(url);
@@ -1886,7 +1892,7 @@ function SessionExitDialog({ therapist, onCancel, onConfirm }: { therapist: Ther
   const [error, setError] = useState("");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const valid = therapist.pinHash ? therapist.pinHash === await hashPin(pin) : therapist.pin === pin;
+    const valid = therapist.pinHash ? await verifyStoredPin(pin, therapist.pinHash) : therapist.pin === pin;
     if (!valid) { setError("PIN non corretto."); return; }
     onConfirm();
   };
@@ -2086,8 +2092,11 @@ function TherapistLogin({ therapists, backendStatus, onLogin, onBack }: { therap
         window.location.reload();
         return;
       }
-      const pinHash = await hashPin(pin);
-      const match = therapists.find((item) => item.email.toLowerCase() === email.trim().toLowerCase() && (item.pinHash === pinHash || item.pin === pin));
+      const candidates = therapists.filter((item) => item.email.toLowerCase() === email.trim().toLowerCase());
+      let match: Therapist | undefined;
+      for (const candidate of candidates) {
+        if ((candidate.pinHash && await verifyStoredPin(pin, candidate.pinHash)) || (!candidate.pinHash && candidate.pin === pin)) { match = candidate; break; }
+      }
       if (!match) { setError("Email o PIN non corretti."); return; }
       onLogin(match.id);
     } catch {
@@ -2179,17 +2188,47 @@ function LibraryView({ items, search, setSearch, onUpload, onEdit, onDelete, sou
   return <div className="page library-sections"><section className="page-title-row"><div><span className="eyebrow">CONTENUTI</span><h1>Libreria</h1><p>Gestisci immagini singole, frasi d’azione e suoni in aree separate.</p></div></section><div className="toolbar"><label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label><div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div></div><section className="library-area"><div className="section-heading"><div><span className="eyebrow">IMMAGINI SINGOLE</span><h2>Parole e immagini</h2><p>Contenuti per riconoscimento, categorie, articoli e denominazione.</p></div><button className="primary-button" onClick={() => onUpload("word")}><Plus size={18} />Aggiungi immagine</button></div><button type="button" className={`filter-chip ${reviewOnly ? "selected" : ""}`} onClick={() => setReviewOnly((value) => !value)} aria-pressed={reviewOnly}>Sillabazione da verificare <span>{reviewCount}</span></button>{cards(visibleWords)}{!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}{expansion("immagini", filteredWords, visibleWords, wordsExpanded, setWordsExpanded)}</section><section className="library-area sentence-library-area"><div className="section-heading"><div><span className="eyebrow">FRASI</span><h2>Scene soggetto + verbo</h2><p>Immagini d’azione usate da Abbina la frase.</p></div><button className="primary-button" onClick={() => onUpload("sentence")}><Plus size={18} />Aggiungi frase</button></div>{cards(visibleSentences, true)}{!filteredSentences.length && <div className="empty-state compact"><Search /><h3>Nessuna frase</h3></div>}{expansion("frasi", filteredSentences, visibleSentences, sentencesExpanded, setSentencesExpanded)}</section><section className="library-area sound-library-area"><SoundSettingsPanel sounds={sounds} onChange={onSoundsChange} /></section></div>;
 }
 
+type SharedLinkSummary = { token: string; kind: "exercise" | "sequence"; contentId: string; title: string; createdAt: number; expiresAt: number };
+
+function SharedLinksDialog({ onClose }: { onClose: () => void }) {
+  const [links, setLinks] = useState<SharedLinkSummary[] | null>(null);
+  const [error, setError] = useState("");
+  const [revoking, setRevoking] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetch("/api/shared-launch", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error("shared_links_load_failed");
+      const result = await response.json() as { links: SharedLinkSummary[] };
+      if (active) setLinks(result.links);
+    }).catch(() => { if (active) setError("Non è stato possibile caricare i link condivisi."); });
+    return () => { active = false; };
+  }, []);
+  const revoke = async (token: string) => {
+    setRevoking(token);
+    setError("");
+    try {
+      const response = await fetch(`/api/shared-launch/${encodeURIComponent(token)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("shared_link_revoke_failed");
+      setLinks((current) => current?.filter((link) => link.token !== token) ?? []);
+    } catch { setError("Non è stato possibile revocare il link."); }
+    finally { setRevoking(""); }
+  };
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="shared-links-title"><div className="modal"><span className="eyebrow">CONDIVISIONI</span><h2 id="shared-links-title">Link condivisi attivi</h2><p>I link scadono automaticamente dopo 30 giorni. Puoi revocarli subito senza eliminare esercizi o immagini.</p>{error && <p className="form-error" role="alert">{error}</p>}{links === null && !error ? <p>Caricamento…</p> : links?.length ? <div className="sequence-order-list">{links.map((link) => <article key={link.token}><span>{link.kind === "sequence" ? "SEQ" : "EX"}</span><div><strong>{link.title}</strong><small>Scade il {new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(link.expiresAt)}</small></div><button className="danger-button subtle" type="button" disabled={revoking === link.token} onClick={() => void revoke(link.token)}><Trash2 />{revoking === link.token ? "Revoca…" : "Revoca"}</button></article>)}</div> : <div className="empty-mini"><Share2 /><p>Nessun link attivo.</p></div>}<div className="modal-actions"><button className="primary-button" type="button" onClick={onClose}>Chiudi</button></div></div></div>;
+}
+
 function ExercisesView({ exercises, sequences, activeSequence, therapists, showSequenceOwners, library, onSelectSequence, onCreateSequence, onRenameSequence, onDeleteSequence, onBuild, onEdit, onDuplicate, onDelete, onToggleInSequence, onMove, onTry, onShareSequence, onShareExercise }: { exercises: Exercise[]; sequences: Sequence[]; activeSequence?: Sequence; therapists: Therapist[]; showSequenceOwners: boolean; library: LibraryItem[]; onSelectSequence: (id: string) => void; onCreateSequence: () => void; onRenameSequence: () => void; onDeleteSequence: () => void; onBuild: (kind: SessionActivity) => void; onEdit: (exercise: Exercise) => void; onDuplicate: (exercise: Exercise) => void; onDelete: (exercise: Exercise) => void; onToggleInSequence: (exerciseId: string) => void; onMove: (exerciseId: string, direction: -1 | 1) => void; onTry: (exerciseId: string) => void; onShareSequence: () => void; onShareExercise: (exercise: Exercise) => void }) {
+  const [sharedLinksOpen, setSharedLinksOpen] = useState(false);
   const sequenceExercises = activeSequence?.exerciseIds.map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [];
   const includedIds = new Set(sequenceExercises.map((exercise) => exercise.id));
   const therapistName = (therapistId: string) => { const owner = therapists.find((item) => item.id === therapistId); return owner ? `${owner.firstName} ${owner.lastName}` : "Terapista non disponibile"; };
   return <div className="page exercises-page">
-    <section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Configurazione</h1><p>Crea, modifica ed elimina esercizi e sequenze. L’avvio delle attività si trova nella sezione Sessione.</p></div></section>
+    <section className="page-title-row"><div><span className="eyebrow">PROGRAMMAZIONE</span><h1>Configurazione</h1><p>Crea, modifica ed elimina esercizi e sequenze. L’avvio delle attività si trova nella sezione Sessione.</p></div><button className="ghost-button" type="button" onClick={() => setSharedLinksOpen(true)}><Share2 />Link condivisi</button></section>
     {activeSequence ? <section className="sequence-banner sequence-manager"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div className="sequence-copy"><span className="soft-label">SEQUENZA</span><select value={activeSequence.id} onChange={(event) => onSelectSequence(event.target.value)} aria-label="Seleziona sequenza">{sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.title}{showSequenceOwners ? ` · ${therapistName(sequence.therapistId)}` : ""}</option>)}</select><p>{sequenceExercises.length} esercizi · {showSequenceOwners ? `terapista: ${therapistName(activeSequence.therapistId)} · ` : ""}salvata nel cloud</p><div className="sequence-actions"><button type="button" onClick={onCreateSequence}><Plus />Nuova</button><button type="button" onClick={onRenameSequence}><Pencil />Rinomina</button><button type="button" onClick={onShareSequence}><Share2 />Condividi</button><button type="button" onClick={onDeleteSequence}><Trash2 />Elimina</button></div></div></section> : <section className="sequence-banner sequence-manager empty-sequence-manager"><div className="sequence-symbol"><span>1</span><span>2</span><span>3</span></div><div className="sequence-copy"><span className="soft-label">SEQUENZE</span><h2>Nessuna sequenza disponibile</h2><p>Crea la prima sequenza per organizzare i tuoi esercizi.</p><div className="sequence-actions"><button type="button" onClick={onCreateSequence}><Plus />Nuova sequenza</button></div></div></section>}
     {activeSequence && <section className="sequence-editor"><div className="section-heading"><div><h2>Ordine della sequenza</h2><p>Usa le frecce per cambiare l’ordine di presentazione.</p></div><span>{sequenceExercises.length} elementi</span></div>{sequenceExercises.length ? <div className="sequence-order-list">{sequenceExercises.map((exercise, index) => <article key={exercise.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{exercise.title}</strong><div><button type="button" disabled={index === 0} onClick={() => onMove(exercise.id, -1)} aria-label={`Sposta ${exercise.title} su`}><ArrowUp /></button><button type="button" disabled={index === sequenceExercises.length - 1} onClick={() => onMove(exercise.id, 1)} aria-label={`Sposta ${exercise.title} giù`}><ArrowDown /></button><button type="button" onClick={() => onToggleInSequence(exercise.id)} aria-label={`Rimuovi ${exercise.title} dalla sequenza`}><X /></button></div></article>)}</div> : <div className="empty-state compact"><BookOpenCheck /><h3>Sequenza vuota</h3><p>Aggiungi almeno un esercizio dal catalogo qui sotto.</p></div>}</section>}
     <div className="catalog-actions"><span className="soft-label">NUOVO ESERCIZIO</span><div className="new-exercise-actions"><button className="primary-button" onClick={() => onBuild("recognition")}><Plus size={19} />Trova la parola</button><button className="ghost-button" onClick={() => onBuild("sentence-matching")}><Plus size={19} />Abbina la frase</button><button className="ghost-button" onClick={() => onBuild("articles")}><Plus size={19} />IL / LA</button><button className="ghost-button" onClick={() => onBuild("word-categories")}><Plus size={19} />Parola → categoria</button><button className="ghost-button" onClick={() => onBuild("naming")}><Plus size={19} />Mix and vary</button><button className="ghost-button" onClick={() => onBuild("number-quantity")}><Plus size={19} />Numero quantità</button></div></div>
     <div className="section-heading exercise-catalog-heading"><div><h2>Catalogo esercizi</h2><p>Modifica, duplica o aggiungi gli esercizi alla sequenza attiva.</p></div><span>{exercises.length} totali</span></div>
     <div className="exercise-list">{exercises.map((exercise, index) => { const prompt = library.find((item) => item.id === exercise.promptId); const included = includedIds.has(exercise.id); const kind = exerciseKind(exercise); const isArticles = kind === "articles"; const isWordCategories = kind === "word-categories"; const isNaming = kind === "naming"; const isQuantity = kind === "number-quantity"; const isSentence = kind === "sentence-matching"; const description = isSentence ? `Frase → immagine · ${exercise.rounds ?? 6} turni · ${exercise.sentenceOptionCount ?? 2} immagini · ${exercise.sentenceDifficulty ?? 1} ${exercise.sentenceDifficulty === 2 ? "gradi" : "grado"} di libertà` : isArticles ? `IL / LA · ${Math.min(exercise.rounds ?? 6, exercise.articleItemIds?.length ?? 0)} turni · ${exercise.articleItemIds?.length ?? 0} immagini scelte` : isWordCategories ? `Parola → categoria · ${exercise.rounds ?? 6} turni · ${exercise.categoryNames?.length ?? 0} categorie` : isNaming ? `Nomina l’immagine · ${exercise.rounds ?? 6} turni` : isQuantity ? `${exercise.rounds ?? 6} turni · quantità ${exercise.quantityMin ?? 1}–${exercise.quantityMax ?? 10} · ${exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "oggetti casuali" : quantityObjectLabel(exercise.quantityObjectSet, 2)} · ${exercise.quantityAutoComplete ? `auto dopo ${exercise.quantityIdleSeconds ?? 3}s in insegnamento` : "conferma adulta"}` : exercise.recognitionMode === "random" ? `Casuale · ${exercise.rounds ?? 6} turni · ${exercise.distractorCount ?? 3} distrattori · ${exercise.distractorSource === "same-category" ? "stessa categoria" : "tutte le parole"} · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"} · ${syllableFilterLabel(exercise.recognitionSyllables)}` : `Parola → scelta · ${exercise.optionIds.length} opzioni · ${exercise.presentation === "words" ? "solo parole" : "foto + parole"}`; return <article className="exercise-row" key={exercise.id}><span className="exercise-number">{String(index + 1).padStart(2, "0")}</span><div className={`tiny-art ${isArticles || isWordCategories || isNaming || isQuantity || isSentence ? "article-icon" : ""}`}>{isSentence ? <strong>S<br />V</strong> : isArticles ? <strong>IL<br />LA</strong> : isWordCategories ? <strong>A<br />B</strong> : isNaming ? <MousePointer2 /> : isQuantity ? <strong>1<br />2</strong> : exercise.recognitionMode === "random" ? <Sparkles /> : prompt && <Artwork item={prompt} compact />}</div><div className="exercise-copy"><h3>{exercise.title}</h3><p>{description}</p>{(kind === "recognition" || isSentence) && <small>Pronuncia {isSentence || (exercise.autoPronounce ?? exercise.presentation === "words") ? "automatica" : "manuale"}</small>}</div><button disabled={!activeSequence} title={activeSequence ? undefined : "Crea prima una sequenza"} className={`sequence-toggle ${included ? "included" : ""}`} onClick={() => onToggleInSequence(exercise.id)}>{included ? <><Check />Nella sequenza</> : <><Plus />Aggiungi</>}</button><div className="exercise-actions"><button onClick={() => onTry(exercise.id)}>Prova</button><button onClick={() => onShareExercise(exercise)} aria-label={`Condividi ${exercise.title}`} title="Condividi"><Share2 /></button><button onClick={() => onEdit(exercise)} aria-label={`Modifica ${exercise.title}`} title="Modifica"><Pencil /></button><button onClick={() => onDuplicate(exercise)} aria-label={`Duplica ${exercise.title}`} title="Duplica"><Copy /></button><button className="delete" onClick={() => onDelete(exercise)} aria-label={`Elimina ${exercise.title}`} title="Elimina"><Trash2 /></button></div></article>; })}</div>
+    {sharedLinksOpen && <SharedLinksDialog onClose={() => setSharedLinksOpen(false)} />}
   </div>;
 }
 
@@ -2741,39 +2780,6 @@ function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
   return <aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside>;
 }
 
-type ProgressKind = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
-type ProgressCell = { total: number; correct: number; percent: number | null };
-type MonthlyProgress = { month: string; label: string; recognition?: number; articles?: number; "word-categories"?: number; naming?: number; "number-quantity"?: number; "sentence-matching"?: number };
-
-function ProgressScore({ cell }: { cell: ProgressCell }) {
-  if (cell.percent === null) return <span className="score-cell empty">—<small>Nessuna prova</small></span>;
-  const tone = cell.percent >= 80 ? "strong" : cell.percent >= 50 ? "developing" : "attention";
-  return <span className={`score-cell ${tone}`}><strong>{cell.percent}%</strong><small>{cell.correct}/{cell.total} corrette</small></span>;
-}
-
-function LearningProgressChart({ points, word }: { points: MonthlyProgress[]; word: string }) {
-  const width = 760;
-  const height = 300;
-  const left = 52;
-  const right = 20;
-  const top = 22;
-  const bottom = 48;
-  const innerWidth = width - left - right;
-  const innerHeight = height - top - bottom;
-  const x = (index: number) => left + (points.length === 1 ? innerWidth / 2 : (index / Math.max(1, points.length - 1)) * innerWidth);
-  const y = (value: number) => top + ((100 - value) / 100) * innerHeight;
-  const series = [
-    { key: "recognition" as const, label: "Trova la parola", color: "#7468df" },
-    { key: "articles" as const, label: "Articolo IL / LA", color: "#33a37a" },
-    { key: "word-categories" as const, label: "Parola → categoria", color: "#e19445" },
-    { key: "naming" as const, label: "Mix and vary", color: "#d15b8f" },
-    { key: "number-quantity" as const, label: "Numero quantità", color: "#a45ad1" },
-    { key: "sentence-matching" as const, label: "Abbina la frase", color: "#2f82a5" },
-  ];
-  const coordinates = (key: ProgressKind) => points.flatMap((point, index) => point[key] === undefined ? [] : [`${x(index)},${y(point[key]!)}`]).join(" ");
-  return <div className="learning-chart"><div className="chart-legend">{series.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}</div>{points.length ? <><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Evoluzione mensile di ${word}: mesi sull’asse orizzontale e percentuale sull’asse verticale`}><title>Evoluzione mensile di {word}</title>{[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} className="chart-grid" /><text x={left - 10} y={y(value) + 4} textAnchor="end" className="chart-axis-label">{value}%</text></g>)}{points.map((point, index) => <text key={point.month} x={x(index)} y={height - 18} textAnchor="middle" className="chart-axis-label">{point.label}</text>)}{series.map((item) => <g key={item.key}>{coordinates(item.key) && <polyline points={coordinates(item.key)} fill="none" stroke={item.color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}{points.map((point, index) => point[item.key] === undefined ? null : <circle key={point.month} cx={x(index)} cy={y(point[item.key]!)} r="6" fill={item.color}><title>{item.label}, {point.label}: {point[item.key]}%</title></circle>)}</g>)}</svg>{points.length < 2 && <p className="chart-guidance">Servono rilevazioni in almeno due mesi per mostrare una tendenza.</p>}</> : <div className="empty-mini"><BarChart3 /><p>Nessuna rilevazione per questa parola.</p><small>Il grafico apparirà dopo la prima prova.</small></div>}</div>;
-}
-
 function StatsView({ child, therapist, therapists, attempts, helps, histories, exercises, library, onSaveHistoryComment, onDeleteHistory, onDeleteAllHistory, onReset }: { child: ChildProfile; therapist: Therapist; therapists: Therapist[]; attempts: Attempt[]; helps: HelpEvent[]; histories: SessionHistoryRecord[]; exercises: Exercise[]; library: LibraryItem[]; onSaveHistoryComment: (id: string, comment: string) => void; onDeleteHistory: (id: string, label: string) => void; onDeleteAllHistory: () => void; onReset: () => void }) {
   const [selectedMode, setSelectedMode] = useState<Mode>("test");
   const [selectedWordId, setSelectedWordId] = useState("");
@@ -2859,7 +2865,7 @@ function AdminPanel({ therapists, childProfiles, onSave, onRequestDelete }: { th
     const emails = drafts.map((item) => item.email.trim().toLowerCase());
     if (new Set(emails).size !== emails.length) { setError("Ogni profilo deve avere un’email diversa."); return; }
     if (Object.values(pinDrafts).some((value) => value && value.length < 4)) { setError("Il nuovo PIN deve contenere almeno 4 cifre."); return; }
-    const updated = await Promise.all(drafts.map(async (item) => ({ ...item, firstName: item.firstName.trim(), lastName: item.lastName.trim(), email: item.email.trim().toLowerCase(), pinHash: pinDrafts[item.id] ? await hashPin(pinDrafts[item.id]) : item.pinHash, pin: undefined })));
+    const updated = await Promise.all(drafts.map(async (item) => ({ ...item, firstName: item.firstName.trim(), lastName: item.lastName.trim(), email: item.email.trim().toLowerCase(), pinHash: pinDrafts[item.id] ? await hashPinForStorage(pinDrafts[item.id]) : item.pinHash, pin: undefined })));
     setError("");
     setDrafts(updated);
     setPinDrafts({});
@@ -2870,7 +2876,7 @@ function AdminPanel({ therapists, childProfiles, onSave, onRequestDelete }: { th
     const normalizedEmail = email.trim().toLowerCase();
     if (drafts.some((item) => item.email.toLowerCase() === normalizedEmail)) { setError("Esiste già un profilo con questa email."); return; }
     if (pin.length < 4 || !selectedChildIds.length) { setError("Inserisci un PIN di almeno 4 cifre e associa almeno un bambino."); return; }
-    const created: Therapist = { id: crypto.randomUUID(), firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, role: newRole, pinHash: await hashPin(pin), childIds: selectedChildIds };
+    const created: Therapist = { id: crypto.randomUUID(), firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, role: newRole, pinHash: await hashPinForStorage(pin), childIds: selectedChildIds };
     const next = [...drafts, created];
     setDrafts(next);
     onSave(next);

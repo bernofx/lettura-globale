@@ -6,6 +6,7 @@ import { therapistCredentials, userStates } from "../../../db/schema";
 import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
 import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
 import { authorizeStateTransition } from "../../domain/state-authorization";
+import { adultRoleInState, stateVisibleToAdult } from "../../domain/state-visibility";
 
 const MAX_STATE_BYTES = 4_000_000;
 
@@ -54,6 +55,7 @@ export async function GET() {
       console.error("relational_shadow_repair_failed", { revision: row.revision, sqliteCode: sqliteCode ?? "unknown" });
       relationalStatus = "pending";
     }
+    if (user.adultProfileId) responseState = stateVisibleToAdult(responseState, user.adultProfileId);
     return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } });
   } catch {
     return Response.json({ error: "invalid_saved_state" }, { status: 500 });
@@ -100,7 +102,9 @@ export async function PUT(request: Request) {
   // profile. Every replacement of an existing state requires an adult session.
   if (currentRevision > 0 && !user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
   if (existing[0]?.payload && user.adultProfileId) {
-    const authorization = authorizeStateTransition(JSON.parse(existing[0].payload), state, user.adultProfileId);
+    const currentState = JSON.parse(existing[0].payload);
+    if (adultRoleInState(currentState, user.adultProfileId) !== "Amministratore") return Response.json({ error: "full_state_replacement_forbidden" }, { status: 403 });
+    const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
     if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
   }
   const revision = baseRevision + 1;

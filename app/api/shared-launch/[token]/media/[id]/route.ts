@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../../../db";
 import { sharedLaunches } from "../../../../../../db/schema";
 import { ownerStoragePrefix, validMediaId } from "../../../../media-key";
+import { sharedLaunchIsAvailable } from "../../../../../domain/shared-launch-policy";
 
 function validToken(value: string) { return /^[0-9a-f-]{36}$/i.test(value); }
 
@@ -10,8 +11,8 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
   if (!env.BUCKET) return new Response("Storage unavailable", { status: 503 });
   const { token, id } = await context.params;
   if (!validToken(token) || !validMediaId(id)) return new Response("Invalid request", { status: 400 });
-  const row = (await getDb().select({ ownerUserId: sharedLaunches.ownerUserId, payload: sharedLaunches.payload }).from(sharedLaunches).where(eq(sharedLaunches.token, token)).limit(1))[0];
-  if (!row) return new Response("Not found", { status: 404 });
+  const row = (await getDb().select({ ownerUserId: sharedLaunches.ownerUserId, payload: sharedLaunches.payload, expiresAt: sharedLaunches.expiresAt, revokedAt: sharedLaunches.revokedAt }).from(sharedLaunches).where(eq(sharedLaunches.token, token)).limit(1))[0];
+  if (!row || !sharedLaunchIsAvailable(row)) return new Response("Not found", { status: 404 });
   let isShared = false;
   try {
     const payload = JSON.parse(row.payload) as { library?: Array<{ remoteImageId?: string }> };
@@ -23,6 +24,6 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
-  headers.set("cache-control", "public, max-age=3600");
+  headers.set("cache-control", "private, no-store");
   return new Response(object.body, { headers });
 }
