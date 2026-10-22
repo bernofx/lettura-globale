@@ -8,6 +8,10 @@
 
 ## Completato
 
+- [x] Primo blocco di hardening successivo alla code review: revoca server-side al logout, autorizzazione delle modifiche per profilo adulto, tentativi/aiuti append-only, proprietà delle sequenze e accesso ai bambini verificati anche nelle API; fallback `PUT` protetto da revisione e batch atomico per snapshot e credenziali.
+- [x] Confine upload rafforzato con verifica dei byte reali PNG/JPEG/WebP, lettura delle dimensioni, limiti in pixel e lato massimo e metadati tecnici R2; validazione del formato login resa esplicita.
+- [x] Controller QR alleggerito senza ridurre la frequenza percepita: heartbeat D1 limitato a uno ogni tre secondi e aggiornamenti React ignorati quando stato e snapshot non cambiano.
+- [x] Primo intervento di riduzione del debito client: collezioni visibili memoizzate e indicizzate per ID, cache immagini con limite, drag pointer condiviso fra riconoscimento e frasi e serie `Numero quantità` aggiunta al grafico.
 - [x] Stato cloud reso semanticamente corretto: un refresh di sola lettura fallito non mostra più il falso allarme rosso “Non salvato nel cloud” quando la revisione locale coincide con l’ultima confermata; journal esteso con `refresh_failed` e `cloud_load_failed`, stato HTTP e codice errore.
 - [x] Libreria resa compatta per impostazione predefinita: immagini singole e frasi mostrano quattro schede con espansione esplicita, mentre ricerca e filtro mostrano tutti i risultati. Le preferenze dei quattro suoni passano dal solo dispositivo allo stato cloud dell’account, recuperando la configurazione locale storica e mantenendo la coda offline. Verificata inoltre la presenza delle 20 immagini d’azione nell’output distribuito e rinnovata la cache PWA.
 - [x] Console QR resa più reattiva: il PC legge i comandi ogni 450 ms con una sola richiesta, mentre lo snapshot viene scritto soltanto quando cambia; il telefono aggiorna lo stato ogni 650 ms. Ogni tasto offre ora feedback immediato alla pressione, vibrazione quando supportata e stati accessibili di invio, conferma o errore.
@@ -111,9 +115,9 @@
 
 - Le preferenze audio sono locali al dispositivo, come l'interruttore degli effetti sonori; il caricamento di suoni personalizzati nella libreria e la sincronizzazione cloud restano interventi futuri.
 - Le modifiche simultanee da più dispositivi vengono ricaricate e riconciliate automaticamente per entità; conflitti ripetuti o vincoli applicativi vengono mostrati come errore di sincronizzazione senza sovrascrivere lo stato remoto.
-- L'ottimizzazione dell'immagine avviene nel browser; varianti e validazione server-side definitive sono ancora da realizzare.
+- L'ottimizzazione dell'immagine avviene nel browser; il server verifica formato reale e dimensioni, mentre ricodifica e varianti server-side restano da realizzare.
 - Il catalogo stock è dimostrativo e non usa ancora un provider esterno.
-- Il ruolo amministratore gestisce i profili nell'interfaccia; permessi server-side più granulari, inviti e recupero accesso richiedono ulteriore hardening.
+- Le scritture applicano ora una prima matrice server-side deny-by-default; la matrice definitiva per genitore/supervisore, inviti e recupero accesso resta subordinata all'ADR di identità.
 - Dati e nomi presenti sono fittizi; il prodotto non è ancora approvato per dati reali di minori.
 - La modalità protetta è un controllo dell'interfaccia web: Chrome/PWA non può impedire la chiusura dell'app, i gesti del sistema operativo o altri comandi del dispositivo.
 - La durata di conservazione dei soli metadati tecnici in `state_operations` deve essere inclusa nella policy di retention prima del pilot.
@@ -124,7 +128,7 @@
 1. Eseguire QA browser su `Abbina la frase`, pairing QR automatico e primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
 3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso Cloudflare, senza deploy di produzione, includendo pairing a sessione iniziata, lease singolo, heartbeat, fallback desktop e replay alla riconnessione.
-4. Introdurre autorizzazioni server-side granulari per amministratore, genitore, supervisore e terapista.
+4. Approvare e completare la matrice definitiva dei permessi server-side per genitore e supervisore, partendo dai vincoli già applicati alle scritture.
 5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.

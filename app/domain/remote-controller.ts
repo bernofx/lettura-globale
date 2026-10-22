@@ -1,5 +1,6 @@
 export const PAIRING_DURATION_MS = 10 * 60 * 1000;
 export const CONTROLLER_LEASE_MS = 8 * 1000;
+export const CONTROLLER_HEARTBEAT_WRITE_MS = 3 * 1000;
 export const REMOTE_HOST_POLL_MS = 450;
 export const REMOTE_CONTROLLER_POLL_MS = 650;
 

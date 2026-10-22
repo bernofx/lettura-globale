@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CONTROLLER_LEASE_MS, controllerIsConnected, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
+import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
 
 test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123456", command: "shuffle" }), { clientEventId: "event-123456", command: "shuffle" });
@@ -22,6 +22,8 @@ test("usa polling rapido ma conserva un lease tollerante e descrive il feedback"
   assert.ok(REMOTE_HOST_POLL_MS <= 500);
   assert.ok(REMOTE_CONTROLLER_POLL_MS <= 750);
   assert.ok(CONTROLLER_LEASE_MS >= REMOTE_CONTROLLER_POLL_MS * 10);
+  assert.ok(CONTROLLER_HEARTBEAT_WRITE_MS > REMOTE_CONTROLLER_POLL_MS);
+  assert.ok(CONTROLLER_HEARTBEAT_WRITE_MS < CONTROLLER_LEASE_MS);
   assert.equal(remoteCommandFeedback("next"), "Passo successivo");
   assert.equal(remoteCommandFeedback("help", { label: "Gesto" }), "Aiuto: Gesto");
 });

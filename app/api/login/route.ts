@@ -13,6 +13,7 @@ export async function POST(request: Request) {
   if (typeof input.email !== "string" || typeof input.pin !== "string") return Response.json({ error: "invalid_request" }, { status: 400 });
 
   const loginEmail = input.email.trim().toLowerCase();
+  if (!loginEmail || loginEmail.length > 320 || !/^\d{4,8}$/.test(input.pin)) return Response.json({ error: "invalid_credentials" }, { status: 401 });
   const submittedHash = await hashText(input.pin);
   const db = getDb();
   let credential = (await db.select().from(therapistCredentials).where(eq(therapistCredentials.loginEmail, loginEmail)).limit(1))[0];
