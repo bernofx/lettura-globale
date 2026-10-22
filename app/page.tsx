@@ -26,7 +26,7 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, type Quant
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
-import { parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { controllerSessionView, parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
@@ -802,7 +802,13 @@ export default function HomePage() {
     const authTimer = window.setTimeout(() => {
       const legacyLaunch = parseSharedLaunch(window.location.search);
       const publicPreview = parseSharedPreview(window.location.search);
-      setControllerToken(parseControllerToken(window.location.search));
+      const scannedControllerToken = parseControllerToken(window.location.search);
+      setControllerToken(scannedControllerToken);
+      if (scannedControllerToken) {
+        const homeUrl = new URL(window.location.href);
+        homeUrl.searchParams.delete("controller");
+        window.history.replaceState({ lgView: "home" }, "", homeUrl.pathname + homeUrl.search + homeUrl.hash);
+      }
       setPendingSharedLaunch(legacyLaunch);
       setPendingSharedPreviewToken(publicPreview?.token ?? null);
       const persistentTherapistId = parsePersistentTherapistSession(localStorage.getItem(THERAPIST_SESSION_STORAGE_KEY));
@@ -1303,7 +1309,7 @@ export default function HomePage() {
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
 
   useEffect(() => {
-    if (!sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
+    if (controllerToken || !sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
     recoveryCheckedFor.current = therapist.id;
     const saved = parseRecoverableSession(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY));
     if (!saved || saved.therapistId !== therapist.id || !associatedChildren.some((child) => child.id === saved.childId)) {
@@ -1312,7 +1318,7 @@ export default function HomePage() {
     }
     const timer = window.setTimeout(() => setRecoveryCandidate(saved), 0);
     return () => window.clearTimeout(timer);
-  }, [allLocalDataLoaded, associatedChildren, backendStatus, sessionActive, sessionChecked, therapist]);
+  }, [allLocalDataLoaded, associatedChildren, backendStatus, controllerToken, sessionActive, sessionChecked, therapist]);
 
   useEffect(() => {
     if (!sessionActive || sessionFromSharedLink || !therapist || !sessionPlan.length || !sessionRunId || !sessionChildId) return;
@@ -1774,7 +1780,7 @@ export default function HomePage() {
     updatedAt: 0,
   } : null;
   const remoteHost = useRemoteSessionHost({
-    enabled: Boolean(sessionActive && !sessionFromSharedLink && !sessionIsTrial && therapist && activeChild),
+    enabled: Boolean(!controllerToken && sessionActive && !sessionFromSharedLink && !sessionIsTrial && therapist && activeChild),
     sessionId: sessionRunId,
     childId: sessionChildId || activeChild?.id || "",
     snapshot: remoteSnapshot,
@@ -1864,10 +1870,21 @@ export default function HomePage() {
     const nextTherapist = therapists.find((item) => item.id === therapistId);
     if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
   };
+  const exitController = useCallback(() => {
+    if (controllerToken) sessionStorage.removeItem(`lg-controller:${controllerToken}`);
+    setControllerToken(null);
+    setSessionPaused(false);
+    setSessionActive(false);
+    setAwaitingNextExercise(false);
+    setRecoveryCandidate(null);
+    setView("home");
+    window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
+  }, [controllerToken]);
   const logout = () => {
     void fetch("/api/logout", { method: "POST", keepalive: true }).catch(() => undefined);
     localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
+    exitController();
     setLoggedInTherapistId(null);
     setShowTherapistLogin(false);
     setView("home");
@@ -1903,7 +1920,7 @@ export default function HomePage() {
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration />}</>;
-  if (controllerToken) return <RemoteControllerConsole token={controllerToken} therapist={therapist} onLogout={logout} />;
+  if (controllerToken) return <RemoteControllerConsole token={controllerToken} therapist={therapist} onLogout={logout} onExit={exitController} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
@@ -1915,7 +1932,7 @@ export default function HomePage() {
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
         {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={sessionActive && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
-        {view === "session" && sessionActive && sessionPaused && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
+        {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
@@ -1998,11 +2015,13 @@ function browserRandomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function RemoteControllerConsole({ token, therapist, onLogout }: { token: string; therapist: Therapist; onLogout: () => void }) {
+function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token: string; therapist: Therapist; onLogout: () => void; onExit: () => void }) {
   const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
   const [commandFeedback, setCommandFeedback] = useState<ControllerCommandFeedback | null>(null);
   const sendQueue = useRef<Promise<void>>(Promise.resolve());
   const feedbackTimer = useRef<number | null>(null);
+  const [connectAttempt, setConnectAttempt] = useState(0);
+  const leaving = useRef(false);
   const storageKey = `lg-controller:${token}`;
 
   useEffect(() => () => {
@@ -2025,6 +2044,7 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
         const response = await fetch("/api/controller/pairing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "join", token, controllerKey }) });
         if (!response.ok) throw new Error(response.status === 404 ? "Il QR è scaduto. Generane uno nuovo dal PC." : response.status === 403 ? "Questo profilo non può controllare la sessione." : "Collegamento non riuscito.");
         const result = await response.json() as { sessionId: string };
+        if (cancelled || leaving.current) return;
         sessionStorage.setItem(storageKey, JSON.stringify({ sessionId: result.sessionId, controllerKey }));
         if (!cancelled) setState((current) => ({ ...current, status: "connected", sessionId: result.sessionId, controllerKey }));
       } catch (error) {
@@ -2033,7 +2053,7 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
     };
     void connect();
     return () => { cancelled = true; };
-  }, [storageKey, token]);
+  }, [connectAttempt, storageKey, token]);
 
   useEffect(() => {
     if (!state.sessionId || !state.controllerKey) return;
@@ -2046,10 +2066,16 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
         const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { headers: { "x-controller-key": state.controllerKey }, cache: "no-store" });
         if (response.status === 403) throw new Error("Un altro telefono ha preso il controllo della sessione.");
         if (!response.ok) throw new Error("Connessione al PC non disponibile.");
-        const result = await response.json() as { status: string; connected: boolean; snapshot?: RemoteSessionSnapshot };
+        const result = await response.json() as { status: string; connected: boolean; snapshot?: RemoteSessionSnapshot | null };
+        if (cancelled || leaving.current) return;
+        const next = controllerSessionView(result);
+        const { status, snapshot } = next;
+        if (status === "closed") {
+          leaving.current = true;
+          onExit();
+          return;
+        }
         if (!cancelled) setState((current) => {
-          const status = result.connected ? "connected" : result.status === "pending" ? "pending" : "lost";
-          const snapshot = result.snapshot ?? current.snapshot;
           return current.status === status && !current.error && JSON.stringify(current.snapshot) === JSON.stringify(snapshot)
             ? current
             : { ...current, status, snapshot, error: "" };
@@ -2057,14 +2083,25 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
       } catch (error) {
         if (!cancelled) setState((current) => {
           const message = error instanceof Error ? error.message : "Connessione persa.";
-          return current.status === "error" && current.error === message ? current : { ...current, status: "error", error: message };
+          return current.status === "error" && current.error === message && !current.snapshot ? current : { ...current, status: "error", snapshot: null, error: message };
         });
       } finally { polling = false; }
     };
     void poll();
     const timer = window.setInterval(poll, REMOTE_CONTROLLER_POLL_MS);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [state.controllerKey, state.sessionId]);
+  }, [onExit, state.controllerKey, state.sessionId]);
+
+  const leaveController = (logOut: boolean) => {
+    leaving.current = true;
+    if (state.sessionId && state.controllerKey) {
+      void fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, {
+        method: "POST", keepalive: true, headers: { "content-type": "application/json", "x-controller-key": state.controllerKey },
+        body: JSON.stringify({ action: "disconnect" }),
+      }, 2_500).catch(() => undefined).finally(() => { if (logOut) onLogout(); });
+    } else if (logOut) onLogout();
+    if (!logOut) onExit();
+  };
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
     if (state.status !== "connected") return;
@@ -2075,15 +2112,19 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
     setCommandFeedback({ id, key, phase: "sending", label });
     if ("vibrate" in navigator) navigator.vibrate(12);
     sendQueue.current = sendQueue.current.catch(() => undefined).then(async () => {
-      const response = await fetch(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) });
+      if (leaving.current) return;
+      const response = await fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) }, 6_500);
+      if (leaving.current) return;
       if (!response.ok) throw new Error("command_failed");
       setCommandFeedback((current) => current?.id === id ? { ...current, phase: "sent" } : current);
       if ("vibrate" in navigator) navigator.vibrate([10, 30, 10]);
       feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 1_100);
     }).catch(() => {
+      if (leaving.current) return;
       setCommandFeedback((current) => current?.id === id ? { ...current, phase: "error" } : current);
+      feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 2_500);
       if ("vibrate" in navigator) navigator.vibrate([35, 30, 35]);
-      setState((current) => ({ ...current, status: "lost", error: "Comando non inviato. Il PC userà i controlli locali." }));
+      setState((current) => ({ ...current, status: "lost", snapshot: null, error: "Comando non inviato. Il PC userà i controlli locali." }));
     });
   };
   const feedbackFor = (command: RemoteCommandName, payload?: { label?: string }) => commandFeedback?.key === `${command}:${payload?.label ?? ""}` ? commandFeedback.phase : undefined;
@@ -2093,10 +2134,10 @@ function RemoteControllerConsole({ token, therapist, onLogout }: { token: string
   const supportsJudgement = snapshot?.exerciseKind === "naming" || snapshot?.exerciseKind === "number-quantity";
 
   return <main className="remote-controller-page">
-    <header><div><span className="brand-mark brand-logo" aria-hidden="true" /><span><small>CONSOLE ADULTA</small><strong>{therapist.firstName} {therapist.lastName}</strong></span></div><button type="button" onClick={onLogout}><LogOut />Esci</button></header>
+    <header><div><span className="brand-mark brand-logo" aria-hidden="true" /><span><small>CONSOLE ADULTA</small><strong>{therapist.firstName} {therapist.lastName}</strong></span></div><div><button type="button" onClick={() => leaveController(false)}><Home />Home</button><button type="button" onClick={() => leaveController(true)} aria-label="Esci dall'account"><LogOut />Esci</button></div></header>
     <section className="remote-controller-status"><span className={`remote-status-dot ${connected ? "connected" : ""}`} />
       <div><strong>{connected ? "Collegato al PC" : state.status === "joining" ? "Collegamento…" : "Non collegato"}</strong><small>{state.error || (connected ? "I comandi vengono registrati nella sessione." : "I controlli restano disponibili sul PC.")}</small></div>
-      {state.error.startsWith("Un altro telefono") && <button type="button" onClick={() => { sessionStorage.removeItem(storageKey); window.location.reload(); }}><RefreshCw />Riprendi il controllo</button>}
+      {state.error.startsWith("Un altro telefono") && <button type="button" onClick={() => { sessionStorage.removeItem(storageKey); setState({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" }); setConnectAttempt((current) => current + 1); }}><RefreshCw />Riprendi il controllo</button>}
     </section>
     {commandFeedback && <div className={`remote-command-feedback ${commandFeedback.phase}`} role="status" aria-live="polite">
       {commandFeedback.phase === "sending" ? <RefreshCw /> : commandFeedback.phase === "sent" ? <Check /> : <X />}

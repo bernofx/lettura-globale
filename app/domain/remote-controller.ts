@@ -73,6 +73,11 @@ export type RemoteSessionSnapshot = {
   updatedAt: number;
 };
 
+export function controllerSessionView(result: { status: string; connected: boolean; snapshot?: RemoteSessionSnapshot | null }) {
+  const status = result.status === "closed" ? "closed" : result.connected ? "connected" : result.status === "pending" ? "pending" : "lost";
+  return { status, snapshot: status === "connected" ? result.snapshot ?? null : null } as const;
+}
+
 export function isRemoteCommandName(value: unknown): value is RemoteCommandName {
   return typeof value === "string" && (remoteCommandNames as readonly string[]).includes(value);
 }

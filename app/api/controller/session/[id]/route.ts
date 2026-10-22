@@ -15,6 +15,7 @@ export async function GET(request: Request, context: RouteContext) {
   const controllerKey = request.headers.get("x-controller-key");
   if (controllerKey) {
     if (!await validateController(row, user, controllerKey)) return noStoreJson({ error: "forbidden" }, { status: 403 });
+    if (row.status === "closed") return noStoreJson({ status: "closed", connected: false, snapshot: null, latestSequence: row.latest_sequence });
     const now = Date.now();
     if (row.status === "connected" && (!row.controller_last_seen_at || row.controller_last_seen_at <= now - CONTROLLER_HEARTBEAT_WRITE_MS)) {
       const heartbeat = await env.DB.prepare("UPDATE remote_controller_sessions SET controller_last_seen_at = ?, updated_at = ? WHERE account_id = ? AND session_id = ? AND controller_key_hash = ?")
@@ -76,6 +77,15 @@ export async function POST(request: Request, context: RouteContext) {
   if (!await validateController(row, user, controllerKey)) return noStoreJson({ error: "forbidden" }, { status: 403 });
   if (row.status !== "connected") return noStoreJson({ error: "not_approved", status: row.status }, { status: 409 });
   const controllerKeyHash = await hashText(controllerKey as string);
+
+  if (body.action === "disconnect") {
+    const disconnected = await env.DB.prepare(`UPDATE remote_controller_sessions SET status = 'waiting', pending_adult_id = NULL,
+      pending_adult_name = NULL, controller_key_hash = NULL, controller_last_seen_at = NULL, updated_at = ?
+      WHERE account_id = ? AND session_id = ? AND status = 'connected' AND controller_key_hash = ?`)
+      .bind(now, row.account_id, row.session_id, controllerKeyHash).run();
+    if (!disconnected.meta.changes) return noStoreJson({ error: "forbidden" }, { status: 403 });
+    return noStoreJson({ ok: true });
+  }
 
   if (body.action === "heartbeat") {
     const heartbeat = await env.DB.prepare("UPDATE remote_controller_sessions SET controller_last_seen_at = ?, updated_at = ? WHERE account_id = ? AND session_id = ? AND controller_key_hash = ?")

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
+import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerSessionView, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandFeedback, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
 
 test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123456", command: "shuffle" }), { clientEventId: "event-123456", command: "shuffle" });
@@ -41,6 +41,16 @@ test("valida lo snapshot minimo mostrato nella console", () => {
   const snapshot = sanitizeRemoteSnapshot({ sessionId: "session-1", childName: "Demo", sessionTitle: "Sequenza", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: false, updatedAt: 1 });
   assert.equal(snapshot?.prompt, "Mela");
   assert.equal(sanitizeRemoteSnapshot({ sessionId: "session-1", currentIndex: -1 }), null);
+});
+
+test("la console scarta la pausa precedente quando la sessione è chiusa o scollegata", () => {
+  const snapshot = sanitizeRemoteSnapshot({ sessionId: "session-1", childName: "Demo", sessionTitle: "Sequenza", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: true, updatedAt: 1 });
+  assert.ok(snapshot);
+  assert.deepEqual(controllerSessionView({ status: "connected", connected: true, snapshot }), { status: "connected", snapshot });
+  assert.deepEqual(controllerSessionView({ status: "closed", connected: false, snapshot }), { status: "closed", snapshot: null });
+  assert.deepEqual(controllerSessionView({ status: "closed", connected: true, snapshot }), { status: "closed", snapshot: null });
+  assert.deepEqual(controllerSessionView({ status: "connected", connected: false, snapshot }), { status: "lost", snapshot: null });
+  assert.deepEqual(controllerSessionView({ status: "waiting", connected: false }), { status: "lost", snapshot: null });
 });
 
 test("la migrazione conserva un solo controller e rende idempotenti i comandi", () => {
@@ -98,6 +108,16 @@ test("il join conserva l'adulto autenticato e l'ultimo telefono può inviare com
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events").get()?.count, 1, "il telefono sostituito non può inviare comandi");
     database.prepare(commandSql).run("event-2", "second-adult", "next", "{}", 5, "account-1", "session-1", "phone-2-hash");
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events").get()?.count, 2);
+
+    const disconnectSql = sessionRoute.match(/prepare\(`(UPDATE remote_controller_sessions SET status = 'waiting'[\s\S]*?)`\)/)?.[1];
+    assert.ok(disconnectSql);
+    assert.equal(database.prepare(disconnectSql).run(6, "account-1", "session-1", "phone-1-hash").changes, 0, "il telefono sostituito non può scollegare il nuovo");
+    assert.equal(database.prepare(disconnectSql).run(6, "account-1", "session-1", "phone-2-hash").changes, 1);
+    const disconnected = database.prepare("SELECT * FROM remote_controller_sessions").get();
+    assert.equal(disconnected?.status, "waiting");
+    assert.equal(disconnected?.controller_key_hash, null);
+    assert.equal(disconnected?.pending_adult_id, null);
+    assert.equal(disconnected?.controller_last_seen_at, null);
   } finally {
     database.close();
   }
