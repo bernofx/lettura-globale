@@ -145,7 +145,7 @@
 
 ## Verifiche della versione corrente
 
-- Durante la sessione il QR del controller resta in un badge compatto sotto l'intestazione, fuori dall'area dei pulsanti; il pannello completo si apre solo su richiesta o in caso di stato da gestire.
+- Durante la sessione il controller usa un pulsante trasparente da 28 px nella barra, con il solo puntino visibile; il pannello QR si apre al tocco. Il controllo dedicato non riutilizza il vecchio badge flottante. Build completa verificata; QA visiva della produzione ancora da confermare.
 - `Avvio rapido` espone tutte le sei tipologie disponibili, incluse `Abbina la frase` e `Numero quantità`, con i rispettivi parametri e controlli di validità.
 - `Abbina la frase` usa contenitori 4:3, accetta il trascinamento della frase sull'immagine, precarica le scene della sessione e avvia la voce del turno successivo solo dopo la conferma della schermata di passaggio.
 - Gli esercizi casuali `Trova la parola` accettano da 1 a 4 distrattori; la sessione desktop adatta la griglia al numero di alternative, amplia le immagini e ingrandisce le scelte nella modalità solo parole.

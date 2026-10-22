@@ -1975,10 +1975,9 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
         : host.status === "creating" ? "Creazione QR…"
           : host.status === "error" ? "Controller non disponibile"
             : "Scansiona per collegare il telefono";
-  return <aside className={`remote-host-badge remote-${host.status}`} aria-label={statusLabel} style={{ width: 28, minWidth: 28, maxWidth: 28, height: 28, minHeight: 28, maxHeight: 28, flex: "0 0 28px", alignSelf: "center" }}>
-    <button type="button" className="remote-host-summary" style={{ width: 28, minWidth: 28, maxWidth: 28, height: 28, minHeight: 28, maxHeight: 28, padding: 0, border: 0, background: "transparent", boxShadow: "none" }} onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
+  return <div className={`session-phone-control remote-${host.status}`}>
+    <button type="button" className="session-phone-dot" title={statusLabel} aria-label={statusLabel} onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
       <span className="remote-status-dot" aria-hidden="true" />
-      <strong>{statusLabel}</strong>
     </button>
     {panelOpen && <div className="remote-host-panel">
       {host.qrDataUrl && <img src={host.qrDataUrl} alt="QR per aprire la console adulta sul telefono" />}
@@ -1988,7 +1987,7 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
         if (host.status !== "connected" || window.confirm("Generare un nuovo QR? Il telefono collegato verrà disconnesso.")) void host.refreshPairing();
       }}><RefreshCw />{host.status === "connected" ? "Sostituisci telefono" : "Genera nuovo QR"}</button>}
     </div>}
-  </aside>;
+  </div>;
 }
 /* eslint-enable @next/next/no-img-element */
 
