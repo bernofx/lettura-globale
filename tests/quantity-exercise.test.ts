@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createQuantityRounds, quantityAnswerId, quantityAnswerLabel, quantityIdleDecision, quantityObjectLabel } from "../app/domain/quantity-exercise.ts";
+import { createQuantityRounds, quantityAnswerId, quantityAnswerLabel, quantityIdleDecision, quantityObjectLabel, quantitySelectionDecision } from "../app/domain/quantity-exercise.ts";
 
 test("genera quantità entro l'intervallo e risolve gli oggetti misti", () => {
   const values = [0, 0, 0.99, 0.99];
@@ -33,4 +33,30 @@ test("il timer è escluso dalla verifica e attivo nell'anteprima condivisa", () 
   assert.deepEqual(quantityIdleDecision("teaching", 2, 4, true, false, 7), { correct: false, delayMs: 7000, method: "idle-wrong", autoResolve: true });
   assert.deepEqual(quantityIdleDecision("teaching", 4, 4, false), { correct: true, delayMs: 5000, method: "idle-teaching", autoResolve: false });
   assert.equal(quantityIdleDecision("teaching", 0, 4, true), null);
+});
+
+test("conta solo le nuove selezioni e blocca immediatamente la quantità senza errori", () => {
+  let selected = new Set<number>();
+  for (let index = 0; index < 3; index++) {
+    const decision = quantitySelectionDecision(selected, index, 3, true)!;
+    assert.equal(decision.spokenNumber, index + 1);
+    assert.equal(decision.correct, index === 2);
+    selected = decision.selected;
+  }
+  assert.equal(quantitySelectionDecision(selected, 3, 3, true), null, "nessun oggetto aggiuntivo anche prima del render");
+  assert.equal(quantitySelectionDecision(selected, 0, 3, true), null, "non si può togliere un oggetto dopo il successo");
+  const normal = quantitySelectionDecision(selected, 3, 3, false)!;
+  assert.equal(normal.selected.size, 4, "la modalità normale conserva la selezione libera");
+  const deselected = quantitySelectionDecision(new Set([0, 1]), 1, 3, true)!;
+  assert.equal(deselected.spokenNumber, null);
+  assert.deepEqual([...deselected.selected], [0]);
+  assert.equal(quantitySelectionDecision(new Set(), 0, 3, false, true), null);
+});
+
+test("senza errori non usa timer, nemmeno in anteprima o valutazione", () => {
+  for (const mode of ["teaching", "test"] as const) for (const preview of [false, true]) {
+    assert.equal(quantityIdleDecision(mode, 2, 3, true, preview, 1, true), null);
+    assert.equal(quantityIdleDecision(mode, 3, 3, true, preview, 1, true), null);
+  }
+  assert.match(quantityAnswerLabel(quantityAnswerId(3, 3, "selection", "test-123"))!, /apprendimento senza errori/);
 });

@@ -28,20 +28,29 @@ export function quantityObjectLabel(object: QuantityObject, count: number) {
   return count === 1 ? "sassolino" : "sassolini";
 }
 
-export type QuantityAnswerMethod = "adult" | "idle-teaching" | "idle-wrong";
+export type QuantityAnswerMethod = "adult" | "idle-teaching" | "idle-wrong" | "selection";
 
 export function quantityAnswerId(target: number, selected: number, method: QuantityAnswerMethod, attemptKey?: string | number) {
   return `quantity:${target}:${selected}:${method}${attemptKey === undefined ? "" : `:${attemptKey}`}`;
 }
 
 export function quantityAnswerLabel(answerId: string) {
-  const match = /^quantity:(\d+):(\d+):(adult|idle-teaching|idle-wrong)(?::[a-zA-Z0-9-]+)?$/.exec(answerId);
+  const match = /^quantity:(\d+):(\d+):(adult|idle-teaching|idle-wrong|selection)(?::[a-zA-Z0-9-]+)?$/.exec(answerId);
   if (!match) return null;
-  const method = match[3] === "idle-teaching" ? "completamento dopo inattività" : match[3] === "idle-wrong" ? "errore dopo inattività" : "conferma adulta";
+  const method = match[3] === "selection" ? "quantità raggiunta · apprendimento senza errori" : match[3] === "idle-teaching" ? "completamento dopo inattività" : match[3] === "idle-wrong" ? "errore dopo inattività" : "conferma adulta";
   return `Richiesti ${match[1]} · selezionati ${match[2]} · ${method}`;
 }
 
-export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, idleSeconds = 5) {
+export function quantitySelectionDecision(selected: ReadonlySet<number>, index: number, target: number, errorless: boolean, locked = false) {
+  if (locked || (errorless && selected.size === target)) return null;
+  const next = new Set(selected);
+  const willSelect = !next.has(index);
+  if (willSelect) next.add(index); else next.delete(index);
+  return { selected: next, willSelect, spokenNumber: willSelect ? next.size : null, correct: errorless && next.size === target };
+}
+
+export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, idleSeconds = 5, errorless = false) {
+  if (errorless) return null;
   if ((mode !== "teaching" && !sharedPreview) || selected === 0) return null;
   const delayMs = Math.min(10, Math.max(1, idleSeconds)) * 1000;
   if (selected !== target) return { correct: false, delayMs, method: "idle-wrong" as const, autoResolve: true };

@@ -10,6 +10,7 @@ export type AttemptEvent = {
   optionIds?: string[];
   correct: boolean;
   firstAttempt: boolean;
+  quantityErrorless?: boolean;
   mode: SessionMode;
   createdAt: string;
   childId?: string;

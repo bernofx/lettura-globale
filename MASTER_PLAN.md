@@ -151,6 +151,8 @@ Il prototipo include selezione esplicita del bambino, sequenze a nuvoletta, avvi
 
 `Abbina la frase` estende le attività con scene soggetto + verbo: frase scritta e pronunciata, 2 o 4 immagini e difficoltà a uno o due gradi di libertà. La struttura dati riserva già il complemento per uno sviluppo successivo, senza esporlo nell’interfaccia corrente.
 
+`Numero quantità` offre conteggio vocale opzionale delle selezioni e apprendimento senza errori: al raggiungimento della quantità corretta blocca la selezione e richiede avanzamento esplicito, senza timer. Le prove senza errori sono riconoscibili negli storici e nei CSV e separate dall'accuratezza autonoma.
+
 ## ADR ancora necessari
 
 1. permessi distinti fra terapista e genitore, inviti e recupero accesso;

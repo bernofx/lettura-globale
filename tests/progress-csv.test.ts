@@ -14,7 +14,7 @@ test("genera un CSV compatibile con Excel italiano", () => {
   assert.ok(csv.startsWith("\uFEFFsep=;\r\n"));
   assert.match(csv, /"esercizio;con separatore"/);
   assert.match(csv, /"risposta ""citata"""/);
-  assert.match(csv, /"Sì";"No";"Valutazione"\r\n$/);
+  assert.match(csv, /"Sì";"No";"Valutazione";"No"\r\n$/);
   assert.equal(csv.includes("\n") && !csv.includes("\r\n"), false);
 });
 
@@ -58,4 +58,13 @@ test("codifica il file Excel in UTF-16LE senza colonne finali vuote", () => {
   const decoded = new TextDecoder("utf-16le").decode(bytes);
   assert.match(decoded, /"Sì";"Sì";"Valutazione"/);
   assert.equal(decoded.split("\r\n").filter((line) => line !== "sep=;").some((line) => line.endsWith(";")), false);
+});
+
+test("le prove senza errori sono distinte e non diventano padronanza autonoma", () => {
+  const csv = buildProgressCsv(Array.from({ length: 5 }, (_, index) => ({ createdAt: "2026-10-22T12:00:00Z", exerciseId: "q", answerId: `quantity:3:3:selection:${index}`, correct: true, firstAttempt: true, quantityErrorless: true, mode: "test" as const })), { exercises: [{ id: "q", title: "Conta", kind: "number-quantity" }] });
+  assert.match(csv, /"apprendimento_senza_errori"/);
+  assert.match(csv, /"Valutazione";"5";"5"/);
+  assert.match(csv, /"Valutazione";"Sì"/);
+  assert.doesNotMatch(csv, /"Acquisita"/);
+  assert.doesNotMatch(csv, /"Competenza";"Tutte";"Numero quantità"/);
 });

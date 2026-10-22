@@ -24,6 +24,8 @@ export type SessionExercise = {
   quantityMax?: number;
   quantityObjectSet?: QuantityObjectSet;
   quantityAutoComplete?: boolean;
+  quantitySpeakNumbers?: boolean;
+  quantityErrorless?: boolean;
   quantityIdleSeconds?: number;
   quantityTarget?: number;
   quantityObject?: QuantityObject;

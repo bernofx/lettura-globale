@@ -30,6 +30,7 @@ export type SessionHistoryItem = {
   responses: SessionHistoryResponse[];
   helpLabels: string[];
   firstCorrect: boolean;
+  quantityErrorless?: boolean;
 };
 
 export type SessionHistoryRecord = {
@@ -110,6 +111,7 @@ export function buildSessionHistoryItems(
       exerciseTitle: exercise?.title ?? "Esercizio archiviato",
       kind: exercise?.kind ?? "recognition",
       presentation: exercise?.presentation,
+      quantityErrorless: first.quantityErrorless || undefined,
       target: snapshotImage(targetId ? itemMap.get(targetId) : undefined),
       options: optionIds.map((optionId) => snapshotImage(itemMap.get(optionId))).filter((item): item is HistoryImageSnapshot => Boolean(item)),
       responses: responses.map((attempt) => ({

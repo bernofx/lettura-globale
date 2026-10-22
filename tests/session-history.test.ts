@@ -37,3 +37,9 @@ test("rende leggibile il risultato numerico nello storico", () => {
   ], [], []);
   assert.equal(result[0].responses[0].label, "Richiesti 5 · selezionati 4 · conferma adulta");
 });
+
+test("lo storico conserva la modalità senza errori del tentativo", () => {
+  const result = buildSessionHistoryItems("session-q", [{ id: "q", title: "Conta", kind: "number-quantity", optionIds: [] }], [{ id: "q1", sessionId: "session-q", sessionItemId: "turn-q", exerciseId: "q", answerId: "quantity:3:3:selection:12345678", correct: true, firstAttempt: true, quantityErrorless: true, mode: "test", createdAt: "2026-10-22T10:00:00Z" }], [], []);
+  assert.equal(result[0].quantityErrorless, true);
+  assert.match(result[0].responses[0].label, /apprendimento senza errori/);
+});

@@ -1,0 +1,11 @@
+# ADR 0016 — Conteggio vocale e apprendimento senza errori
+
+Accettato su richiesta dell'utente, 22 ottobre 2026.
+
+Due opzioni indipendenti e disattivate per impostazione predefinita su `Numero quantità`: `quantitySpeakNumbers` pronuncia il numero di oggetti selezionati solo sulle nuove selezioni, rispettando il volume globale; `quantityErrorless` riconosce immediatamente la quantità corretta e blocca tutte le selezioni/deselezioni successive. Il successo registra un solo tentativo. Si procede solo con Continua o con un comando esplicito adulto, anche in valutazione, anteprima, senza telefono o dopo perdita del controller. La modalità senza errori prevale sul timer e sul completamento automatico configurati; non registra errori per inattività né consente giudizi manuali contrari alla quantità raggiunta. Il comando retry non riapre un turno già concluso senza errori.
+
+Le opzioni sono disponibili nel configuratore e nell'avvio rapido; la compilazione delle sessioni e i link condivisi ne conservano lo snapshot. Il flag della modalità è copiato in ogni tentativo e nel relativo item storico, senza derivarlo dalla configurazione attuale dell'esercizio. Le statistiche mostrano le prove guidate separatamente, senza includerle nell'accuratezza autonoma o nella soglia descrittiva di acquisizione. Anche il CSV include flag e riepilogo dedicato.
+
+La migrazione D1 `0015_quantity_learning_options` aggiunge due booleani a exercises e un booleano a attempts e session_items, tutti con default 0. Non ricrea tabelle e non modifica risultati precedenti o vincoli sui tipi di esercizio. La risposta automatica usa il metodo testuale `selection` nel campo answer_id, privo di CHECK enumerato; la ricostruzione dello storico riconosce sia il nuovo formato sia quelli precedenti. Applicare la migrazione prima del deploy del codice che scrive le nuove colonne, verificando prima il punto di ripristino nativo D1; un export completo fuori dal cloud richiede autorizzazione separata. Nessun cambiamento a R2 o Durable Objects.
+
+Verifiche: selezioni rapide e blocco della quantità, assenza di timer in tutte le modalità, conteggio solo sulle selezioni, round-trip e scrittura SQLite con tutte le migrazioni storiche, storico e CSV con separazione delle prove guidate. Le prove browser touch e sintesi vocale sui dispositivi reali restano da confermare sul campo.
