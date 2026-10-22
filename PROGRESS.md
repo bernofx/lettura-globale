@@ -145,6 +145,7 @@
 
 ## Verifiche della versione corrente
 
+- Pairing telefono: il join salva l'identificativo dell'adulto insieme alla chiave del controller, richiesti dalla validazione delle richieste successive. Test SQLite sullo stesso SQL delle route verifica primo collegamento, invio di comandi e revoca del primo telefono quando si collega il secondo.
 - Durante la sessione il controller usa un pulsante trasparente da 28 px nella barra, con il solo puntino visibile; il pannello QR si apre al tocco. Il controllo dedicato non riutilizza il vecchio badge flottante. Build completa verificata; QA visiva della produzione ancora da confermare.
 - `Avvio rapido` espone tutte le sei tipologie disponibili, incluse `Abbina la frase` e `Numero quantità`, con i rispettivi parametri e controlli di validità.
 - `Abbina la frase` usa contenitori 4:3, accetta il trascinamento della frase sull'immagine, precarica le scene della sessione e avvia la voce del turno successivo solo dopo la conferma della schermata di passaggio.

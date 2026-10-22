@@ -66,3 +66,39 @@ test("la migrazione conserva un solo controller e rende idempotenti i comandi", 
     .run("account-1", "session-1", 2, "event-1", "adult-1", 3));
   database.close();
 });
+
+test("il join conserva l'adulto autenticato e l'ultimo telefono può inviare comandi", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(readFileSync(new URL("../drizzle/0011_remote_session_controller.sql", import.meta.url), "utf8"));
+    database.prepare(`INSERT INTO remote_controller_sessions
+      (account_id, session_id, child_id, owner_adult_id, pairing_token_hash, pairing_expires_at, status, latest_sequence, snapshot_json, created_at, updated_at)
+      VALUES ('account-1', 'session-1', 'child-1', 'host-adult', 'token-1', 99999, 'waiting', 0, '{}', 1, 1)`).run();
+    const pairingRoute = readFileSync(new URL("../app/api/controller/pairing/route.ts", import.meta.url), "utf8");
+    const joinSql = pairingRoute.match(/prepare\(`(UPDATE remote_controller_sessions SET status = 'connected'[\s\S]*?)`\)/)?.[1];
+    assert.ok(joinSql, "esegue lo stesso UPDATE del join di produzione");
+    const sessionRoute = readFileSync(new URL("../app/api/controller/session/[id]/route.ts", import.meta.url), "utf8");
+    const commandSql = sessionRoute.match(/prepare\(`(INSERT INTO remote_controller_events[\s\S]*?)`\)/)?.[1];
+    assert.ok(commandSql);
+
+    database.prepare(joinSql).run("controller-adult", "phone-1-hash", 2, 2, "account-1", "session-1");
+    const row = database.prepare("SELECT * FROM remote_controller_sessions").get();
+    assert.equal(row?.pending_adult_id, "controller-adult", "validateController richiede l'adulto associato al telefono");
+    assert.equal(row?.controller_key_hash, "phone-1-hash");
+    assert.equal(row?.status, "connected");
+    database.prepare(commandSql).run("event-1", "controller-adult", "next", "{}", 3, "account-1", "session-1", "phone-1-hash");
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events").get()?.count, 1);
+    database.prepare("UPDATE remote_controller_sessions SET latest_sequence = 1 WHERE account_id = ? AND session_id = ?").run("account-1", "session-1");
+
+    database.prepare(joinSql).run("second-adult", "phone-2-hash", 4, 4, "account-1", "session-1");
+    const replacement = database.prepare("SELECT * FROM remote_controller_sessions").get();
+    assert.equal(replacement?.pending_adult_id, "second-adult");
+    assert.equal(replacement?.controller_key_hash, "phone-2-hash");
+    database.prepare(commandSql).run("event-old-phone", "controller-adult", "next", "{}", 5, "account-1", "session-1", "phone-1-hash");
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events").get()?.count, 1, "il telefono sostituito non può inviare comandi");
+    database.prepare(commandSql).run("event-2", "second-adult", "next", "{}", 5, "account-1", "session-1", "phone-2-hash");
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events").get()?.count, 2);
+  } finally {
+    database.close();
+  }
+});

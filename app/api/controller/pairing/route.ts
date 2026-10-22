@@ -37,9 +37,9 @@ export async function POST(request: Request) {
     if (!row) return noStoreJson({ error: "pairing_expired" }, { status: 404 });
     if (row.account_id !== user.userId || !await adultCanAccessChild(user, row.child_id)) return noStoreJson({ error: "forbidden" }, { status: 403 });
     const replacement = row.status === "connected" || row.status === "pending";
-    const statements = [env.DB.prepare(`UPDATE remote_controller_sessions SET status = 'connected', pending_adult_id = NULL, pending_adult_name = NULL,
+    const statements = [env.DB.prepare(`UPDATE remote_controller_sessions SET status = 'connected', pending_adult_id = ?, pending_adult_name = NULL,
       controller_key_hash = ?, controller_last_seen_at = ?, updated_at = ? WHERE account_id = ? AND session_id = ?`)
-      .bind(await hashText(body.controllerKey), now, now, row.account_id, row.session_id)];
+      .bind(user.adultProfileId, await hashText(body.controllerKey), now, now, row.account_id, row.session_id)];
     if (replacement) statements.push(env.DB.prepare("INSERT INTO audit_events (id, account_id, adult_id, action, entity_type, entity_id, created_at) VALUES (?, ?, ?, 'controller_replaced', 'learning_session', ?, ?)")
       .bind(crypto.randomUUID(), row.account_id, user.adultProfileId, row.session_id, now));
     await env.DB.batch(statements);
