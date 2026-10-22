@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy
 import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
+import { SessionAdvanceGuard } from "./domain/session-advance";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
 import { feedbackStartOffset } from "./domain/feedback-audio";
@@ -729,7 +730,7 @@ export default function HomePage() {
   const [celebratingSequence, setCelebratingSequence] = useState(false);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
   const [sessionIndex, setSessionIndex] = useState(0);
-  const lastAdvancedSessionItem = useRef("");
+  const sessionAdvanceGuard = useRef(new SessionAdvanceGuard());
   const [sessionFurthestIndex, setSessionFurthestIndex] = useState(0);
   const [sessionPlan, setSessionPlan] = useState<Exercise[]>([]);
   const [sessionRunId, setSessionRunId] = useState("");
@@ -1667,9 +1668,7 @@ export default function HomePage() {
   };
   const nextExercise = (options?: { skipTransition?: boolean }) => {
     if (sessionPausedRef.current) return;
-    const itemKey = `${sessionRunId}:${sessionIndex}`;
-    if (lastAdvancedSessionItem.current === itemKey) return;
-    lastAdvancedSessionItem.current = itemKey;
+    if (!sessionAdvanceGuard.current.claim(sessionRunId, sessionIndex)) return;
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
       wrongFeedbackTimer.current = null;
@@ -1692,6 +1691,7 @@ export default function HomePage() {
     if (sessionPausedRef.current) return;
     const nextIndex = sessionIndex + direction;
     if (nextIndex < 0 || nextIndex > sessionFurthestIndex) return;
+    sessionAdvanceGuard.current.navigated();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
@@ -1712,6 +1712,7 @@ export default function HomePage() {
   const jumpToSessionIndex = (nextIndex: number) => {
     if (sessionPausedRef.current) return;
     if (nextIndex < 0 || nextIndex >= sessionExercises.length) return;
+    if (nextIndex !== sessionIndex) sessionAdvanceGuard.current.navigated();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
     setSessionIndex(nextIndex);
