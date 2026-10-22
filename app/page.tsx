@@ -5,6 +5,7 @@ import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
+import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
 import { feedbackStartOffset } from "./domain/feedback-audio";
@@ -495,7 +496,14 @@ function shuffled<T>(items: T[]) {
 let speechRequestId = 0;
 let currentAudioVolume = 1;
 
+function cancelSpeech() {
+  stopAndroidSpeech();
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
 function speakWord(word: string, onComplete?: () => void) {
+  const nativeCancel = startAndroidSpeech(androidBridge(), window, word, currentAudioVolume, onComplete);
+  if (nativeCancel) return nativeCancel;
   if (!("speechSynthesis" in window)) { onComplete?.(); return () => undefined; }
   const synthesis = window.speechSynthesis;
   const requestId = ++speechRequestId;
@@ -764,7 +772,7 @@ export default function HomePage() {
     const volume = Math.min(100, Math.max(0, Math.round(nextVolume)));
     setSoundVolume(volume);
     setSoundEffects(volume > 0);
-    if (volume === 0 && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (volume === 0) cancelSpeech();
   }, [setSoundEffects, setSoundVolume]);
 
   useEffect(() => {
@@ -1632,7 +1640,7 @@ export default function HomePage() {
     if (exitModalMarker) modalHistoryMarker.current = null;
     localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     setExitPinOpen(false);
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    cancelSpeech();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
       wrongFeedbackTimer.current = null;
@@ -1692,7 +1700,7 @@ export default function HomePage() {
     const nextIndex = sessionIndex + direction;
     if (nextIndex < 0 || nextIndex > sessionFurthestIndex) return;
     sessionAdvanceGuard.current.navigated();
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    cancelSpeech();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
       wrongFeedbackTimer.current = null;
@@ -1713,7 +1721,7 @@ export default function HomePage() {
     if (sessionPausedRef.current) return;
     if (nextIndex < 0 || nextIndex >= sessionExercises.length) return;
     if (nextIndex !== sessionIndex) sessionAdvanceGuard.current.navigated();
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    cancelSpeech();
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
     setSessionIndex(nextIndex);
     setAnswerState("idle");
@@ -1748,13 +1756,13 @@ export default function HomePage() {
     if (command === "pause") {
       sessionPausedRef.current = true;
       setSessionPaused(true);
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      cancelSpeech();
       return;
     }
     if (command === "resume") { sessionPausedRef.current = false; setSessionPaused(false); return; }
     if (command === "toggle_audio") {
       setSoundEffects((current) => {
-        if (current && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        if (current) cancelSpeech();
         return !current;
       });
       return;
@@ -3310,5 +3318,15 @@ function ContentDeleteDialog({ title, detail, onCancel, onConfirm }: { title: st
 }
 
 function downloadProgressCsv(attempts: Attempt[], exercises: Exercise[], library: LibraryItem[]) {
-  const blob = new Blob([buildExcelProgressCsv(attempts, { exercises, library })], { type: "text/csv;charset=utf-16le" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "lettura-globale-progressi.csv"; link.click(); URL.revokeObjectURL(url);
+  const blob = new Blob([buildExcelProgressCsv(attempts, { exercises, library })], { type: "text/csv;charset=utf-16le" });
+  const native = androidBridge();
+  if (native) {
+    if (blob.size > 5_900_000) { window.alert("Esportazione troppo grande per l’app: usa il browser sul PC."); return; }
+    const reader = new FileReader();
+    reader.onload = () => native.saveCsv(String(reader.result).split(",")[1]);
+    reader.onerror = () => window.alert("Esportazione CSV non riuscita.");
+    reader.readAsDataURL(blob);
+    return;
+  }
+  const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "lettura-globale-progressi.csv"; link.click(); URL.revokeObjectURL(url);
 }

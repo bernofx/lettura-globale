@@ -1,0 +1,11 @@
+# ADR 0017 — Contenitore Android 11 per il tablet
+
+Accettato su richiesta dell'utente del 22 ottobre 2026: APK collegata al sito, senza duplicare gli esercizi, con primo livello di protezione tramite blocco app Android. Non è autorizzata/configurata la gestione device owner del tablet né un kiosk gestito.
+
+Un'Activity Android nativa senza dipendenze di terze parti apre esclusivamente il dominio HTTPS esistente, preservando la pipeline Git → Cloudflare e la fonte dati cloud D1/R2/DO. Non si crea un secondo backend o una seconda implementazione delle attività. La WebView ha cookie/sessione propri, dom storage e coda offline già gestita dall'app web; non si promette una disponibilità offline completa.
+
+La sintesi vocale usa un bridge minimo al motore Android installato, con ID di richiesta, volume, callback e cancellazione che non deve provocare avanzamenti. Il browser normale conserva Web Speech. Il bridge espone solo speak, stop e salvataggio CSV con selettore documenti e verifica adulta. Le immagini sono caricate tramite selettore file di sistema; nessun accesso generalizzato allo storage. Unico permesso: Internet. No HTTP, bypass TLS, WebView debug, popup o navigazione su origini esterne; backup Android disabilitato.
+
+L'app usa immersive fullscreen e una piccola barra adulta nativa non sovrapposta ai pulsanti degli esercizi. Il menu richiede le credenziali del blocco schermo Android e consente screen pinning, refresh o uscita. La richiesta PIN alla rimozione del blocco va abilitata dal proprietario nelle impostazioni Android: startLockTask non concede device owner e non garantisce da solo un kiosk completo. Tasti fisici, riavvio e differenze OEM rimangono limiti del sistema. Test sul tablet indispensabile prima dell'uso col bambino.
+
+La prima APK è un artefatto dimostrativo firmato con chiave di prova locale esclusa dal repository; è scaricabile come asset del sito pubblico esistente, senza dati né credenziali inclusi. Una distribuzione definitiva richiede una chiave stabile del proprietario con backup sicuro e strategia aggiornamenti nativi. Le normali correzioni web arrivano senza reinstallare l'APK. Fonti e procedura SDK sono versionate; non occorrono migrazioni cloud. Vedi `android/README.md` per installazione, compilazione e QA.

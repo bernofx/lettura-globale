@@ -145,6 +145,8 @@ Matrice con parole sulle righe e tipologie di attività sulle colonne, compreso 
 
 PWA, accessibilità, sicurezza, privacy, backup/restore, UAT e runbook. Accettazione: nessun finding critico/alto aperto e approvazione esplicita prima di Cloudflare produzione.
 
+Contenitore Android 11+ collegato al sito: aggiornamenti web condivisi, TTS nativo quando necessario e screen pinning esplicito con credenziali Android per il menu adulto. Il kiosk device owner resta separato e non attivato; la prima APK è una prova su dispositivo, secondo ADR 0017.
+
 ### M7 — Sessioni guidate e console realtime *(MVP QR/D1 completato; WebSocket DO disponibile su scelta esplicita)*
 
 Il prototipo include selezione esplicita del bambino, sequenze a nuvoletta, avvio rapido, riepilogo e schermata `PRONTI?`; la creazione delle sequenze resta nel pannello Configurazione. L'MVP pubblicato separa i controlli adulti tramite console mobile collegata con QR e ripristina i controlli locali se il telefono perde il lease. Con il telefono collegato l'adulto conferma ogni avanzamento e può navigare fra turni e attività, gestire audio, pausa, conclusione e aiuti e rimescolare le scelte di riconoscimento/categorizzazione; tutte le azioni sono tracciate. Il metodo predefinito resta D1 con polling; il pannello QR offre anche Durable Objects/WebSocket come prova facoltativa, secondo ADR 0015. Entrambi mantengono idempotenza e audit D1. Restano le verifiche sul campo e l'hardening dei permessi prima del pilot. Dettagli in `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.

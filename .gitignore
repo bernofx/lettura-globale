@@ -12,3 +12,5 @@ site-build.tar.gz
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+android/build/
+.android-local/
