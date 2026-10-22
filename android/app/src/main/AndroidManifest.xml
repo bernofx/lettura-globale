@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="it.letturaglobale.tablet" android:versionCode="1" android:versionName="0.1.0">
+    package="it.letturaglobale.tablet" android:versionCode="2" android:versionName="0.1.1">
     <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>

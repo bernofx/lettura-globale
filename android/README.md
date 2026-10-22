@@ -6,11 +6,12 @@ Contenitore WebView nativo: carica esclusivamente `https://lettura-globale.berno
 
 1. Aggiornare Android System WebView e installare/attivare una voce italiana nelle impostazioni Android di sintesi vocale. Internet è necessario per il primo caricamento; questa APK non promette disponibilità offline completa.
 2. Impostare un PIN, password o sequenza di blocco schermo del tablet.
-3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.0.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
+3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.1.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
 4. Aprire Lettura Globale e accedere con il consueto profilo adulto. L'accesso della WebView è separato da Chrome; i dati cloud sono gli stessi, non vengono copiati i cookie del browser.
 
 ## Blocco app e uscita adulta
 
+- La versione 0.1.1 chiude il menu prima di richiedere il blocco e non riattiva immersive/fullscreen durante la conferma o mentre l'app è fissata. Le barre di sistema rimangono visibili: è una scelta di compatibilità per il freeze dei tocchi segnalato su telefono, da verificare sul dispositivo interessato. Il blocco di Home/Recenti rimane quello gestito da Android. La WebView recupera il focus dopo il ritorno dalle finestre del sistema. Installare come aggiornamento della 0.1.0, senza disinstallarla.
 - Nelle impostazioni Android cercare **Blocco app**, **Fissa schermo** o **Screen pinning**; il nome varia per produttore. Abilitare anche la richiesta del PIN per rimuovere il blocco. Il PIN è quello di sblocco Android, non il PIN del profilo nel sito.
 - Tenere premuti i tre puntini della piccola barra nativa e confermare le credenziali Android. Scegliere **Blocca app sullo schermo** e accettare l'eventuale conferma del sistema.
 - Il menu adulto permette anche di aggiornare la pagina e uscire dall'app, dopo verifica Android. Il tasto Indietro segue la cronologia interna del sito; alla radice richiede l'accesso adulto al menu.

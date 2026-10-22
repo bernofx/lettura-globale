@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.util.Base64;
@@ -42,6 +44,10 @@ public class MainActivity extends Activity {
     private Runnable adultAction;
     private ValueCallback<Uri[]> fileCallback;
     private byte[] pendingCsv;
+    private boolean pinRequestPending;
+    private int pinChecks;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pinningCheck = this::checkPinning;
     private final class Speech {
         final String text, id;
         final float volume;
@@ -134,16 +140,46 @@ public class MainActivity extends Activity {
                 .setMessage("Imposta un PIN di blocco schermo sul tablet e attiva ‘Richiedi PIN per sbloccare app’. Tieni premuti i tre puntini per il menu adulto e scegli Blocca app. Lo schermo intero, da solo, non blocca Home e cambio app. Voce italiana e WebView devono essere aggiornati.")
                 .setPositiveButton("Ho capito", (dialog, which) -> getPreferences(0).edit().putBoolean("introShown", true).apply()).show();
         }
-        immersive();
+        updateWindowMode();
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     private boolean trustedPage() { return web != null && UrlPolicy.trusted(web.getUrl()); }
-    private void immersive() {
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    private boolean isPinned() {
+        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        return manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE;
     }
-    @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if (focused) immersive(); }
+    private void updateWindowMode() {
+        boolean immersive = PinningUiPolicy.allowImmersive(pinRequestPending, isPinned());
+        getWindow().getDecorView().setSystemUiVisibility(immersive
+            ? View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            : View.SYSTEM_UI_FLAG_VISIBLE);
+    }
+    private void restoreWebFocus() {
+        if (web == null) return;
+        web.onResume(); web.requestFocus(View.FOCUS_DOWN); web.invalidate();
+    }
+    private void beginScreenPinning() {
+        pinRequestPending = true; pinChecks = 0;
+        uiHandler.removeCallbacks(pinningCheck);
+        updateWindowMode();
+        // The adult dialog must be detached before Android installs its pinning window.
+        uiHandler.postDelayed(() -> {
+            if (isFinishing()) return;
+            try { startLockTask(); uiHandler.post(pinningCheck); }
+            catch (Exception error) { pinRequestPending = false; updateWindowMode(); toast("Blocco app non disponibile: usa le impostazioni Android"); }
+        }, 200);
+    }
+    private void checkPinning() {
+        if (isFinishing()) return;
+        if (isPinned() || ++pinChecks >= 40) pinRequestPending = false;
+        updateWindowMode();
+        if (pinRequestPending) uiHandler.postDelayed(pinningCheck, 250);
+        else if (hasWindowFocus()) restoreWebFocus();
+    }
+    @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if (focused) { updateWindowMode(); restoreWebFocus(); } }
+    @Override protected void onResume() { super.onResume(); updateWindowMode(); if (hasWindowFocus()) restoreWebFocus(); }
     @Override protected void onSaveInstanceState(Bundle state) { if (web != null) web.saveState(state); super.onSaveInstanceState(state); }
     @Override public void onBackPressed() {
         if (web != null && web.canGoBack()) web.goBack(); else authenticate(this::showAdultMenu);
@@ -160,8 +196,8 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Area adulto")
             .setItems(new String[]{"Blocca app sullo schermo", "Aggiorna pagina", "Esci dall’app"}, (dialog, item) -> {
                 if (item == 0) {
-                    try { startLockTask(); toast("Conferma il blocco Android. La richiesta PIN all’uscita va attivata nelle impostazioni del tablet."); }
-                    catch (Exception error) { toast("Blocco app non disponibile: usa le impostazioni Android"); }
+                    dialog.dismiss();
+                    beginScreenPinning();
                 } else if (item == 1 && web != null) web.reload();
                 else {
                     stopVoice();
@@ -231,6 +267,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onPause() { stopVoice(); super.onPause(); }
     @Override protected void onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null);
         if (fileCallback != null) fileCallback.onReceiveValue(null);
         if (voice != null) { voice.stop(); voice.shutdown(); }
         if (web != null) { web.removeJavascriptInterface("LetturaGlobaleAndroid"); web.destroy(); }

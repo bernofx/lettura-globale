@@ -3,3 +3,9 @@
   Content-Disposition: attachment; filename="lettura-globale-android11-v0.1.0.apk"
   X-Content-Type-Options: nosniff
   Cache-Control: public, max-age=31536000, immutable
+
+/downloads/lettura-globale-android11-v0.1.1.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="lettura-globale-android11-v0.1.1.apk"
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=31536000, immutable

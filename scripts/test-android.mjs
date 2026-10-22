@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 const root = resolve(import.meta.dirname, "..");
 const out = mkdtempSync(join(tmpdir(), "lg-android-test-"));
 for (const args of [
-  ["com.sun.tools.javac.Main", "-d", out, join(root, "android/app/src/main/java/it/letturaglobale/tablet/UrlPolicy.java"), join(root, "android/tests/UrlPolicyTest.java")],
+  ["com.sun.tools.javac.Main", "-d", out, join(root, "android/app/src/main/java/it/letturaglobale/tablet/UrlPolicy.java"), join(root, "android/app/src/main/java/it/letturaglobale/tablet/PinningUiPolicy.java"), join(root, "android/tests/UrlPolicyTest.java")],
   ["-cp", out, "it.letturaglobale.tablet.UrlPolicyTest"],
 ]) {
   const result = spawnSync("java", args, { stdio: "inherit" });
