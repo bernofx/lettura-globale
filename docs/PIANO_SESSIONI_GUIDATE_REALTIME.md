@@ -1,6 +1,6 @@
 # Piano — Sessioni guidate e console realtime
 
-**Stato:** MVP QR/D1 pubblicato; ottimizzazione del polling e feedback dei comandi implementati
+**Stato:** MVP QR/D1 pubblicato; percorso Durable Object/WebSocket opt-in implementato secondo ADR 0015, metodo classico ancora predefinito
 **Origine:** audit tecnico Fase 0 del 17 ottobre 2026  
 **Vincolo:** nessun deploy Cloudflare di produzione senza approvazione esplicita
 

@@ -20,6 +20,8 @@ const managedLinux = readExecutionProfile() === "managed-linux";
 const localBindingConfig = {
   main: "./build/sites-worker.ts",
   compatibility_flags: ["nodejs_compat"],
+  durable_objects: { bindings: [{ name: "SESSIONS", class_name: "RealtimeSession" }] },
+  migrations: [{ tag: "realtime-v1", new_sqlite_classes: ["RealtimeSession"] }],
   d1_databases: d1
     ? [
         {

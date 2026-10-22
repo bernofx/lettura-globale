@@ -134,7 +134,7 @@
 
 1. Eseguire QA browser su `Abbina la frase`, pairing QR automatico e primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
-3. Eseguire uno spike sul supporto Durable Objects/WebSocket nel flusso Cloudflare, senza deploy di produzione, includendo pairing a sessione iniziata, lease singolo, heartbeat, fallback desktop e replay alla riconnessione.
+3. Verificare sul campo la modalità QR `Realtime DO`, soprattutto sospensione Android/iOS, rete instabile, sostituzione del telefono e ritorno esplicito al metodo classico; mantenere `Classico` come predefinito.
 4. Approvare e completare la matrice definitiva dei permessi server-side per genitore e supervisore, partendo dai vincoli già applicati alle scritture.
 5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
@@ -145,6 +145,7 @@
 
 ## Verifiche della versione corrente
 
+- Migrazione realtime controllata: il pannello QR mantiene `Classico` predefinito e offre `Realtime DO · prova`, con QR esplicitamente distinto. Il nuovo percorso usa un vero Durable Object SQLite e WebSocket nello stesso Worker, ticket monouso, audit D1 prima della conferma, heartbeat, replay e revoca del controller precedente. Il cambio di modalità chiude il vecchio collegamento e richiede nuova scansione; nessuna migrazione D1/R2. Vedi ADR 0015 e test runtime `pnpm test:realtime`.
 - Pausa remota: i comandi che cambiano esercizio, risposta, ordine o aiuti vengono bloccati dal PC e disabilitati nella console; restano disponibili ripresa, audio e termine. Il blocco è immediato anche per comandi ricevuti nello stesso batch. L'avanzamento remoto supera le transizioni fra esercizi; una transizione già aperta è confermabile dal telefono senza saltare il primo turno.
 - Console adulta: feedback comandi in notifica temporanea sovrapposta, home accessibile senza logout e scollegamento immediato del controller; il token QR viene consumato al primo accesso e rimosso dalla URL. Logout azzera la modalità controller e la pausa locale. Alla chiusura della sessione sul PC la console scarta lo snapshot e torna alla home; durante disconnessioni non mostra la vecchia indicazione di pausa.
 - Pairing telefono: il join salva l'identificativo dell'adulto insieme alla chiave del controller, richiesti dalla validazione delle richieste successive. Test SQLite sullo stesso SQL delle route verifica primo collegamento, invio di comandi e revoca del primo telefono quando si collega il secondo.

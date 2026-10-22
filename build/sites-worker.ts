@@ -1,9 +1,16 @@
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
+import { upgradeRealtime } from "../realtime/gateway";
+export { RealtimeSession } from "../realtime/worker";
 
 export default {
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/controller/realtime/connect") {
+      if (!env.SESSIONS) return new Response("Realtime unavailable", { status: 503 });
+      return upgradeRealtime(request, env.SESSIONS, url.origin);
+    }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.

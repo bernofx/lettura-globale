@@ -8,6 +8,8 @@
   "preview_urls": true,
   "no_bundle": true,
   "keep_vars": true,
+  "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "RealtimeSession" }] },
+  "migrations": [{ "tag": "realtime-v1", "new_sqlite_classes": ["RealtimeSession"] }],
   "rules": [
     {
       "type": "ESModule",

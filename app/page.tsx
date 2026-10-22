@@ -28,6 +28,8 @@ import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
 import { controllerSessionView, parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
+import { parseRealtimeController } from "./domain/realtime-protocol";
+import { RealtimeSocket } from "./realtime-socket";
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
 import { isSimpleSentenceScene, sentenceMatchingAvailability, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./domain/sentence-matching";
@@ -678,6 +680,7 @@ export default function HomePage() {
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [controllerToken, setControllerToken] = useState<string | null>(null);
+  const [realtimeControllerSessionId, setRealtimeControllerSessionId] = useState<string | null>(null);
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
   const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
   const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, hydrateSequences);
@@ -806,16 +809,19 @@ export default function HomePage() {
       const publicPreview = parseSharedPreview(window.location.search);
       const scannedControllerToken = parseControllerToken(window.location.search);
       setControllerToken(scannedControllerToken);
-      if (scannedControllerToken) {
-        const homeUrl = new URL(window.location.href);
-        homeUrl.searchParams.delete("controller");
-        window.history.replaceState({ lgView: "home" }, "", homeUrl.pathname + homeUrl.search + homeUrl.hash);
-      }
+      setRealtimeControllerSessionId(scannedControllerToken ? parseRealtimeController(window.location.search) : null);
       setPendingSharedLaunch(legacyLaunch);
       setPendingSharedPreviewToken(publicPreview?.token ?? null);
       const persistentTherapistId = parsePersistentTherapistSession(localStorage.getItem(THERAPIST_SESSION_STORAGE_KEY));
       const legacyTherapistId = sessionStorage.getItem(THERAPIST_SESSION_STORAGE_KEY);
       const restoredTherapistId = persistentTherapistId ?? legacyTherapistId;
+      if (scannedControllerToken && restoredTherapistId) {
+        const homeUrl = new URL(window.location.href);
+        homeUrl.searchParams.delete("controller");
+        homeUrl.searchParams.delete("transport");
+        homeUrl.searchParams.delete("session");
+        window.history.replaceState({ lgView: "home" }, "", homeUrl.pathname + homeUrl.search + homeUrl.hash);
+      }
       if (legacyTherapistId && !persistentTherapistId) localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(legacyTherapistId));
       sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
       if (!restoredTherapistId) localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
@@ -1880,6 +1886,7 @@ export default function HomePage() {
   };
 
   const login = (therapistId: string) => {
+    if (controllerToken) window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
     localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(therapistId));
     setLoggedInTherapistId(therapistId);
     const nextTherapist = therapists.find((item) => item.id === therapistId);
@@ -1888,6 +1895,7 @@ export default function HomePage() {
   const exitController = useCallback(() => {
     if (controllerToken) sessionStorage.removeItem(`lg-controller:${controllerToken}`);
     setControllerToken(null);
+    setRealtimeControllerSessionId(null);
     setSessionPaused(false);
     setSessionActive(false);
     setAwaitingNextExercise(false);
@@ -1935,7 +1943,7 @@ export default function HomePage() {
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration />}</>;
-  if (controllerToken) return <RemoteControllerConsole token={controllerToken} therapist={therapist} onLogout={logout} onExit={exitController} />;
+  if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
@@ -2000,7 +2008,8 @@ function PublicPreviewError() {
 /* eslint-disable @next/next/no-img-element */
 function RemoteHostBadge({ host }: { host: RemoteHostState }) {
   const [panel, setPanel] = useState<{ open: boolean; status: RemoteHostState["status"] }>({ open: false, status: host.status });
-  const panelOpen = panel.open && panel.status === host.status;
+  if (panel.status !== host.status) setPanel({ open: host.status === "connected" ? false : panel.open, status: host.status });
+  const panelOpen = panel.open;
   const statusLabel = host.status === "connected" ? "Telefono collegato"
     : host.status === "lost" ? "Connessione persa · controlli sul PC"
       : host.status === "pending" ? "Telefono in attesa di approvazione"
@@ -2008,10 +2017,11 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
           : host.status === "error" ? "Controller non disponibile"
             : "Scansiona per collegare il telefono";
   return <div className={`session-phone-control remote-${host.status}`}>
-    <button type="button" className="session-phone-dot" title={statusLabel} aria-label={statusLabel} onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
+    <button type="button" className="session-phone-dot" title={statusLabel} aria-label={statusLabel} onClick={() => setPanel((current) => ({ open: !current.open, status: host.status }))} aria-expanded={panelOpen}>
       <span className="remote-status-dot" aria-hidden="true" />
     </button>
     {panelOpen && <div className="remote-host-panel">
+      <div className="remote-transport-picker"><label>Modalità collegamento<select aria-label="Modalità collegamento del telefono" value={host.transport ?? "classic"} disabled={host.status === "creating"} onChange={(event) => { if ((host.status === "connected" || host.status === "lost") && !window.confirm("Cambiare modalità scollega il telefono corrente. Dovrai scansionare il nuovo QR. Continuare?")) return; void host.selectTransport?.(event.target.value === "do" ? "do" : "classic"); }}><option value="classic">Classico · attuale</option><option value="do">Realtime DO · prova</option></select></label><small>{host.transport === "do" ? "Connessione WebSocket tramite Durable Object." : "Metodo attuale con polling. Selezionato per impostazione predefinita."}</small></div>
       {host.qrDataUrl && <img src={host.qrDataUrl} alt="QR per aprire la console adulta sul telefono" />}
       <div><strong>{statusLabel}</strong><p>{host.status === "connected" ? "L’avanzamento è controllato dal telefono." : host.status === "lost" ? "La sessione continua con i controlli locali finché il telefono non torna online." : "Apri il QR da un telefono e accedi con il profilo adulto."}</p></div>
       {host.status === "error" && <><small>{host.error}</small><button className="ghost-button" type="button" onClick={() => void host.refreshPairing()}><RefreshCw />Riprova</button></>}
@@ -2030,13 +2040,14 @@ function browserRandomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token: string; therapist: Therapist; onLogout: () => void; onExit: () => void }) {
+function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout, onExit }: { token: string; realtimeSessionId: string | null; therapist: Therapist; onLogout: () => void; onExit: () => void }) {
   const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
   const [commandFeedback, setCommandFeedback] = useState<ControllerCommandFeedback | null>(null);
   const sendQueue = useRef<Promise<void>>(Promise.resolve());
   const feedbackTimer = useRef<number | null>(null);
   const [connectAttempt, setConnectAttempt] = useState(0);
   const leaving = useRef(false);
+  const realtimeSocket = useRef<RealtimeSocket | null>(null);
   const storageKey = `lg-controller:${token}`;
 
   useEffect(() => () => {
@@ -2056,7 +2067,7 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
           }
         }
         const controllerKey = browserRandomHex();
-        const response = await fetch("/api/controller/pairing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "join", token, controllerKey }) });
+        const response = await fetch(realtimeSessionId ? "/api/controller/realtime" : "/api/controller/pairing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "join", token, controllerKey, ...(realtimeSessionId ? { sessionId: realtimeSessionId } : {}) }) });
         if (!response.ok) throw new Error(response.status === 404 ? "Il QR è scaduto. Generane uno nuovo dal PC." : response.status === 403 ? "Questo profilo non può controllare la sessione." : "Collegamento non riuscito.");
         const result = await response.json() as { sessionId: string };
         if (cancelled || leaving.current) return;
@@ -2068,10 +2079,28 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
     };
     void connect();
     return () => { cancelled = true; };
-  }, [connectAttempt, storageKey, token]);
+  }, [connectAttempt, storageKey, token, realtimeSessionId]);
 
   useEffect(() => {
     if (!state.sessionId || !state.controllerKey) return;
+    if (realtimeSessionId) {
+      const socket = new RealtimeSocket({ sessionId: state.sessionId, role: "controller", controllerKey: state.controllerKey,
+        onConnection: (connected, reason) => {
+          if (leaving.current || connected) return;
+          if (reason === "session_closed") { leaving.current = true; onExit(); return; }
+          setState((old) => ({ ...old, status: "lost", snapshot: null, error: reason === "controller_replaced" ? "Un altro telefono ha preso il controllo della sessione." : "Connessione DO interrotta. Riconnessione in corso…" }));
+        },
+        onMessage: (message) => {
+          if (leaving.current || message.type !== "state") return;
+          const next = controllerSessionView(message);
+          if (next.status === "closed") { leaving.current = true; onExit(); return; }
+          const { status, snapshot } = next;
+          setState((old) => old.status === status && !old.error && JSON.stringify(old.snapshot) === JSON.stringify(snapshot) ? old : { ...old, status, snapshot, error: "" });
+        },
+      });
+      realtimeSocket.current = socket;
+      return () => { socket.stop(); if (realtimeSocket.current === socket) realtimeSocket.current = null; };
+    }
     let cancelled = false;
     let polling = false;
     const poll = async () => {
@@ -2105,14 +2134,14 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
     void poll();
     const timer = window.setInterval(poll, REMOTE_CONTROLLER_POLL_MS);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [onExit, state.controllerKey, state.sessionId]);
+  }, [onExit, state.controllerKey, state.sessionId, realtimeSessionId]);
 
   const leaveController = (logOut: boolean) => {
     leaving.current = true;
     if (state.sessionId && state.controllerKey) {
-      void fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, {
+      void fetchWithTimeout(realtimeSessionId ? "/api/controller/realtime" : `/api/controller/session/${encodeURIComponent(state.sessionId)}`, {
         method: "POST", keepalive: true, headers: { "content-type": "application/json", "x-controller-key": state.controllerKey },
-        body: JSON.stringify({ action: "disconnect" }),
+        body: JSON.stringify({ action: "disconnect", ...(realtimeSessionId ? { sessionId: state.sessionId, controllerKey: state.controllerKey } : {}) }),
       }, 2_500).catch(() => undefined).finally(() => { if (logOut) onLogout(); });
     } else if (logOut) onLogout();
     if (!logOut) onExit();
@@ -2128,9 +2157,14 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
     if ("vibrate" in navigator) navigator.vibrate(12);
     sendQueue.current = sendQueue.current.catch(() => undefined).then(async () => {
       if (leaving.current) return;
-      const response = await fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) }, 6_500);
+      if (realtimeSessionId) {
+        if (!realtimeSocket.current) throw new Error("not_connected");
+        await realtimeSocket.current.command({ clientEventId: id, command, payload });
+      } else {
+        const response = await fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) }, 6_500);
+        if (!response.ok) throw new Error("command_failed");
+      }
       if (leaving.current) return;
-      if (!response.ok) throw new Error("command_failed");
       setCommandFeedback((current) => current?.id === id ? { ...current, phase: "sent" } : current);
       if ("vibrate" in navigator) navigator.vibrate([10, 30, 10]);
       feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 1_100);
@@ -2152,7 +2186,7 @@ function RemoteControllerConsole({ token, therapist, onLogout, onExit }: { token
   return <main className="remote-controller-page">
     <header><div><span className="brand-mark brand-logo" aria-hidden="true" /><span><small>CONSOLE ADULTA</small><strong>{therapist.firstName} {therapist.lastName}</strong></span></div><div><button type="button" onClick={() => leaveController(false)}><Home />Home</button><button type="button" onClick={() => leaveController(true)} aria-label="Esci dall'account"><LogOut />Esci</button></div></header>
     <section className="remote-controller-status"><span className={`remote-status-dot ${connected ? "connected" : ""}`} />
-      <div><strong>{connected ? "Collegato al PC" : state.status === "joining" ? "Collegamento…" : "Non collegato"}</strong><small>{state.error || (connected ? "I comandi vengono registrati nella sessione." : "I controlli restano disponibili sul PC.")}</small></div>
+      <div><strong>{connected ? "Collegato al PC" : state.status === "joining" ? "Collegamento…" : "Non collegato"}{realtimeSessionId ? " · Realtime DO" : ""}</strong><small>{state.error || (connected ? "I comandi vengono registrati nella sessione." : "I controlli restano disponibili sul PC.")}</small></div>
       {state.error.startsWith("Un altro telefono") && <button type="button" onClick={() => { sessionStorage.removeItem(storageKey); setState({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" }); setConnectAttempt((current) => current + 1); }}><RefreshCw />Riprendi il controllo</button>}
     </section>
     {commandFeedback && <div className={`remote-command-feedback ${commandFeedback.phase}`} role="status" aria-live="polite">

@@ -1,0 +1,13 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "lettura-globale-realtime-test",
+  "main": "worker.ts",
+  "compatibility_date": "2026-05-15",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "ALLOWED_ORIGIN": "https://lettura-globale.bernofx.workers.dev" },
+  "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "RealtimeSession" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RealtimeSession"] }],
+  "d1_databases": [{ "binding": "DB", "database_name": "test-controller-d1", "database_id": "00000000-0000-4000-8000-000000000000" }],
+  "observability": { "enabled": true }
+}
