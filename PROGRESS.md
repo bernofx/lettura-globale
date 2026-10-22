@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Controlli della sessione compattati: il QR è un indicatore nella barra superiore e apre il pannello solo su richiesta; il volume di voce e suoni è regolabile da 0 a 100; `Termina` richiede due secondi ed è disponibile anche mentre un telefono controlla l'avanzamento.
 - [x] Su mobile le attività standard con due risposte mostrano le immagini una sotto l’altra per massimizzarne l’area; `IL / LA` conserva la propria disposizione dedicata. Le cinque scene del cane nel catalogo frasi usano ora un mantello grigio, distinguibile dal gatto rosso, mantenendo azioni e stile fotografico coerenti.
 - [x] Secondo blocco di hardening: PIN nuovi in PBKDF2 versionato con compatibilità SHA-256, rate limit D1 per email e rete (5 errori/15 minuti con blocco progressivo), rimozione del fallback in chiaro e migrazione `0014` forward-only.
 - [x] Link pubblici con scadenza a 30 giorni, revoca dal pannello Configurazione, controllo uniforme anche sui media, cache disabilitata e pulizia opportunistica degli snapshot non più attivi.

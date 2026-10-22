@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, QrCode, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
+import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
@@ -54,6 +54,10 @@ type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "
 type SharedPreviewPayload = { schemaVersion: 1; kind: "exercise" | "sequence"; title: string; exercises: Exercise[]; library: LibraryItem[] };
 
 const REMOTE_COMPONENT_EVENT = "lg:remote-controller-command";
+
+type AudioVolumeControl = { volume: number; setVolume: (volume: number) => void };
+const AudioVolumeContext = createContext<AudioVolumeControl>({ volume: 100, setVolume: () => undefined });
+const RemoteHostContext = createContext<RemoteHostState | null>(null);
 
 function emitRemoteComponentCommand(event: RemoteControllerEvent) {
   window.dispatchEvent(new CustomEvent<RemoteControllerEvent>(REMOTE_COMPONENT_EVENT, { detail: event }));
@@ -475,6 +479,7 @@ function shuffled<T>(items: T[]) {
 }
 
 let speechRequestId = 0;
+let currentAudioVolume = 1;
 
 function speakWord(word: string, onComplete?: () => void) {
   if (!("speechSynthesis" in window)) { onComplete?.(); return () => undefined; }
@@ -499,7 +504,7 @@ function speakWord(word: string, onComplete?: () => void) {
     if (preferredVoice) utterance.voice = preferredVoice;
     utterance.rate = 0.72;
     utterance.pitch = 1;
-    utterance.volume = 1;
+    utterance.volume = currentAudioVolume;
     utterance.onend = finish;
     utterance.onerror = () => {
       window.clearTimeout(fallback);
@@ -543,6 +548,7 @@ function feedbackAudioFor(url: string) {
   if (!feedbackAudioPlayers[url]) {
     const audio = new window.Audio(url);
     audio.preload = "auto";
+    audio.volume = currentAudioVolume;
     audio.load();
     feedbackAudioPlayers[url] = audio;
   }
@@ -595,7 +601,7 @@ function playSynthesizedSound(cue: SoundCue, choice: string, selected: boolean) 
     oscillator.frequency.setValueAtTime(frequency, start);
     if (cue === "select") oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.35, start + 0.1);
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(cue === "select" ? 0.07 : 0.055, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, (cue === "select" ? 0.07 : 0.055) * currentAudioVolume), start + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + (cue === "finish" ? 0.38 : 0.22));
     oscillator.connect(gain);
     gain.connect(context.destination);
@@ -614,8 +620,11 @@ function playSoundCue(cue: SoundCue, enabled: boolean, selected = true, override
   if (context?.state === "running" && prepared) {
     activeFeedbackSource?.stop();
     const source = context.createBufferSource();
+    const gain = context.createGain();
     source.buffer = prepared.buffer;
-    source.connect(context.destination);
+    gain.gain.value = currentAudioVolume;
+    source.connect(gain);
+    gain.connect(context.destination);
     source.onended = () => { if (activeFeedbackSource === source) activeFeedbackSource = null; };
     activeFeedbackSource = source;
     source.start(0, prepared.startOffset);
@@ -630,6 +639,7 @@ function playSoundCue(cue: SoundCue, enabled: boolean, selected = true, override
     if (player) player.currentTime = 0;
   });
   audio.currentTime = prepared?.startOffset ?? 0;
+  audio.volume = currentAudioVolume;
   void audio.play().catch(() => undefined);
 }
 
@@ -700,6 +710,7 @@ export default function HomePage() {
   const recoveryCheckedFor = useRef("");
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
+  const [soundVolume, setSoundVolume] = useStoredState<number>("lg-sound-volume", 100, (saved) => Math.min(100, Math.max(0, Number(saved) || 0)));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
@@ -728,6 +739,19 @@ export default function HomePage() {
   const spokenPromptKey = useRef("");
   const wrongFeedbackTimer = useRef<number | null>(null);
   const handledSharedLaunch = useRef("");
+
+  const effectiveSoundVolume = soundEffects ? soundVolume : 0;
+  const changeSoundVolume = useCallback((nextVolume: number) => {
+    const volume = Math.min(100, Math.max(0, Math.round(nextVolume)));
+    setSoundVolume(volume);
+    setSoundEffects(volume > 0);
+    if (volume === 0 && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, [setSoundEffects, setSoundVolume]);
+
+  useEffect(() => {
+    currentAudioVolume = effectiveSoundVolume / 100;
+    Object.values(feedbackAudioPlayers).forEach((player) => { if (player) player.volume = currentAudioVolume; });
+  }, [effectiveSoundVolume]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
@@ -1841,7 +1865,7 @@ export default function HomePage() {
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
-    return <main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main>;
+    return <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main></AudioVolumeContext.Provider>;
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
@@ -1857,8 +1881,7 @@ export default function HomePage() {
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && (awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />)}
-        {view === "session" && sessionActive && !sessionFromSharedLink && !sessionIsTrial && <RemoteHostBadge host={remoteHost} />}
+        {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={sessionActive && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
         {view === "session" && sessionActive && sessionPaused && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
@@ -1912,7 +1935,7 @@ function PublicPreviewError() {
 /* eslint-disable @next/next/no-img-element */
 function RemoteHostBadge({ host }: { host: RemoteHostState }) {
   const [panel, setPanel] = useState<{ open: boolean; status: RemoteHostState["status"] }>({ open: false, status: host.status });
-  const panelOpen = (panel.open && panel.status === host.status) || host.status === "pending" || host.status === "error";
+  const panelOpen = panel.open && panel.status === host.status;
   const statusLabel = host.status === "connected" ? "Telefono collegato"
     : host.status === "lost" ? "Connessione persa · controlli sul PC"
       : host.status === "pending" ? "Telefono in attesa di approvazione"
@@ -1921,7 +1944,6 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
             : "Scansiona per collegare il telefono";
   return <aside className={`remote-host-badge remote-${host.status}`} aria-label={statusLabel}>
     <button type="button" className="remote-host-summary" onClick={() => setPanel((current) => ({ open: current.status === host.status ? !current.open : true, status: host.status }))} aria-expanded={panelOpen}>
-      {host.qrDataUrl && host.status !== "connected" ? <img src={host.qrDataUrl} alt="QR per collegare il telefono" /> : <QrCode />}
       <span className="remote-status-dot" aria-hidden="true" />
       <strong>{statusLabel}</strong>
     </button>
@@ -2291,8 +2313,19 @@ function RecognitionRandomParameterFields({ distractorCount, distractorSource, s
   return <><label>Distrattori<select value={distractorCount} onChange={(event) => onDistractorCountChange(Number(event.target.value) as 1 | 2 | 3 | 4)}><option value={1}>1 distrattore</option><option value={2}>2 distrattori</option><option value={3}>3 distrattori</option><option value={4}>4 distrattori</option></select></label><label>Origine distrattori<select value={distractorSource} onChange={(event) => onDistractorSourceChange(event.target.value as DistractorSource)}><option value="mixed">Tutte le parole selezionate</option><option value="same-category">Solo stessa categoria</option></select></label><label>Numero di sillabe<select value={syllables} onChange={(event) => onSyllablesChange(event.target.value as SyllableFilter)}><option value="all">Tutte</option><option value="2">2 sillabe</option><option value="3">3 sillabe</option><option value="2-3">2 o 3 sillabe</option><option value="4+">4 o più sillabe</option></select></label></>;
 }
 
-function SessionTools({ soundEffects, onToggleSound, onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
-  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><button className="sound-toggle" type="button" onClick={onToggleSound} aria-label={soundEffects ? "Disattiva effetti sonori" : "Attiva effetti sonori"} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}</button>{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div>;
+function SessionTools({ onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
+  const remoteHost = useContext(RemoteHostContext);
+  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div>;
+}
+
+function VolumeControl() {
+  const { volume, setVolume } = useContext(AudioVolumeContext);
+  const [open, setOpen] = useState(false);
+  const level = Math.min(100, Math.max(0, volume));
+  return <div className="volume-control">
+    <button className="sound-toggle" type="button" onClick={() => setOpen((current) => !current)} aria-label={`Volume ${level}%. Apri regolazione`} aria-expanded={open}>{level > 0 ? <Volume2 /> : <VolumeX />}</button>
+    {open && <div className="volume-popover"><VolumeX aria-hidden="true" /><input type="range" min={0} max={100} step={5} value={level} onChange={(event) => setVolume(Number(event.target.value))} aria-label="Volume di voce e suoni" /><Volume2 aria-hidden="true" /><output>{level}%</output></div>}
+  </div>;
 }
 
 function ProtectedExitButton({ onComplete }: { onComplete: () => void }) {
@@ -2310,12 +2343,12 @@ function ProtectedExitButton({ onComplete }: { onComplete: () => void }) {
       timer.current = null;
       setHolding(false);
       onComplete();
-    }, 4_000);
+    }, 2_000);
   };
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
   }, []);
-  return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label="Tieni premuto per 4 secondi per terminare"><span>{holding ? "Continua a premere…" : "Termina"}</span><i aria-hidden="true" /></button>;
+  return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label="Tieni premuto per 2 secondi per terminare"><span>{holding ? "Premi…" : "Termina"}</span><i aria-hidden="true" /></button>;
 }
 
 function NamingSession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
