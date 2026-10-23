@@ -7,6 +7,15 @@ public class UrlPolicyTest {
         for (String url : allowed) if (!UrlPolicy.trusted(url)) throw new AssertionError("Blocked trusted URL: " + url);
         for (String url : denied) if (UrlPolicy.trusted(url)) throw new AssertionError("Allowed untrusted URL: " + url);
         System.out.println("PASS: URL Android limitate all'origine HTTPS dell'app.");
+        String token = new String(new char[64]).replace('\0', 'a');
+        String classic = UrlPolicy.HOME + "?controller=" + token;
+        String realtime = classic + "&transport=do&session=session-demo-123";
+        for (String link : new String[] { UrlPolicy.HOME, classic, realtime, UrlPolicy.HOME + "?preview=12345678-1234-1234-1234-123456789abc", UrlPolicy.HOME + "?launch=exercise&id=demo-123" }) {
+            if (!link.equals(UrlPolicy.appLink(link))) throw new AssertionError("App Link valido perso: " + link);
+        }
+        String[] invalidLinks = { classic.replace("https:", "http:"), classic.replace("workers.dev", "workers.dev.evil.test"), UrlPolicy.HOME + "api/logout?controller=" + token, classic + "&controller=" + token, classic + "&transport=do", classic + "&transport=evil", classic + "#evil", UrlPolicy.HOME + "?controller=short", "javascript:alert(1)", null };
+        for (String link : invalidLinks) if (UrlPolicy.appLink(link) != null) throw new AssertionError("App Link non valido accettato");
+        System.out.println("PASS: App Links classici/DO/condivisione; respinti intent e parametri non validi.");
         if (!PinningUiPolicy.allowImmersive(false, false)) throw new AssertionError("Immersive normale non disponibile");
         if (PinningUiPolicy.allowImmersive(true, false)) throw new AssertionError("Conferma Android nascosta durante il blocco");
         if (PinningUiPolicy.allowImmersive(false, true)) throw new AssertionError("Immersive riattivata mentre l'app è fissata");

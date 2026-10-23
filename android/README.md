@@ -6,8 +6,16 @@ Contenitore WebView nativo: carica esclusivamente `https://lettura-globale.berno
 
 1. Aggiornare Android System WebView e installare/attivare una voce italiana nelle impostazioni Android di sintesi vocale. Internet è necessario per il primo caricamento; questa APK non promette disponibilità offline completa.
 2. Impostare un PIN, password o sequenza di blocco schermo del tablet.
-3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.1.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
+3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.2.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare **come aggiornamento**, senza disinstallare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
 4. Aprire Lettura Globale e accedere con il consueto profilo adulto. L'accesso della WebView è separato da Chrome; i dati cloud sono gli stessi, non vengono copiati i cookie del browser.
+
+## QR e apertura nell’app
+
+La 0.1.2 registra Android App Links HTTPS per la sola pagina radice del dominio esistente. Il sito pubblica `/.well-known/assetlinks.json` con package e impronta SHA-256 del certificato pubblico dell’APK di prova, non la chiave privata. La build verifica la corrispondenza con la firma reale. Sono gestiti QR Classico e Realtime DO, sia ad app chiusa sia già aperta (`singleTask` e `onNewIntent`), senza aprire Activity duplicate. Link esterni, HTTP e percorsi API non vengono caricati dagli intent. Le anteprime condivise valide restano apribili nell’app.
+
+Dopo l’aggiornamento Android deve verificare l’associazione online. Se la fotocamera continua ad aprire Chrome, controllare **Impostazioni → App → Lettura Globale → Apri per impostazione predefinita / Apri link supportati** e abilitare il dominio. Nome e percorso variano per produttore; alcuni lettori QR aprono deliberatamente un browser interno. La verifica automatica va provata sul telefono; non è stata eseguita su un dispositivo/emulatore in questo ambiente. L’accesso nell’app è separato da quello in Chrome: al primo utilizzo può servire il login adulto; il QR rimane pendente durante l’accesso. La sessione locale interrotta non viene cancellata per collegare il controller.
+
+Per diagnosi con ADB su Android 11: `adb shell dumpsys package domain-preferred-apps`; su Android 12+ anche `adb shell pm get-app-links it.letturaglobale.tablet`. Una scansione reale deve verificare apertura a freddo, app già aperta, login necessario e QR DO/Classico. Il certificato è ancora quello di prova: passando a firma definitiva occorrerà aggiornare anche l’associazione del dominio.
 
 ## Blocco app e uscita adulta
 

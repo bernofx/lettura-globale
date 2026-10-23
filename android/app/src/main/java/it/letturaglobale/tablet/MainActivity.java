@@ -134,13 +134,32 @@ public class MainActivity extends Activity {
             voiceFailed = !voiceReady;
             if (pendingSpeech != null) speak(pendingSpeech);
         });
-        if (saved == null || web.restoreState(saved) == null) web.loadUrl(UrlPolicy.HOME);
+        if (saved == null || web.restoreState(saved) == null) {
+            String link = intentLink(getIntent());
+            web.loadUrl(link != null ? link : UrlPolicy.HOME);
+        }
         if (!getPreferences(0).getBoolean("introShown", false)) {
             new AlertDialog.Builder(this).setTitle("Prima dell’attività")
                 .setMessage("Imposta un PIN di blocco schermo sul tablet e attiva ‘Richiedi PIN per sbloccare app’. Tieni premuti i tre puntini per il menu adulto e scegli Blocca app. Lo schermo intero, da solo, non blocca Home e cambio app. Voce italiana e WebView devono essere aggiornati.")
                 .setPositiveButton("Ho capito", (dialog, which) -> getPreferences(0).edit().putBoolean("introShown", true).apply()).show();
         }
         updateWindowMode();
+    }
+
+    private String intentLink(Intent intent) {
+        return intent != null && Intent.ACTION_VIEW.equals(intent.getAction())
+            ? UrlPolicy.appLink(intent.getDataString()) : null;
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String link = intentLink(intent);
+        if (link == null) return;
+        setIntent(intent);
+        if (web == null) { recreate(); return; }
+        stopVoice();
+        // A second scan replaces the controller destination, also when the app is already open.
+        web.loadUrl(link);
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

@@ -60,6 +60,28 @@ test("valida lo snapshot minimo mostrato nella console", () => {
   assert.equal(sanitizeRemoteSnapshot({ sessionId: "session-1", currentIndex: -1 }), null);
 });
 
+test("i limiti delle sezioni arrivano alla console e i vecchi snapshot restano compatibili", () => {
+  const base = { sessionId: "demo", childName: "Demo", sessionTitle: "Demo", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: false, updatedAt: 1 };
+  const snapshot = sanitizeRemoteSnapshot({ ...base, canPreviousActivity: false, canNextActivity: true });
+  assert.equal(snapshot?.canPreviousActivity, false);
+  assert.equal(snapshot?.canNextActivity, true);
+  assert.equal(sanitizeRemoteSnapshot(base)?.canNextActivity, undefined);
+  assert.equal(sanitizeRemoteSnapshot({ ...base, canNextActivity: "true" }), null);
+  assert.equal(parseRemoteCommand({ clientEventId: "finish-demo-123", command: "finish" })?.command, "finish");
+  assert.equal(remoteCommandFeedback("finish"), "Concludi sessione");
+  assert.equal(remoteCommandDisposition("finish", true), "ignore");
+});
+
+test("la conclusione esplicita è compatibile con lo schema D1 storico", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(readFileSync(new URL("../drizzle/0011_remote_session_controller.sql", import.meta.url), "utf8"));
+    db.prepare("INSERT INTO remote_controller_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("demo", "session", 1, "finish-demo-123", "adult", "mobile", "finish", "{}", 1);
+    assert.equal(db.prepare("SELECT command FROM remote_controller_events").get()?.command, "finish");
+  } finally { db.close(); }
+});
+
 test("la console scarta la pausa precedente quando la sessione è chiusa o scollegata", () => {
   const snapshot = sanitizeRemoteSnapshot({ sessionId: "session-1", childName: "Demo", sessionTitle: "Sequenza", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: true, updatedAt: 1 });
   assert.ok(snapshot);

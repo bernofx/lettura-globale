@@ -111,6 +111,11 @@ try {
   assert.equal((await call({ action: "ticket", role: "controller", identity: controller, controllerKey: secondKey })).status, 403);
   assert.equal((await call({ action: "join", identity: controller, token: created.token, controllerKey: secondKey })).ok, true);
   const returningPhone = await open("controller", secondKey);
+  reconnectedHost.send({ type: "sync", snapshot: { ...snapshot, canPreviousActivity: true, canNextActivity: false } });
+  await returningPhone.wait((message) => message.type === "state" && message.snapshot?.canNextActivity === false);
+  returningPhone.send({ type: "command", command: { clientEventId: "event-finish-demo", command: "finish" } });
+  await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === "event-finish-demo");
+  await reconnectedHost.wait((message) => message.type === "events" && message.events.some((event) => event.command === "finish"));
   assert.equal((await call({ action: "close", role: "host" })).ok, true);
   await returningPhone.wait((message) => message.type === "state" && message.status === "closed" && message.snapshot === null);
   assert.equal((await call({ action: "ticket", role: "controller", identity: controller, controllerKey: secondKey })).status, 410);

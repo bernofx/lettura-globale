@@ -15,6 +15,7 @@ export const remoteCommandNames = [
   "pause",
   "resume",
   "end",
+  "finish",
   "help",
   "mark_correct",
   "mark_wrong",
@@ -53,6 +54,7 @@ const remoteCommandLabels: Record<RemoteCommandName, string> = {
   pause: "Pausa",
   resume: "Riprendi",
   end: "Interrompi sessione",
+  finish: "Concludi sessione",
   help: "Aiuto",
   mark_correct: "Risposta corretta",
   mark_wrong: "Risposta errata",
@@ -77,6 +79,8 @@ export type RemoteSessionSnapshot = {
   soundEffects: boolean;
   paused: boolean;
   awaitingNextExercise?: boolean;
+  canPreviousActivity?: boolean;
+  canNextActivity?: boolean;
   updatedAt: number;
 };
 
@@ -113,6 +117,9 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
   if (!Number.isInteger(input.currentIndex) || !Number.isInteger(input.total) || (input.currentIndex as number) < 0 || (input.total as number) < 1) return null;
   if (!(["idle", "wrong", "correct"] as unknown[]).includes(input.answerState)) return null;
   if (typeof input.soundEffects !== "boolean" || typeof input.paused !== "boolean") return null;
+  for (const key of ["canPreviousActivity", "canNextActivity"]) {
+    if (input[key] !== undefined && typeof input[key] !== "boolean") return null;
+  }
   return {
     sessionId: input.sessionId as string,
     childName: input.childName as string,
@@ -126,6 +133,8 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
     soundEffects: input.soundEffects,
     paused: input.paused,
     awaitingNextExercise: input.awaitingNextExercise === true,
+    ...(typeof input.canPreviousActivity === "boolean" ? { canPreviousActivity: input.canPreviousActivity } : {}),
+    ...(typeof input.canNextActivity === "boolean" ? { canNextActivity: input.canNextActivity } : {}),
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : Date.now(),
   };
 }

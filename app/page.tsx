@@ -5,6 +5,8 @@ import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
+import { activityNavigation } from "./domain/session-navigation";
+import { PENDING_CONTROLLER_LAUNCH_KEY, resolveControllerLaunch } from "./domain/controller-launch";
 import { CELEBRATION_DURATION_MS } from "./domain/celebration";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
@@ -30,9 +32,8 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, quantitySe
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
-import { controllerSessionView, parseControllerToken, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { controllerSessionView, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
-import { parseRealtimeController } from "./domain/realtime-protocol";
 import { RealtimeSocket } from "./realtime-socket";
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
@@ -691,6 +692,7 @@ export default function HomePage() {
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [controllerToken, setControllerToken] = useState<string | null>(null);
+  const controllerActiveRef = useRef(false);
   const [realtimeControllerSessionId, setRealtimeControllerSessionId] = useState<string | null>(null);
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
   const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
@@ -784,8 +786,8 @@ export default function HomePage() {
 
   useEffect(() => {
     sessionActiveRef.current = sessionActive;
-    if (!sessionActive && pendingAppReload.current) window.location.reload();
-  }, [sessionActive]);
+    if (!sessionActive && !controllerActiveRef.current && pendingAppReload.current) window.location.reload();
+  }, [sessionActive, controllerToken]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
@@ -800,13 +802,16 @@ export default function HomePage() {
   }, [appearance]);
 
   useEffect(() => {
+    // Capture the intent before login, history cleanup or a service-worker update can remove it.
+    const controllerLaunch = resolveControllerLaunch(window.location.search, sessionStorage);
+    controllerActiveRef.current = Boolean(controllerLaunch);
     preloadFeedbackSounds();
     const prime = () => primeFeedbackSounds();
     const receiveServiceWorkerUpdate = (event: MessageEvent) => {
       const version = typeof event.data?.version === "string" ? event.data.version : "";
       if (event.data?.type !== "lettura-globale:update-ready" || !version || sessionStorage.getItem("lg-active-app-version") === version) return;
       sessionStorage.setItem("lg-active-app-version", version);
-      if (sessionActiveRef.current) pendingAppReload.current = true;
+      if (sessionActiveRef.current || controllerActiveRef.current) pendingAppReload.current = true;
       else window.location.reload();
     };
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
@@ -818,9 +823,9 @@ export default function HomePage() {
     const authTimer = window.setTimeout(() => {
       const legacyLaunch = parseSharedLaunch(window.location.search);
       const publicPreview = parseSharedPreview(window.location.search);
-      const scannedControllerToken = parseControllerToken(window.location.search);
+      const scannedControllerToken = controllerLaunch?.token ?? null;
       setControllerToken(scannedControllerToken);
-      setRealtimeControllerSessionId(scannedControllerToken ? parseRealtimeController(window.location.search) : null);
+      setRealtimeControllerSessionId(controllerLaunch?.realtimeSessionId ?? null);
       setPendingSharedLaunch(legacyLaunch);
       setPendingSharedPreviewToken(publicPreview?.token ?? null);
       const persistentTherapistId = parsePersistentTherapistSession(localStorage.getItem(THERAPIST_SESSION_STORAGE_KEY));
@@ -1328,14 +1333,14 @@ export default function HomePage() {
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
 
   useEffect(() => {
-    if (controllerToken || !sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
+    if (controllerActiveRef.current || controllerToken || !sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
     recoveryCheckedFor.current = therapist.id;
     const saved = parseRecoverableSession(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY));
     if (!saved || saved.therapistId !== therapist.id || !associatedChildren.some((child) => child.id === saved.childId)) {
       if (!saved || saved?.therapistId !== therapist.id) localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
       return;
     }
-    const timer = window.setTimeout(() => setRecoveryCandidate(saved), 0);
+    const timer = window.setTimeout(() => { if (!controllerActiveRef.current) setRecoveryCandidate(saved); }, 0);
     return () => window.clearTimeout(timer);
   }, [allLocalDataLoaded, associatedChildren, backendStatus, controllerToken, sessionActive, sessionChecked, therapist]);
 
@@ -1676,6 +1681,23 @@ export default function HomePage() {
     window.history.replaceState({ lgView: "session" }, "", window.location.pathname);
     setView("session");
   };
+  const completeActiveSession = () => {
+    cancelSpeech();
+    if (wrongFeedbackTimer.current !== null) {
+      window.clearTimeout(wrongFeedbackTimer.current);
+      wrongFeedbackTimer.current = null;
+    }
+    if (sessionFromSharedLink) { notify("Anteprima completata"); closeActiveSession(); return; }
+    if (sessionIsTrial) { notify("Prova completata · nessun risultato registrato"); closeActiveSession(); return; }
+    setCelebratingSequence(true);
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setSessionActive(false);
+    setAwaitingNextExercise(false);
+    setSessionComplete(true);
+    setAnswerState("idle");
+    setWrongAnswerId(null);
+    notify("Sessione completata e salvata");
+  };
   const nextExercise = (options?: { skipTransition?: boolean }) => {
     if (sessionPausedRef.current) return;
     if (!sessionAdvanceGuard.current.claim(sessionRunId, sessionIndex)) return;
@@ -1687,10 +1709,8 @@ export default function HomePage() {
     const completesExercise = completesSequenceExercise(sessionExercises[sessionIndex], sessionExercises[sessionIndex + 1]);
     if (sessionDescriptor.source === "sequence" && completesExercise) playSoundCue("finish", soundEffects);
     if (isLast) {
-      if (sessionDescriptor.source === "sequence" && !sessionIsTrial) setCelebratingSequence(true);
-      if (sessionFromSharedLink) { notify("Anteprima completata"); closeActiveSession(); return; }
-      if (sessionIsTrial) { notify("Prova completata · nessun risultato registrato"); closeActiveSession(); return; }
-      localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); setSessionActive(false); setSessionComplete(true); setAnswerState("idle"); setWrongAnswerId(null); notify("Sessione completata e salvata"); return;
+      completeActiveSession();
+      return;
     }
     const nextIndex = sessionIndex + 1;
     setSessionFurthestIndex((current) => Math.max(current, nextIndex));
@@ -1730,27 +1750,23 @@ export default function HomePage() {
     setWrongAnswerId(null);
     setAwaitingNextExercise(false);
   };
+  const activityBounds = activityNavigation(sessionExercises, sessionIndex);
   const jumpActivity = (direction: -1 | 1) => {
-    const sourceAt = (index: number) => sessionExercises[index]?.sourceExerciseId ?? sessionExercises[index]?.id;
-    const currentSource = sourceAt(sessionIndex);
-    if (direction === 1) {
-      const next = sessionExercises.findIndex((_, index) => index > sessionIndex && sourceAt(index) !== currentSource);
-      if (next >= 0) jumpToSessionIndex(next); else nextExercise({ skipTransition: true });
-      return;
-    }
-    let currentStart = sessionIndex;
-    while (currentStart > 0 && sourceAt(currentStart - 1) === currentSource) currentStart -= 1;
-    if (currentStart === 0) return;
-    const previousSource = sourceAt(currentStart - 1);
-    let previousStart = currentStart - 1;
-    while (previousStart > 0 && sourceAt(previousStart - 1) === previousSource) previousStart -= 1;
-    jumpToSessionIndex(previousStart);
+    const target = direction === 1 ? activityBounds.next : activityBounds.previous;
+    if (target !== null) jumpToSessionIndex(target);
   };
   const handleRemoteCommand = (event: RemoteControllerEvent) => {
     const command = event.command;
     const disposition = remoteCommandDisposition(command, sessionPausedRef.current, awaitingNextExercise);
     if (disposition === "ignore") return;
+    // Check actual PC bounds too: a stale/forged phone snapshot cannot skip past the plan.
+    if (command === "next_activity" && activityBounds.next === null) return;
+    if (command === "previous_activity" && activityBounds.previous === null) return;
     if (disposition === "continue") { setAwaitingNextExercise(false); return; }
+    if (command === "finish") {
+      if (activityBounds.next === null && sessionAdvanceGuard.current.claim(sessionRunId, sessionIndex)) completeActiveSession();
+      return;
+    }
     if (command === "next") { nextExercise({ skipTransition: true }); return; }
     if (command === "previous") { navigateReachedExercise(-1); return; }
     if (command === "next_activity") { jumpActivity(1); return; }
@@ -1809,6 +1825,8 @@ export default function HomePage() {
     soundEffects,
     paused: sessionPaused,
     awaitingNextExercise,
+    canPreviousActivity: activityBounds.previous !== null,
+    canNextActivity: activityBounds.next !== null,
     updatedAt: 0,
   } : null;
   const remoteHost = useRemoteSessionHost({
@@ -1905,6 +1923,8 @@ export default function HomePage() {
   };
   const exitController = useCallback(() => {
     if (controllerToken) sessionStorage.removeItem(`lg-controller:${controllerToken}`);
+    sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
+    controllerActiveRef.current = false;
     setControllerToken(null);
     setRealtimeControllerSessionId(null);
     setSessionPaused(false);
@@ -1914,6 +1934,9 @@ export default function HomePage() {
     setView("home");
     window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
   }, [controllerToken]);
+  const controllerJoined = useCallback(() => {
+    sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
+  }, []);
   const logout = () => {
     void fetch("/api/logout", { method: "POST", keepalive: true }).catch(() => undefined);
     localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
@@ -1954,7 +1977,7 @@ export default function HomePage() {
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration />}</>;
-  if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} />;
+  if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
@@ -2051,7 +2074,7 @@ function browserRandomHex(bytes = 32) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout, onExit }: { token: string; realtimeSessionId: string | null; therapist: Therapist; onLogout: () => void; onExit: () => void }) {
+function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout, onExit, onJoined }: { token: string; realtimeSessionId: string | null; therapist: Therapist; onLogout: () => void; onExit: () => void; onJoined: () => void }) {
   const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
   const [commandFeedback, setCommandFeedback] = useState<ControllerCommandFeedback | null>(null);
   const sendQueue = useRef<Promise<void>>(Promise.resolve());
@@ -2060,6 +2083,10 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
   const leaving = useRef(false);
   const realtimeSocket = useRef<RealtimeSocket | null>(null);
   const storageKey = `lg-controller:${token}`;
+
+  useEffect(() => {
+    if (state.status === "connected" && state.snapshot) onJoined();
+  }, [onJoined, state.status, state.snapshot]);
 
   useEffect(() => () => {
     if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current);
@@ -2160,6 +2187,9 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
     if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false) === "ignore") return;
+    if (command === "previous_activity" && state.snapshot?.canPreviousActivity !== true) return;
+    if (command === "next_activity" && state.snapshot?.canNextActivity !== true) return;
+    if (command === "finish" && state.snapshot?.canNextActivity !== false) return;
     const id = crypto.randomUUID();
     const key = `${command}:${payload?.label ?? ""}`;
     const label = remoteCommandFeedback(command, payload);
@@ -2209,9 +2239,10 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
       <section className="remote-command-grid">
         <button type="button" data-feedback={feedbackFor("previous")} disabled={!exerciseControlsEnabled || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
         <button type="button" className="primary" data-feedback={feedbackFor("next")} disabled={!exerciseControlsEnabled} onClick={() => send("next")}>{snapshot.awaitingNextExercise ? "Avvia esercizio" : "Passo successivo"}<ChevronRight /></button>
-        <button type="button" data-feedback={feedbackFor("previous_activity")} disabled={!exerciseControlsEnabled} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
-        <button type="button" data-feedback={feedbackFor("next_activity")} disabled={!exerciseControlsEnabled} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
+        <button type="button" data-feedback={feedbackFor("previous_activity")} disabled={!exerciseControlsEnabled || snapshot.canPreviousActivity !== true} onClick={() => send("previous_activity")}><ChevronLeft />Tipo precedente</button>
+        <button type="button" data-feedback={feedbackFor("next_activity")} disabled={!exerciseControlsEnabled || snapshot.canNextActivity !== true} onClick={() => send("next_activity")}>Tipo successivo<ChevronRight /></button>
       </section>
+      {snapshot.canNextActivity === false && <section className="remote-command-row"><button type="button" data-feedback={feedbackFor("finish")} disabled={!exerciseControlsEnabled} onClick={() => { if (window.confirm("Concludere la sessione e mostrare la festa finale? Le prove non svolte non saranno segnate come corrette.")) send("finish"); }}><Check />Concludi sessione</button></section>}
       <section className="remote-command-row">
         <button type="button" data-feedback={feedbackFor("speak")} disabled={!exerciseControlsEnabled} onClick={() => send("speak")}><Volume2 />Riascolta</button>
         <button type="button" data-feedback={feedbackFor("toggle_audio")} disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>

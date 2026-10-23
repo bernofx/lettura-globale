@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join, delimiter } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -39,5 +39,11 @@ if (!existsSync(key)) run("keytool", ["-genkeypair", "-keystore", key, "-alias",
 const apk = join(out, "lettura-globale-android11-prova.apk");
 run(join(tools, "apksigner"), ["sign", "--ks", key, "--ks-key-alias", "androiddebugkey", "--ks-pass", "pass:android", "--key-pass", "pass:android", "--out", apk, join(work, "aligned.apk")]);
 run(join(tools, "apksigner"), ["verify", "--verbose", apk]);
+const certificate = spawnSync(join(tools, "apksigner"), ["verify", "--print-certs", apk], { encoding: "utf8" });
+const fingerprint = certificate.stdout?.match(/certificate SHA-256 digest: ([a-f0-9]+)/i)?.[1]?.toUpperCase();
+const appLinks = JSON.parse(readFileSync(join(root, "public/.well-known/assetlinks.json"), "utf8"));
+if (certificate.status !== 0 || !fingerprint || !appLinks.some((entry) => entry.target?.package_name === "it.letturaglobale.tablet" && entry.target.sha256_cert_fingerprints.some((value) => value.replaceAll(":", "") === fingerprint))) {
+  throw new Error("La firma APK non corrisponde all’associazione App Links pubblicata: non distribuire questo aggiornamento.");
+}
 run(join(tools, "aapt2"), ["dump", "badging", apk]);
 console.log(`APK di prova: ${apk}`);

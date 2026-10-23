@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 22 ottobre 2026
+**Aggiornato:** 23 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -144,6 +144,10 @@
 10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
+
+- APK 0.1.2: App Links verificati sul dominio esistente, QR Classico/DO ricevuti sia all’avvio sia ad app già aperta, firma invariata e controllo automatico della corrispondenza con `assetlinks.json`. Nessun nuovo permesso e nessuna migrazione dati. Verifica dell’associazione Android e scansione reale da confermare sul telefono; istruzioni di fallback in `android/README.md`.
+- Controller adulto: intento QR preservato durante login e reload, con priorità sul recupero della sessione locale (che non viene cancellata); aggiornamenti PWA rinviati mentre la console è aperta. Precedente/successiva attività limitati dai confini reali del piano, esposti anche negli snapshot Classico/DO. Nell’ultima attività è disponibile `Concludi sessione`, distinta da interruzione, con festa finale e soli tentativi realmente registrati; comando tracciato nello schema D1 storico senza migrazione. Test di regressione su intenti, scadenza, confini e protocollo realtime.
+- Verifiche 0.1.2/controller: test JVM Android, firma APK e corrispondenza App Links, suite di dominio, typecheck e build superati; lint con i tre avvisi `<img>` preesistenti. Test reale Miniflare DO/WebSocket, incluso comando `finish`, e integrazione del Worker completo superati. Asset JSON e APK presenti nell’output statico; nessun test su hardware Android disponibile nell’ambiente.
 
 - Festa finale interattiva: otto palloncini toccabili/cliccabili con scoppio visivo, un solo scoppio per palloncino e protezione dai tocchi sui controlli sottostanti. Durata invariata a sei secondi, supporto tastiera e movimento ridotto; nessun dato o punteggio salvato nelle statistiche. Funzione web condivisa con l'APK, senza ricompilazione Android.
 - APK 0.1.1: mitigazione del freeze dei tocchi osservato dopo screen pinning su telefono. Avvio del blocco dopo chiusura del dialogo adulto, barre Android visibili durante richiesta/blocco e ripristino focus WebView al ritorno dal sistema. VersionCode incrementato e stessa firma della 0.1.0 per aggiornare senza disinstallazione. Policy verificata su JVM; esito reale sul telefono da confermare con l'utente.

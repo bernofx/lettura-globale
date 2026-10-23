@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "it.letturaglobale.tablet",
+      "sha256_cert_fingerprints": [
+        "C0:CD:44:57:14:89:4D:F3:1C:9E:A7:DD:89:A4:AA:D5:F5:DF:A9:C3:8F:31:6A:D6:B6:3A:78:AB:2B:09:58:DC"
+      ]
+    }
+  }
+]
