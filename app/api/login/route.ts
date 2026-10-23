@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { loginRateLimits, therapistCredentials, userStates } from "../../../db/schema";
 import { CHATGPT_SESSION_COOKIE, CHATGPT_SESSION_DURATION_SECONDS, createCloudSession, hashText } from "../../chatgpt-auth";
 import { loginRetryAfterSeconds, nextLoginFailure, type LoginRateState } from "../../domain/login-rate-limit";
-import { verifyStoredPin } from "../../domain/pin-credentials";
+import { PinVerificationUnavailableError, verifyStoredPin } from "../../domain/pin-credentials";
 
 type SavedTherapist = { id: string; email: string; firstName?: string; lastName?: string; pinHash?: string };
 
@@ -42,6 +42,16 @@ async function invalidCredentials(keys: string[], now: number) {
 }
 
 export async function POST(request: Request) {
+  try { return await login(request); }
+  catch (error) {
+    if (!(error instanceof PinVerificationUnavailableError)) throw error;
+    const diagnosticId = crypto.randomUUID();
+    console.error("pin_verification_unavailable", { diagnosticId });
+    return Response.json({ error: "pin_verification_unavailable", diagnosticId }, { status: 503 });
+  }
+}
+
+async function login(request: Request) {
   const raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > 2048) return Response.json({ error: "invalid_request" }, { status: 400 });
   let input: { email?: unknown; pin?: unknown };

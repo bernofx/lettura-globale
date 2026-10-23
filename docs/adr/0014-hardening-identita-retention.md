@@ -27,3 +27,13 @@ La review ha rilevato che i PIN brevi usavano SHA-256 senza fattore di costo, il
 ## Verifica
 
 Test automatici coprono compatibilità dei PIN, sale casuale, soglie e limite del blocco, scadenza/revoca e migrazione dei link esistenti. La visibilità dello stato è coperta da casi amministratore e terapista.
+
+## Correzione del flusso di accesso — 23 ottobre 2026
+
+Approvata dall’utente dopo la riproduzione del falso login al cambio profilo. Ogni accesso al pannello chiama `/api/login` e conserva l’identificativo locale soltanto dopo la conferma server; lo stato React viene ricaricato dal cloud per il profilo autenticato. Il controllo locale del PIN resta esclusivamente per lo sblocco di controlli già autenticati, non per accedere al pannello. Non è previsto un nuovo login offline.
+
+Il logout disabilita subito il pannello, interrompe refresh e nuovi autosalvataggi, tenta di completare la coda sotto la vecchia identità e attende la conferma della revoca prima di consentire un nuovo login. Se il salvataggio fallisce resta la coda offline; se la revoca non è confermata si richiede un retry esplicito, senza aprire un altro accesso. Nessun PIN, hash, ruolo, schema o durata della sessione viene modificato.
+
+Un errore del servizio crittografico durante PBKDF2 non viene più trasformato in PIN errato: produce `503 pin_verification_unavailable`, con solo identificativo diagnostico casuale nei log e senza incrementare gli errori di credenziali. Gli errori di formato e i PIN diversi restano rifiutati. Messaggi client distinti per 401, 429 e indisponibilità tecnica; nessun dettaglio crittografico o personale esposto.
+
+`pnpm test:auth` esegue il Worker compilato su D1 sintetico: login PBKDF2, refresh, revoca, cambio adulto, rifiuto del PIN errato e vista per ruolo. Sono richieste build preliminare e QA del passaggio fra profili sul dispositivo; il test non prova né modifica le credenziali di produzione.

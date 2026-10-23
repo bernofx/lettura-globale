@@ -42,6 +42,7 @@ import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
 import { isSimpleSentenceScene, sentenceMatchingAvailability, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./domain/sentence-matching";
 import { hashPinForStorage, verifyStoredPin } from "./domain/pin-credentials";
+import { cloudLoginErrorMessage, loginToCloud, logoutFromCloud } from "./domain/cloud-auth-client";
 import { LearningProgressChart, ProgressScore, type MonthlyProgress, type ProgressCell, type ProgressKind } from "./components/progress-visuals";
 
 type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance";
@@ -693,6 +694,8 @@ export default function HomePage() {
   const [activeChildId, setActiveChildId, activeChildLoaded] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
+  const [logoutState, setLogoutState] = useState<"idle" | "pending" | "failed">("idle");
+  const logoutInFlight = useRef(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [controllerToken, setControllerToken] = useState<string | null>(null);
   const controllerActiveRef = useRef(false);
@@ -1019,7 +1022,7 @@ export default function HomePage() {
   }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences]);
 
   useEffect(() => {
-    if (!backendInitialized || sessionActive || sessionReady || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
+    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
     const baseline = lastSyncedBackendState.current;
     if (!baseline) return;
     const local = backendStateForStorage(localBootstrapSnapshot.current);
@@ -1073,10 +1076,10 @@ export default function HomePage() {
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
-    if (!backendInitialized || sessionActive || sessionReady) return;
+    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible" && navigator.onLine) {
         if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
@@ -1084,7 +1087,7 @@ export default function HomePage() {
       }
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [backendInitialized, backendStatus, sessionActive, sessionReady]);
+  }, [backendInitialized, backendStatus, loggedInTherapistId, logoutState, sessionActive, sessionReady]);
 
   useEffect(() => {
     if (allLocalDataLoaded) return;
@@ -1294,7 +1297,7 @@ export default function HomePage() {
   }, [loggedInTherapistId, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
-    if (backendHydrating.current) return;
+    if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
     const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences });
     if (!backendInitialized) {
       if (!localFallbackBaseline.current) return;
@@ -1317,10 +1320,10 @@ export default function HomePage() {
       void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
     }, 500);
     return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
-  }, [backendInitialized, backendSaveRetryKey, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, enqueueBackendSave]);
+  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, enqueueBackendSave]);
 
   useEffect(() => {
-    if (!backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
+    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
     const candidates = library.filter((item) => item.privateUpload && !item.remoteImageId && (item.image?.startsWith("data:") || item.imageKey));
     if (!candidates.length) return;
     let cancelled = false;
@@ -1347,7 +1350,7 @@ export default function HomePage() {
       }
     }).finally(() => { localMediaRepairing.current = false; });
     return () => { cancelled = true; };
-  }, [backendInitialized, backendRefreshKey, backendStatus, library, notify, enqueueBackendSave, setLibrary]);
+  }, [backendInitialized, backendRefreshKey, backendStatus, loggedInTherapistId, logoutState, library, notify, enqueueBackendSave, setLibrary]);
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
@@ -1973,13 +1976,6 @@ export default function HomePage() {
     notify("Sequenza eliminata; esercizi e storico restano disponibili");
   };
 
-  const login = (therapistId: string) => {
-    if (controllerToken) window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
-    localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(therapistId));
-    setLoggedInTherapistId(therapistId);
-    const nextTherapist = therapists.find((item) => item.id === therapistId);
-    if (nextTherapist && !nextTherapist.childIds.includes(activeChildId)) setActiveChildId(nextTherapist.childIds[0] ?? "");
-  };
   const exitController = useCallback(() => {
     if (controllerToken) sessionStorage.removeItem(`lg-controller:${controllerToken}`);
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
@@ -1998,16 +1994,36 @@ export default function HomePage() {
   const controllerJoined = useCallback(() => {
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
   }, []);
-  const logout = () => {
+  const logout = async () => {
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
+    setLogoutState("pending");
+    if (backendSaveTimer.current !== null) window.clearTimeout(backendSaveTimer.current);
+    backendSaveTimer.current = null;
+    const snapshot = backendStateForStorage(localBootstrapSnapshot.current);
+    const baseline = lastSyncedBackendState.current;
+    const pendingChange = baseline ? buildStateChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current) : null;
+    if (pendingChange) storePendingCloudSave(pendingChange);
     lastStateReadTag.current = "";
     lastStateReadAdultId.current = null;
-    void fetch("/api/logout", { method: "POST", keepalive: true }).catch(() => undefined);
     localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     exitController();
     setLoggedInTherapistId(null);
     setShowTherapistLogin(false);
     setView("home");
+    try {
+      // Finish queued/profile writes under the old cookie before revoking it.
+      // A failed flush remains in the existing offline queue, never discarded.
+      if (loggedInTherapistId && backendInitialized && baseline) await enqueueBackendSave(snapshot).catch(() => undefined);
+      else await backendSaveQueue.current.catch(() => undefined);
+      await logoutFromCloud((input, init) => fetchWithTimeout(input, init, 6500));
+      setBackendStatus("local");
+      setLogoutState("idle");
+    } catch {
+      // Do not expose a new login while an old logout is unconfirmed.
+      setLogoutState("failed");
+    } finally { logoutInFlight.current = false; }
   };
   const confirmDelete = () => {
     if (!pendingDelete) return;
@@ -2032,6 +2048,7 @@ export default function HomePage() {
   };
 
   if (!sessionChecked || (pendingSharedPreviewToken && (sharedPreviewStatus === "idle" || sharedPreviewStatus === "loading"))) return <LoadingScreen label={pendingSharedPreviewToken ? "Caricamento anteprima…" : "Caricamento dati…"} stalled={localLoadSlow} />;
+  if (logoutState !== "idle") return <LoadingScreen label={logoutState === "failed" ? "Disconnessione non confermata. Controlla la rete e riprova." : "Salvataggio e disconnessione..."} stalled={logoutState === "failed"} onRetry={() => { void logout(); }} />;
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
@@ -2039,7 +2056,7 @@ export default function HomePage() {
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
-  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} />}</>;
+  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin defaultEmail={therapists[0]?.email ?? ""} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} />}</>;
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -2329,35 +2346,27 @@ function PublicLanding({ onLogin }: { onLogin: () => void }) {
   return <main className="auth-page public-landing"><section className="auth-brand"><span className="brand-mark brand-logo large" aria-hidden="true" /><span>Lettura <strong>Globale</strong></span><h1>Imparare a leggere, una parola alla volta.</h1><p>Attività visive semplici e personalizzabili per accompagnare bambini, terapisti e famiglie.</p></section><section className="login-card welcome-card"><div className="auth-icon"><BookOpenCheck /></div><span className="eyebrow">AREA RISERVATA</span><h2>Pronto per iniziare?</h2><p>Accedi con il tuo profilo adulto per aprire il pannello, scegliere il bambino e avviare gli esercizi.</p><button className="primary-button large" onClick={onLogin}><KeyRound />Accedi al pannello</button><div className="welcome-points"><span><Check />Lettura globale con immagini e parole</span><span><Check />Esercizi IL / LA</span><span><Check />Progressi e aiuti registrati</span></div></section></main>;
 }
 
-function TherapistLogin({ therapists, backendStatus, onLogin, onBack }: { therapists: Therapist[]; backendStatus: BackendStatus; onLogin: (therapistId: string) => void; onBack: () => void }) {
-  const [email, setEmail] = useState(therapists[0]?.email ?? "");
+function TherapistLogin({ defaultEmail, onBack }: { defaultEmail: string; onBack: () => void }) {
+  const [email, setEmail] = useState(defaultEmail);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError("");
     try {
-      if (backendStatus === "local") {
-        const response = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: email.trim(), pin }) });
-        if (response.status === 401) { setError("Email o PIN non corretti."); return; }
-        if (!response.ok) { setError("Il cloud non è raggiungibile. Riprova tra poco."); return; }
-        const result = await response.json() as { therapistId: string };
-        localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(result.therapistId));
-        window.location.reload();
-        return;
-      }
-      const candidates = therapists.filter((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-      let match: Therapist | undefined;
-      for (const candidate of candidates) {
-        if ((candidate.pinHash && await verifyStoredPin(pin, candidate.pinHash)) || (!candidate.pinHash && candidate.pin === pin)) { match = candidate; break; }
-      }
-      if (!match) { setError("Email o PIN non corretti."); return; }
-      onLogin(match.id);
-    } catch {
-      setError("Il cloud non è raggiungibile. Riprova tra poco.");
-    } finally {
+      const therapistId = await loginToCloud((input, init) => fetchWithTimeout(input, init, 10_000), email, pin);
+      localStorage.setItem(THERAPIST_SESSION_STORAGE_KEY, createPersistentTherapistSession(therapistId));
+      // Reload the authenticated, role-filtered cloud state; do not retain the
+      // previous adult's in-memory view or reinterpret local PINs as a login.
+      window.location.reload();
+    } catch (error) {
+      setError(cloudLoginErrorMessage(error));
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

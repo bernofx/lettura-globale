@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { loginRetryAfterSeconds, nextLoginFailure } from "../app/domain/login-rate-limit.ts";
-import { hashPinForStorage, isVersionedPinHash, verifyStoredPin } from "../app/domain/pin-credentials.ts";
+import { hashPinForStorage, isVersionedPinHash, PinVerificationUnavailableError, verifyStoredPin } from "../app/domain/pin-credentials.ts";
 import { SHARED_LAUNCH_LIFETIME_MS, sharedLaunchExpiresAt, sharedLaunchIsAvailable } from "../app/domain/shared-launch-policy.ts";
 
 test("i PIN nuovi usano PBKDF2 con sale e quelli SHA-256 esistenti restano validi", async () => {
@@ -27,6 +27,16 @@ test("il quinto errore blocca il login e il ritardo cresce fino al limite", () =
   let repeated = sixth;
   for (let index = 0; index < 10; index += 1) repeated = nextLoginFailure(repeated, now + 30_006 + index);
   assert.equal(loginRetryAfterSeconds([repeated], now + 30_015), 15 * 60);
+});
+
+test("a crypto service failure is not misreported as an incorrect PIN", async (context) => {
+  const hash = await hashPinForStorage("1357");
+  const derive = context.mock.method(crypto.subtle, "deriveBits", async () => { throw new Error("synthetic-unavailable"); });
+  try { await assert.rejects(verifyStoredPin("1357", hash), PinVerificationUnavailableError); }
+  finally { derive.mock.restore(); }
+  assert.equal(await verifyStoredPin("1357", hash), true);
+  assert.equal(await verifyStoredPin("1358", hash), false);
+  assert.equal(await verifyStoredPin("1357", "pbkdf2-sha256$120000$invalid$invalid"), false);
 });
 
 test("i link pubblici scadono dopo trenta giorni e la revoca è immediata", () => {

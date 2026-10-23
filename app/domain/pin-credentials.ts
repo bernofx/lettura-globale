@@ -3,6 +3,10 @@ const PIN_HASH_ITERATIONS = 120_000;
 const SALT_BYTES = 16;
 const HASH_BYTES = 32;
 
+export class PinVerificationUnavailableError extends Error {
+  constructor() { super("pin_verification_unavailable"); }
+}
+
 function toBase64Url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -48,13 +52,13 @@ export async function verifyStoredPin(pin: string, storedHash: string) {
     const [prefix, rawIterations, rawSalt, rawHash, ...extra] = storedHash.split("$");
     const iterations = Number(rawIterations);
     if (prefix !== PIN_HASH_PREFIX || extra.length || !Number.isSafeInteger(iterations) || iterations < 50_000 || iterations > 1_000_000) return false;
-    try {
-      const expected = fromBase64Url(rawHash);
-      if (expected.length !== HASH_BYTES) return false;
-      return constantTimeEqual(await derivePin(pin, fromBase64Url(rawSalt), iterations), expected);
-    } catch {
-      return false;
-    }
+    let expected: Uint8Array;
+    let salt: Uint8Array;
+    try { expected = fromBase64Url(rawHash); salt = fromBase64Url(rawSalt); }
+    catch { return false; }
+    if (expected.length !== HASH_BYTES || salt.length !== SALT_BYTES) return false;
+    try { return constantTimeEqual(await derivePin(pin, salt, iterations), expected); }
+    catch { throw new PinVerificationUnavailableError(); }
   }
   if (!/^[0-9a-f]{64}$/i.test(storedHash)) return false;
   return constantTimeEqual(await legacySha256(pin), Uint8Array.from(storedHash.match(/.{2}/g) ?? [], (part) => Number.parseInt(part, 16)));
