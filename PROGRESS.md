@@ -145,6 +145,9 @@
 
 ## Verifiche della versione corrente
 
+- Palloncini finali con breve effetto di scoppio sintetizzato localmente al tocco/click/tastiera: un solo suono per palloncino, volume e audio disattivato rispettati, riuso del contesto audio degli effetti esistente. Nessun campione esterno, nuova preferenza, dato statistico, migrazione o APK richiesta; festa visiva invariata anche se l’audio non è disponibile. Verifica sonora sul dispositivo da confermare.
+- Verifica suono palloncini: 172 test superati, inclusi volume, mute, ripresa del contesto sospeso, audio bloccato e rilascio dei nodi; typecheck e build verdi, lint con i tre avvisi `<img>` preesistenti.
+
 - Accoppiamento anticipato nella schermata `PRONTI?`: QR Realtime subito visibile, avvio dal PC o dal telefono già collegato, stesso piano/ID/socket dopo Inizia e nessun altro controllo sul telefono prima dell’avvio. Comandi pre-avvio bloccati anche dal DO; uscita dal riepilogo chiude la preparazione. Nuovi QR esclusivamente DO, senza selettore Classico; API storiche mantenute per compatibilità. Nessun nuovo APK necessario.
 - Verificati i comandi contestuali sulle sei tipologie: Mischia per riconoscimento/frasi/categorie, valutazione per Mix and vary e Numero quantità, corretta con aiuto solo per Mix and vary e Riprova solo per Numero quantità. Riascolta è esposto solo dove il prompt vocale è implementato (riconoscimento/frasi/quantità), evitando pulsanti senza effetto nelle altre attività.
 - Numero quantità: conteggio aggiornato pronunciato anche togliendo spunte, incluso zero, rispettando l’opzione vocale; l’apprendimento senza errori resta bloccato dopo la quantità corretta. Bersagli estratti senza reinserimento nell’intervallo configurato; soltanto esaurito il giro ne inizia uno nuovo, evitando ripetizioni consecutive al confine quando sono disponibili almeno due numeri. Nessuna modifica ai risultati storici o alle preferenze salvate.

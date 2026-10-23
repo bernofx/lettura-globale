@@ -8,6 +8,7 @@ import { SessionAdvanceGuard } from "./domain/session-advance";
 import { activityNavigation } from "./domain/session-navigation";
 import { PENDING_CONTROLLER_LAUNCH_KEY, resolveControllerLaunch } from "./domain/controller-launch";
 import { CELEBRATION_DURATION_MS } from "./domain/celebration";
+import { playBalloonPop } from "./domain/balloon-audio";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
@@ -773,6 +774,10 @@ export default function HomePage() {
   const handledSharedLaunch = useRef("");
 
   const effectiveSoundVolume = soundEffects ? soundVolume : 0;
+  const playBalloonPopSound = () => {
+    if (effectiveSoundVolume <= 0) return;
+    void playBalloonPop(feedbackContext(), effectiveSoundVolume / 100);
+  };
   useEffect(() => { sessionPausedRef.current = sessionPaused; }, [sessionPaused]);
   const changeSoundVolume = useCallback((nextVolume: number) => {
     const volume = Math.min(100, Math.max(0, Math.round(nextVolume)));
@@ -2018,7 +2023,7 @@ export default function HomePage() {
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
-  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration />}</>;
+  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin therapists={therapists} backendStatus={backendStatus} onLogin={login} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} />}</>;
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -2050,7 +2055,7 @@ export default function HomePage() {
       {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
       {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
-      {celebratingSequence && <SequenceCelebration />}
+      {celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} />}
     </div>
   );
 }

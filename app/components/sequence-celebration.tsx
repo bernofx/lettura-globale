@@ -10,7 +10,7 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
   "--burst-angle": `${index * 45}deg`,
 } as CSSProperties));
 
-export function SequenceCelebration() {
+export function SequenceCelebration({ onPop }: { onPop?: () => void }) {
   const [popped, setPopped] = useState<ReadonlySet<number>>(() => new Set());
   const poppedRef = useRef(popped);
   const pop = (index: number) => {
@@ -18,6 +18,7 @@ export function SequenceCelebration() {
     if (next === poppedRef.current) return;
     poppedRef.current = next;
     setPopped(next);
+    onPop?.();
   };
   return <div className="sequence-celebration" role="region" aria-label="Festa di fine sequenza: tocca i palloncini per farli scoppiare" style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}>
     <div className="celebration-glow" aria-hidden="true" />
