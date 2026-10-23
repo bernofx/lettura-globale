@@ -145,6 +145,11 @@
 
 ## Verifiche della versione corrente
 
+- Ridotto il costo CPU dello stato cloud: ricostruzione relazionale con indici per richiesta invece di scansioni complete per ogni turno, lettura coerente delle 20 tabelle e delle anomalie in una sola chiamata batch D1, eliminazione di query/parse/checksum duplicati. Check di parità, riparazione e fallback conservati; nessuna modifica di schema o dati storici.
+- Refresh invariato tramite ETag opaco legato ad account, profilo adulto e revisione: autenticazione sempre richiesta, risposta 304 con sola lettura della revisione e senza cache condivisa. Bootstrap, cambio adulto, revisione nuova e stato pending richiedono lettura completa; coda offline invariata e refresh tardivi non sovrascrivono modifiche locali nuove. Il server non conserva cache dei dati; il validatore client resta solo in memoria.
+- Benchmark sintetico da 1000 turni (~887 KB): ricostruzione precedente ~345–417 ms, nuova ~15–19 ms nella stessa prova locale; hash dell’output identico. Queste misure non equivalgono al tempo CPU del Worker in produzione e non garantiscono da sole assenza di futuri superamenti del limite.
+- Verifiche ottimizzazione stato: 176 test superati, typecheck e build verdi, lint con i tre avvisi `<img>` preesistenti. `pnpm test:state-read` verifica il Worker completo su D1 sintetico, incluse scritture idempotenti e fallback pending; `pnpm test:realtime --app-build` superato. Nessun export o benchmark dei dati reali, modifica al piano Cloudflare o ampliamento dei limiti CPU.
+
 - Palloncini finali con breve effetto di scoppio sintetizzato localmente al tocco/click/tastiera: un solo suono per palloncino, volume e audio disattivato rispettati, riuso del contesto audio degli effetti esistente. Nessun campione esterno, nuova preferenza, dato statistico, migrazione o APK richiesta; festa visiva invariata anche se l’audio non è disponibile. Verifica sonora sul dispositivo da confermare.
 - Verifica suono palloncini: 172 test superati, inclusi volume, mute, ripresa del contesto sospeso, audio bloccato e rilascio dei nodi; typecheck e build verdi, lint con i tre avvisi `<img>` preesistenti.
 

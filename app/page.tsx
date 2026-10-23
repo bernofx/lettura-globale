@@ -715,6 +715,8 @@ export default function HomePage() {
   const backendHydrating = useRef(true);
   const backendSaveTimer = useRef<number | null>(null);
   const backendRevision = useRef(0);
+  const lastStateReadTag = useRef("");
+  const lastStateReadAdultId = useRef<string | null>(null);
   const lastSyncedBackendState = useRef<BackendState | null>(null);
   const localFallbackBaseline = useRef<BackendState | null>(null);
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -1023,10 +1025,18 @@ export default function HomePage() {
     let cancelled = false;
     const refresh = async () => {
       await backendSaveQueue.current.catch(() => undefined);
-      const response = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
+      const scopeChanged = lastStateReadAdultId.current !== loggedInTherapistId;
+      const tag = scopeChanged ? "" : lastStateReadTag.current;
+      const response = await fetchWithTimeout("/api/state", { cache: "no-store", headers: tag ? { "if-none-match": tag } : {} }, 6500);
+      if (response.status === 304) return;
       if (!response.ok) throw await backendResponseError(response, "backend_refresh_failed");
       const result = await response.json() as { state: BackendState | null; revision: number };
-      if (cancelled || !result.state || result.revision <= backendRevision.current) return;
+      if (cancelled || !result.state || result.revision < backendRevision.current) return;
+      const confirmed = lastSyncedBackendState.current;
+      if (confirmed && buildStateChange(confirmed, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current)) return;
+      lastStateReadTag.current = response.headers.get("etag") ?? "";
+      lastStateReadAdultId.current = loggedInTherapistId;
+      if (result.revision === backendRevision.current && !scopeChanged) return;
       const saved = result.state;
       const savedBaseline: BackendState = {
         schemaVersion: 1,
@@ -1061,7 +1071,7 @@ export default function HomePage() {
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (!backendInitialized || sessionActive || sessionReady) return;
@@ -1110,6 +1120,8 @@ export default function HomePage() {
       if (!response.ok) throw new Error("backend_load_failed");
       const result = await response.json() as { state: BackendState | null; revision: number };
       if (cancelled) return;
+      lastStateReadTag.current = response.headers.get("etag") ?? "";
+      lastStateReadAdultId.current = loggedInTherapistId;
 
       if (result.state) {
         const saved = result.state;
@@ -1985,6 +1997,8 @@ export default function HomePage() {
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
   }, []);
   const logout = () => {
+    lastStateReadTag.current = "";
+    lastStateReadAdultId.current = null;
     void fetch("/api/logout", { method: "POST", keepalive: true }).catch(() => undefined);
     localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);

@@ -29,12 +29,16 @@ const PRIMARY_KEYS: Record<RelationalTable, string[]> = {
 };
 
 export function relationalShadowMatches(state: unknown, actual: RelationalProjection, accountId: string) {
-  const expected = projectLegacyState(state, accountId);
+  return relationalProjectionMatches(projectLegacyState(state, accountId), actual);
+}
+
+export function relationalProjectionMatches(expected: RelationalProjection, actual: RelationalProjection) {
   return INSERT_ORDER.every((table) => {
+    if (expected.tables[table].length !== actual.tables[table].length) return false;
     const identity = (row: RelationalRow) => JSON.stringify(PRIMARY_KEYS[table].map((key) => row[key]));
     const wanted = expected.tables[table].map(identity).sort();
     const found = actual.tables[table].map(identity).sort();
-    return wanted.length === found.length && wanted.every((key, index) => key === found[index]);
+    return wanted.every((key, index) => key === found[index]);
   });
 }
 
@@ -275,7 +279,7 @@ export async function repairRelationalShadow(options: Parameters<typeof persistR
     }
   }
   const persisted = await loadRelationalProjection(options.database, options.accountId);
-  if (!relationalShadowMatches(options.state, persisted, options.accountId)) throw new Error("relational_shadow_identity_mismatch");
+  if (!relationalProjectionMatches(projection, persisted)) throw new Error("relational_shadow_identity_mismatch");
   await options.database.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) SELECT ?, ?, ?, ?, 'verified', ?, ?, ? WHERE EXISTS (SELECT 1 FROM user_states WHERE user_id = ? AND revision = ? AND payload = ?) ON CONFLICT(account_id, migration_key) DO UPDATE SET source_revision = excluded.source_revision, source_checksum = excluded.source_checksum, status = excluded.status, details = excluded.details, started_at = excluded.started_at, completed_at = excluded.completed_at")
     .bind(options.accountId, RELATIONAL_MIGRATION_KEY, options.sourceRevision, sourceChecksum, JSON.stringify({ counts: projectionCounts(projection), warnings: projection.warnings, writeMode: "repair" }), now, now, options.accountId, options.sourceRevision, options.rawState).run();
   const marker = await relationalMigrationInfo(options.database, options.accountId);
@@ -284,14 +288,14 @@ export async function repairRelationalShadow(options: Parameters<typeof persistR
 }
 
 export async function loadRelationalProjection(database: D1Database, accountId: string): Promise<RelationalProjection> {
-  const entries = await Promise.all(INSERT_ORDER.map(async (table) => {
-    const result = await database.prepare(`SELECT * FROM \`${table}\` WHERE account_id = ?`).bind(accountId).all<Record<string, string | number | null>>();
-    return [table, result.results] as const;
-  }));
-  const migration = await database.prepare("SELECT details FROM data_migrations WHERE account_id = ? AND migration_key = ?").bind(accountId, RELATIONAL_MIGRATION_KEY).first<{ details: string | null }>();
+  const statements = INSERT_ORDER.map((table) => database.prepare(`SELECT * FROM \`${table}\` WHERE account_id = ?`).bind(accountId));
+  statements.push(database.prepare("SELECT details FROM data_migrations WHERE account_id = ? AND migration_key = ?").bind(accountId, RELATIONAL_MIGRATION_KEY));
+  const results = await database.batch<Record<string, string | number | null>>(statements);
+  const entries = INSERT_ORDER.map((table, index) => [table, results[index].results] as const);
+  const migration = results[INSERT_ORDER.length].results[0];
   let warnings: string[] = [];
   try {
-    const details = JSON.parse(migration?.details ?? "{}") as { warnings?: unknown };
+    const details = JSON.parse(String(migration?.details ?? "{}")) as { warnings?: unknown };
     if (Array.isArray(details.warnings)) warnings = details.warnings.filter((item): item is string => typeof item === "string");
   } catch { /* invalid diagnostics do not affect persisted data */ }
   return { tables: Object.fromEntries(entries) as RelationalProjection["tables"], warnings };

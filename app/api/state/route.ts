@@ -3,20 +3,31 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getDb } from "../../../db";
 import { therapistCredentials, userStates } from "../../../db/schema";
-import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalMigrationRevision, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
+import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
 import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
 import { authorizeStateTransition } from "../../domain/state-authorization";
 import { adultRoleInState, stateVisibleToAdult } from "../../domain/state-visibility";
+import { stateReadHeaders, stateReadMatches, stateReadTag } from "../../domain/state-read";
 
 const MAX_STATE_BYTES = 4_000_000;
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
+  if (!user) return Response.json({ error: "authentication_required" }, { status: 401, headers: stateReadHeaders() });
+
+  // Authenticate first; account/profile-scoped validators never reuse another adult's view.
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch) {
+    const metadata = (await getDb().select({ revision: userStates.revision }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1))[0];
+    if (metadata) {
+      const tag = await stateReadTag(user.userId, user.adultProfileId, metadata.revision);
+      if (stateReadMatches(ifNoneMatch, tag)) return new Response(null, { status: 304, headers: stateReadHeaders(tag) });
+    }
+  }
 
   const rows = await getDb().select().from(userStates).where(eq(userStates.userId, user.userId)).limit(1);
   const row = rows[0];
-  if (!row) return Response.json({ state: null, revision: 0, user: { email: user.email, name: user.displayName } });
+  if (!row) return Response.json({ state: null, revision: 0, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders() });
 
   try {
     const state = JSON.parse(row.payload) as unknown;
@@ -24,11 +35,12 @@ export async function GET() {
     let relationalStatus = "pending";
     let dataSource = "snapshot";
     try {
-      let relationalRevision = env.DB ? await relationalMigrationRevision(env.DB, user.userId) : 0;
       if (env.DB) {
+        const checksum = await stateChecksum(row.payload);
         let projection = await loadRelationalProjection(env.DB, user.userId);
         let migration = await relationalMigrationInfo(env.DB, user.userId);
-        let parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+        let relationalRevision = migration?.source_revision ?? 0;
+        let parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === checksum);
         // A previous partial direct write can leave a current migration marker
         // while whole collections are absent. Repair that case as well as stale revisions.
         if (relationalRevision < row.revision || !parity.sourceChecksumMatches || !relationalShadowMatches(state, projection, user.userId)) {
@@ -36,7 +48,7 @@ export async function GET() {
           projection = await loadRelationalProjection(env.DB, user.userId);
           migration = await relationalMigrationInfo(env.DB, user.userId);
           relationalRevision = migration?.source_revision ?? 0;
-          parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === await stateChecksum(row.payload));
+          parity = relationalParityReport(state, projection, row.revision, relationalRevision, migration?.source_checksum === checksum);
         }
         relationalStatus = parity.ready ? "ready" : "pending";
         if (parity.ready) {
@@ -56,9 +68,9 @@ export async function GET() {
       relationalStatus = "pending";
     }
     if (user.adultProfileId) responseState = stateVisibleToAdult(responseState, user.adultProfileId);
-    return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } });
+    return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders(relationalStatus === "ready" ? await stateReadTag(user.userId, user.adultProfileId, row.revision) : undefined) });
   } catch {
-    return Response.json({ error: "invalid_saved_state" }, { status: 500 });
+    return Response.json({ error: "invalid_saved_state" }, { status: 500, headers: stateReadHeaders() });
   }
 }
 

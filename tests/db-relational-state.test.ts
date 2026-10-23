@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prepareRelationalChange } from "../db/relational-state.ts";
+import { loadRelationalProjection, prepareRelationalChange } from "../db/relational-state.ts";
+
+test("loads all account-scoped relational tables and warnings in one read batch", async () => {
+  let batches = 0;
+  const database = {
+    prepare(sql: string) { return { bind(...values: unknown[]) { return { sql, values }; } }; },
+    async batch(statements: Array<{ sql: string; values: unknown[] }>) {
+      batches++;
+      assert.equal(statements.length, 21);
+      for (const statement of statements) {
+        assert.equal(statement.values[0], "account-demo");
+        assert.match(statement.sql, /WHERE account_id = \?/);
+      }
+      return statements.map((statement) => ({ results: statement.sql.includes("data_migrations") ? [{ details: JSON.stringify({ warnings: ["archived_adult:demo", 99] }) }] : [] }));
+    },
+  };
+  const projection = await loadRelationalProjection(database as never, "account-demo");
+  assert.equal(batches, 1);
+  assert.equal(Object.keys(projection.tables).length, 20);
+  assert.deepEqual(projection.warnings, ["archived_adult:demo"]);
+});
 
 test("keeps ordered collection updates below the D1 binding limit", async () => {
   const prepared: Array<{ sql: string; bindings: unknown[] }> = [];

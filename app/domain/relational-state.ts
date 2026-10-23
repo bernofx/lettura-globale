@@ -305,10 +305,6 @@ function iso(value: unknown) {
   return new Date(Number(value)).toISOString();
 }
 
-function rowsFor(rows: Row[], key: string, value: unknown) {
-  return rows.filter((row) => row[key] === value).sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
-}
-
 function ordered(rows: Row[]) {
   return [...rows].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 }
@@ -316,6 +312,23 @@ function ordered(rows: Row[]) {
 /** Rebuilds the compatibility BackendState shape from normalized rows. */
 export function rebuildLegacyState(projection: RelationalProjection) {
   const { tables } = projection;
+  // Request-local indexes: no retained account data and no full-table scan per history item.
+  const indexes = new WeakMap<Row[], Map<string, Map<unknown, Row[]>>>();
+  const rowsFor = (rows: Row[], key: string, value: unknown) => {
+    let byColumn = indexes.get(rows);
+    if (!byColumn) { byColumn = new Map(); indexes.set(rows, byColumn); }
+    let groups = byColumn.get(key);
+    if (!groups) {
+      groups = new Map();
+      for (const row of rows) {
+        const group = groups.get(row[key]);
+        if (group) group.push(row); else groups.set(row[key], [row]);
+      }
+      for (const group of groups.values()) group.sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+      byColumn.set(key, groups);
+    }
+    return groups.get(value) ?? [];
+  };
   const activeAdults = ordered(tables.adult_profiles.filter((row) => row.deleted_at === null));
   const activeChildren = ordered(tables.children.filter((row) => row.deleted_at === null));
   const mediaById = new Map(tables.media_assets.map((row) => [row.id, row]));
@@ -334,8 +347,8 @@ export function rebuildLegacyState(projection: RelationalProjection) {
       ["article", row.article], ["syllabification", row.syllabification], ["syllableCount", row.syllable_count], ["syllableStatus", row.syllable_status], ["privateUpload", media?.is_private_upload ? true : undefined], ["deleted", row.deleted_at === null ? undefined : true],
     ]);
   });
-  const exerciseRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_items.filter((row) => row.role === role), "exercise_id", exerciseId).map((row) => row.library_item_id);
-  const categoryRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_categories.filter((row) => row.role === role), "exercise_id", exerciseId).map((row) => row.category_name);
+  const exerciseRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_items, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.library_item_id);
+  const categoryRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_categories, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.category_name);
   const exercises = ordered(tables.exercises).map((row) => definedEntries([
     ["id", row.id], ["title", row.title], ["kind", row.semantic_kind ?? (row.quantity_min != null || row.quantity_max != null || row.quantity_object_set != null ? "number-quantity" : row.kind)], ["promptId", exerciseRole(row.id, "prompt")[0]], ["optionIds", exerciseRole(row.id, "option")],
     ["articleItemIds", exerciseRole(row.id, "article_pool").length ? exerciseRole(row.id, "article_pool") : undefined],

@@ -58,13 +58,14 @@ test("repairs a verified-but-empty relational shadow in bounded D1 batches", asy
         },
       };
     },
-    batch(statements: Array<{ run: () => unknown }>) {
+    batch(statements: Array<{ run: () => unknown; all: () => unknown }>) {
       batchSizes.push(statements.length);
       assert.ok(statements.length <= 100);
       sqlite.exec("BEGIN");
       try {
-        for (const statement of statements) statement.run();
+        const results = statements.map((statement) => statement.all());
         sqlite.exec("COMMIT");
+        return results;
       } catch (error) {
         sqlite.exec("ROLLBACK");
         throw error;

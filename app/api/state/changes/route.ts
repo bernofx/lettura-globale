@@ -6,7 +6,6 @@ import { authorizeStateTransition } from "../../../domain/state-authorization";
 import { getDb } from "../../../../db";
 import { therapistCredentials, userStates } from "../../../../db/schema";
 import { loadRelationalProjection, prepareRelationalChange, relationalMigrationInfo, relationalShadowMatches, stateChecksum } from "../../../../db/relational-state";
-import { relationalParityReport } from "../../../domain/relational-state";
 
 const MAX_CHANGE_BYTES = 4_000_000;
 const MAX_STATE_BYTES = 4_000_000;
@@ -69,9 +68,10 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   if (current.revision !== change.baseRevision) return Response.json({ error: "revision_conflict", currentRevision: current.revision }, { status: 409 });
 
   let state: unknown;
-  try { state = applyStateChange(JSON.parse(current.payload), change); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
+  let currentState: unknown;
+  try { currentState = JSON.parse(current.payload); state = applyStateChange(currentState, change); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
   if (!user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
-  const authorization = authorizeStateTransition(JSON.parse(current.payload), state, user.adultProfileId);
+  const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
   if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
   const rawState = JSON.stringify(state);
   if (new TextEncoder().encode(rawState).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
@@ -91,8 +91,7 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   setPhase("relational_preflight");
   const migration = await relationalMigrationInfo(database, user.userId);
   const projection = await loadRelationalProjection(database, user.userId);
-  const parity = relationalParityReport(JSON.parse(current.payload), projection, current.revision, migration?.source_revision ?? 0, migration?.source_checksum === await stateChecksum(current.payload));
-  const relationalReady = parity.relationalRevision === current.revision && parity.sourceChecksumMatches && relationalShadowMatches(JSON.parse(current.payload), projection, user.userId);
+  const relationalReady = migration?.source_revision === current.revision && migration.source_checksum === await stateChecksum(current.payload) && relationalShadowMatches(currentState, projection, user.userId);
   setPhase("projection");
   const relational = relationalReady ? await prepareRelationalChange({
     database, accountId: user.userId, email: user.email, displayName: user.displayName, rawState, state,
