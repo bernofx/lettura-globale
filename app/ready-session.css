@@ -6,9 +6,9 @@
 .ready-pairing small { color: var(--muted); font-weight: 700; }
 .remote-ready-card { display: flex; align-items: center; flex-direction: column; gap: 16px; text-align: center; }
 @media (max-width: 700px) {
-  .ready-screen { padding-bottom: 32px; }
+  .page.ready-screen { padding-bottom: 32px; }
   .ready-screen > .ready-layout { flex-direction: column; gap: 22px; }
-  .ready-cloud { width: 92px; height: 62px; margin-bottom: 8px; }
-  .ready-cloud svg { width: 38px; height: 38px; }
+  .ready-screen .ready-cloud { width: 92px; height: 62px; margin-bottom: 8px; }
+  .ready-screen .ready-cloud svg { width: 38px; height: 38px; }
   .ready-pairing img { width: 220px; height: 220px; }
 }
