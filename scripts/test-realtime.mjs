@@ -111,8 +111,22 @@ try {
   assert.equal((await call({ action: "ticket", role: "controller", identity: controller, controllerKey: secondKey })).status, 403);
   assert.equal((await call({ action: "join", identity: controller, token: created.token, controllerKey: secondKey })).ok, true);
   const returningPhone = await open("controller", secondKey);
+  reconnectedHost.send({ type: "sync", snapshot: { ...snapshot, phase: "ready" } });
+  await returningPhone.wait((message) => message.type === "state" && message.snapshot?.phase === "ready");
+  for (const command of ["next", "shuffle", "help", "pause", "finish"]) {
+    returningPhone.send({ type: "command", command: { clientEventId: `not-ready-${command}`, command } });
+    await returningPhone.wait((message) => message.type === "error" && message.clientEventId === `not-ready-${command}`);
+  }
+  returningPhone.send({ type: "command", command: { clientEventId: "start-ready-demo", command: "start" } });
+  const started = await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === "start-ready-demo");
+  returningPhone.send({ type: "command", command: { clientEventId: "start-ready-demo", command: "start" } });
+  await reconnectedHost.wait((message) => message.type === "events" && message.events.some((event) => event.command === "start"));
   reconnectedHost.send({ type: "sync", snapshot: { ...snapshot, canPreviousActivity: true, canNextActivity: false } });
   await returningPhone.wait((message) => message.type === "state" && message.snapshot?.canNextActivity === false);
+  returningPhone.send({ type: "command", command: { clientEventId: "already-started-demo", command: "start" } });
+  await returningPhone.wait((message) => message.type === "error" && message.clientEventId === "already-started-demo");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events WHERE command = 'start'").first()).count, 1, "Inizia è idempotente e usa la stessa connessione");
+  assert.equal(started.serverSequence, 4);
   returningPhone.send({ type: "command", command: { clientEventId: "event-finish-demo", command: "finish" } });
   await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === "event-finish-demo");
   await reconnectedHost.wait((message) => message.type === "events" && message.events.some((event) => event.command === "finish"));

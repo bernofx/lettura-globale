@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerSessionView, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, remoteCommandNames, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
+import { CONTROLLER_HEARTBEAT_WRITE_MS, CONTROLLER_LEASE_MS, controllerIsConnected, controllerSessionView, remoteExerciseControls, controllerUrl, parseControllerToken, parseRemoteCommand, REMOTE_CONTROLLER_POLL_MS, REMOTE_HOST_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, remoteCommandNames, sanitizeRemoteSnapshot } from "../app/domain/remote-controller.ts";
 
 test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.deepEqual(parseRemoteCommand({ clientEventId: "event-123456", command: "shuffle" }), { clientEventId: "event-123456", command: "shuffle" });
@@ -11,11 +11,23 @@ test("accetta soltanto comandi remoti noti e idempotenti", () => {
   assert.equal(parseRemoteCommand({ clientEventId: "event-123456", command: "delete" }), null);
 });
 
+test("i comandi si adattano alle sei tipologie senza pulsanti senza effetto", () => {
+  for (const kind of ["recognition", "sentence-matching", "articles", "word-categories", "naming", "number-quantity"]) {
+    const controls = remoteExerciseControls(kind);
+    assert.equal(controls.shuffle, ["recognition", "sentence-matching", "word-categories"].includes(kind));
+    assert.equal(controls.judgement, ["naming", "number-quantity"].includes(kind));
+    assert.equal(controls.helped, kind === "naming");
+    assert.equal(controls.retry, kind === "number-quantity");
+    assert.equal(controls.speak, ["recognition", "sentence-matching", "number-quantity"].includes(kind));
+  }
+  assert.equal(Object.values(remoteExerciseControls(undefined)).some(Boolean), false);
+});
+
 test("la pausa impedisce di modificare il turno anche con comandi già in coda", () => {
   const allowedDuringPause = new Set(["pause", "resume", "end", "toggle_audio"]);
   for (const command of remoteCommandNames) {
     assert.equal(remoteCommandDisposition(command, true), allowedDuringPause.has(command) ? "execute" : "ignore", command);
-    assert.equal(remoteCommandDisposition(command, false), "execute", command);
+    assert.equal(remoteCommandDisposition(command, false), command === "start" ? "ignore" : "execute", command);
   }
   assert.equal(remoteCommandDisposition("next", true, true), "ignore", "la pausa prevale anche sulla conferma di una transizione");
 });
@@ -76,10 +88,22 @@ test("la conclusione esplicita è compatibile con lo schema D1 storico", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(readFileSync(new URL("../drizzle/0011_remote_session_controller.sql", import.meta.url), "utf8"));
-    db.prepare("INSERT INTO remote_controller_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("demo", "session", 1, "finish-demo-123", "adult", "mobile", "finish", "{}", 1);
-    assert.equal(db.prepare("SELECT command FROM remote_controller_events").get()?.command, "finish");
+    for (const [index, command] of ["finish", "start"].entries()) {
+      db.prepare("INSERT INTO remote_controller_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("demo", "session", index + 1, `${command}-demo-123`, "adult", "mobile", command, "{}", 1);
+      assert.equal(db.prepare("SELECT command FROM remote_controller_events WHERE server_sequence = ?").get(index + 1)?.command, command);
+    }
   } finally { db.close(); }
+});
+
+test("prima di Inizia tutti gli altri comandi sono bloccati, senza fallback impliciti", () => {
+  for (const command of remoteCommandNames) {
+    assert.equal(remoteCommandDisposition(command, false, false, "ready"), command === "start" ? "execute" : "ignore");
+  }
+  const snapshot = sanitizeRemoteSnapshot({ sessionId: "demo", childName: "Demo", sessionTitle: "Demo", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: false, phase: "ready", updatedAt: 1 });
+  assert.equal(snapshot?.phase, "ready");
+  assert.equal(sanitizeRemoteSnapshot({ ...snapshot, phase: "invalid" }), null);
+  assert.equal(sanitizeRemoteSnapshot({ ...snapshot, phase: undefined })?.phase, "active");
 });
 
 test("la console scarta la pausa precedente quando la sessione è chiusa o scollegata", () => {

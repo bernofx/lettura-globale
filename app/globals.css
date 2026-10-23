@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./ready-session.css";
 :root{--ink:#25233a;--muted:#767489;--line:#e9e7ef;--paper:#fff;--canvas:#f7f6fb;--violet:#6659d9;--violet-dark:#5147bd;--lavender:#efedff;--mint:#dff5ec;--peach:#ffeadc;--sky:#e2f0fa;--control-radius:14px;--panel-radius:22px;--shadow:0 14px 38px rgba(50,46,90,.08)}
 html[data-palette="ocean"]{--violet:#2678b8;--violet-dark:#175f98;--lavender:#e8f4fc;--canvas:#f5f9fc;--mint:#e0f6f2;--peach:#fff0df;--sky:#ddecf8}
 html[data-palette="forest"]{--violet:#367b5e;--violet-dark:#275f48;--lavender:#e9f5ef;--canvas:#f6f9f7;--mint:#dcf2e7;--peach:#f7eadc;--sky:#e4f0ed}

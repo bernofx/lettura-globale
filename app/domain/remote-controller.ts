@@ -5,6 +5,7 @@ export const REMOTE_HOST_POLL_MS = 450;
 export const REMOTE_CONTROLLER_POLL_MS = 650;
 
 export const remoteCommandNames = [
+  "start",
   "next",
   "previous",
   "next_activity",
@@ -25,7 +26,19 @@ export const remoteCommandNames = [
 
 export type RemoteCommandName = typeof remoteCommandNames[number];
 
-export function remoteCommandDisposition(command: RemoteCommandName, paused: boolean, awaitingNextExercise = false) {
+export function remoteExerciseControls(kind: string | undefined) {
+  return {
+    shuffle: kind === "recognition" || kind === "sentence-matching" || kind === "word-categories",
+    judgement: kind === "naming" || kind === "number-quantity",
+    helped: kind === "naming",
+    retry: kind === "number-quantity",
+    speak: kind === "recognition" || kind === "sentence-matching" || kind === "number-quantity",
+  };
+}
+
+export function remoteCommandDisposition(command: RemoteCommandName, paused: boolean, awaitingNextExercise = false, phase: "ready" | "active" = "active") {
+  if (phase === "ready") return command === "start" ? "execute" : "ignore";
+  if (command === "start") return "ignore";
   if (paused && command !== "resume" && command !== "pause" && command !== "end" && command !== "toggle_audio") return "ignore";
   if (awaitingNextExercise && (command === "next" || command === "next_activity")) return "continue";
   return "execute";
@@ -44,6 +57,7 @@ export type RemoteControllerEvent = RemoteCommand & {
 };
 
 const remoteCommandLabels: Record<RemoteCommandName, string> = {
+  start: "Inizia sessione",
   next: "Passo successivo",
   previous: "Passo precedente",
   next_activity: "Tipo successivo",
@@ -79,6 +93,7 @@ export type RemoteSessionSnapshot = {
   soundEffects: boolean;
   paused: boolean;
   awaitingNextExercise?: boolean;
+  phase?: "ready" | "active";
   canPreviousActivity?: boolean;
   canNextActivity?: boolean;
   updatedAt: number;
@@ -117,6 +132,7 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
   if (!Number.isInteger(input.currentIndex) || !Number.isInteger(input.total) || (input.currentIndex as number) < 0 || (input.total as number) < 1) return null;
   if (!(["idle", "wrong", "correct"] as unknown[]).includes(input.answerState)) return null;
   if (typeof input.soundEffects !== "boolean" || typeof input.paused !== "boolean") return null;
+  if (input.phase !== undefined && input.phase !== "ready" && input.phase !== "active") return null;
   for (const key of ["canPreviousActivity", "canNextActivity"]) {
     if (input[key] !== undefined && typeof input[key] !== "boolean") return null;
   }
@@ -133,6 +149,7 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
     soundEffects: input.soundEffects,
     paused: input.paused,
     awaitingNextExercise: input.awaitingNextExercise === true,
+    phase: input.phase === "ready" ? "ready" : "active",
     ...(typeof input.canPreviousActivity === "boolean" ? { canPreviousActivity: input.canPreviousActivity } : {}),
     ...(typeof input.canNextActivity === "boolean" ? { canNextActivity: input.canNextActivity } : {}),
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : Date.now(),

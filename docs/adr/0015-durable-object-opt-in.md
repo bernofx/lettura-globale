@@ -2,6 +2,14 @@
 
 Stato: accettato su richiesta dell'utente del 22 ottobre 2026, attivazione controllata tramite QR.
 
+## Aggiornamento approvato — 23 ottobre 2026
+
+Dopo le prove sul campo l’utente richiede Realtime come unico metodo per i nuovi QR, anche prima dell’avvio. Questa decisione sostituisce il default e il selettore descritti nella prima versione dell’ADR, conservata sotto come cronologia. Le API classiche restano compatibili con client già aperti, ma il nuovo host non avvia polling né propone il selettore.
+
+La schermata `PRONTI?` prepara il piano e un solo identificativo di sessione, mostra immediatamente il QR DO e pubblica lo stato `ready`. Il telefono mostra soltanto `Inizia`; anche il DO rifiuta gli altri comandi fino allo stato `active`. L’avvio è possibile dal PC senza telefono o dal telefono autenticato, senza rigenerare QR, piano, lease o connessione. Un guard locale rende l’avvio unico anche in caso di pressioni simultanee; il registro D1 conserva l’evento remoto `start` con idempotenza e ordine. L’ora di inizio, il ripristino locale e le statistiche iniziano soltanto dopo l’avvio esplicito. Tornare al riepilogo chiude il collegamento preparato, senza risultati fittizi. Nessuna migrazione D1/R2/DO: comando testuale e fase nello snapshot JSON, compatibili con lo schema distribuito.
+
+Snapshot precedenti senza fase restano `active`. Le nuove console espongono i comandi secondo le capacità dell’esercizio. Realtime conserva autenticazione, lease, revoca dell’ultimo telefono e fallback ai controlli locali; se il QR non è disponibile si può comunque iniziare dal PC. Un rollback al client classico richiede un deploy esplicito, non un fallback automatico durante la sessione.
+
 ## Comportamento
 
 Ogni nuova sessione parte in modalità `Classico`, mantenendo le API, il QR e il polling esistenti. Nel pannello QR l'adulto può scegliere `Realtime DO · prova`. Questo genera un QR distinto con trasporto e identificativo della sessione espliciti; il telefono non interpreta mai un QR classico come DO.

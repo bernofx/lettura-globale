@@ -213,7 +213,7 @@ export class RealtimeSession {
       if (!command) { this.send(socket, { type: "error", error: "invalid_command" }); return; }
       const duplicate = await this.env.DB.prepare("SELECT server_sequence FROM remote_controller_events WHERE account_id = ? AND session_id = ? AND client_event_id = ?")
         .bind(s.accountId, s.sessionId, command.clientEventId).first<{ server_sequence: number }>();
-      if (!duplicate && (!this.connected() || remoteCommandDisposition(command.command, s.snapshot.paused) === "ignore")) {
+      if (!duplicate && (!this.connected() || remoteCommandDisposition(command.command, s.snapshot.paused, s.snapshot.awaitingNextExercise, s.snapshot.phase) === "ignore")) {
         this.send(socket, { type: "error", error: "session_not_ready", clientEventId: command.clientEventId }); return;
       }
       const now = Date.now();

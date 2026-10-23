@@ -16,10 +16,24 @@ export function createQuantityRounds(config: { rounds?: number; min?: number; ma
   const min = clampQuantity(config.min, 1);
   const max = Math.max(min, clampQuantity(config.max, 10));
   const rounds = Math.min(50, Math.max(1, Math.trunc(config.rounds ?? 6)));
-  return Array.from({ length: rounds }, () => ({
-    target: min + Math.floor(random() * (max - min + 1)),
-    object: config.objectSet && config.objectSet !== "mixed" ? config.objectSet : objects[Math.floor(random() * objects.length)],
-  }));
+  let bag: number[] = [];
+  let previous: number | undefined;
+  return Array.from({ length: rounds }, () => {
+    if (!bag.length) {
+      bag = Array.from({ length: max - min + 1 }, (_, index) => min + index);
+      for (let index = bag.length - 1; index > 0; index--) {
+        const swap = Math.floor(random() * (index + 1));
+        [bag[index], bag[swap]] = [bag[swap], bag[index]];
+      }
+      // Drawing from the end keeps every cycle unique, including its boundary.
+      if (bag.length > 1 && bag[bag.length - 1] === previous) {
+        [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+      }
+    }
+    const target = bag.pop()!;
+    previous = target;
+    return { target, object: config.objectSet && config.objectSet !== "mixed" ? config.objectSet : objects[Math.floor(random() * objects.length)] };
+  });
 }
 
 export function quantityObjectLabel(object: QuantityObject, count: number) {
@@ -46,7 +60,7 @@ export function quantitySelectionDecision(selected: ReadonlySet<number>, index: 
   const next = new Set(selected);
   const willSelect = !next.has(index);
   if (willSelect) next.add(index); else next.delete(index);
-  return { selected: next, willSelect, spokenNumber: willSelect ? next.size : null, correct: errorless && next.size === target };
+  return { selected: next, willSelect, spokenNumber: next.size, correct: errorless && next.size === target };
 }
 
 export function quantityIdleDecision(mode: "teaching" | "test", selected: number, target: number, autoComplete: boolean, sharedPreview = false, idleSeconds = 5, errorless = false) {

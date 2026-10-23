@@ -32,7 +32,7 @@ import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, quantitySe
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { waitForSpeechVoices } from "./domain/speech-readiness";
-import { controllerSessionView, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
+import { controllerSessionView, remoteExerciseControls, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 import { RealtimeSocket } from "./realtime-socket";
 import { usePointerDrop } from "./use-pointer-drop";
@@ -750,6 +750,8 @@ export default function HomePage() {
   const [sessionStartedAt, setSessionStartedAt] = useState("");
   const [sessionDescriptor, setSessionDescriptor] = useState<{ title: string; source: "sequence" | "quick" }>({ title: "Sessione", source: "sequence" });
   const [sessionActive, setSessionActive] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const sessionReadyRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const pendingAppReload = useRef(false);
   const [sessionWizardKey, setSessionWizardKey] = useState(0);
@@ -785,9 +787,9 @@ export default function HomePage() {
   }, [effectiveSoundVolume]);
 
   useEffect(() => {
-    sessionActiveRef.current = sessionActive;
-    if (!sessionActive && !controllerActiveRef.current && pendingAppReload.current) window.location.reload();
-  }, [sessionActive, controllerToken]);
+    sessionActiveRef.current = sessionActive || sessionReady;
+    if (!sessionActive && !sessionReady && !controllerActiveRef.current && pendingAppReload.current) window.location.reload();
+  }, [sessionActive, sessionReady, controllerToken]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
@@ -973,6 +975,7 @@ export default function HomePage() {
         return;
       }
       setView(nextView);
+      if (nextView !== "session") { sessionReadyRef.current = false; setSessionReady(false); }
       setMenuOpen(false);
       window.scrollTo({ top: 0, behavior: "auto" });
     };
@@ -1007,7 +1010,7 @@ export default function HomePage() {
   }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences]);
 
   useEffect(() => {
-    if (!backendInitialized || sessionActive || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
+    if (!backendInitialized || sessionActive || sessionReady || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
     const baseline = lastSyncedBackendState.current;
     if (!baseline) return;
     const local = backendStateForStorage(localBootstrapSnapshot.current);
@@ -1053,10 +1056,10 @@ export default function HomePage() {
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, notify, sessionActive, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
-    if (!backendInitialized || sessionActive) return;
+    if (!backendInitialized || sessionActive || sessionReady) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible" && navigator.onLine) {
         if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
@@ -1064,7 +1067,7 @@ export default function HomePage() {
       }
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [backendInitialized, backendStatus, sessionActive]);
+  }, [backendInitialized, backendStatus, sessionActive, sessionReady]);
 
   useEffect(() => {
     if (allLocalDataLoaded) return;
@@ -1333,7 +1336,7 @@ export default function HomePage() {
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
 
   useEffect(() => {
-    if (controllerActiveRef.current || controllerToken || !sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
+    if (controllerActiveRef.current || controllerToken || !sessionChecked || !allLocalDataLoaded || !therapist || sessionActive || sessionReady || recoveryCheckedFor.current === therapist.id || backendStatus === "loading" || backendStatus === "migrating") return;
     recoveryCheckedFor.current = therapist.id;
     const saved = parseRecoverableSession(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY));
     if (!saved || saved.therapistId !== therapist.id || !associatedChildren.some((child) => child.id === saved.childId)) {
@@ -1342,7 +1345,7 @@ export default function HomePage() {
     }
     const timer = window.setTimeout(() => { if (!controllerActiveRef.current) setRecoveryCandidate(saved); }, 0);
     return () => window.clearTimeout(timer);
-  }, [allLocalDataLoaded, associatedChildren, backendStatus, controllerToken, sessionActive, sessionChecked, therapist]);
+  }, [allLocalDataLoaded, associatedChildren, backendStatus, controllerToken, sessionActive, sessionReady, sessionChecked, therapist]);
 
   useEffect(() => {
     if (!sessionActive || sessionFromSharedLink || !therapist || !sessionPlan.length || !sessionRunId || !sessionChildId) return;
@@ -1552,6 +1555,7 @@ export default function HomePage() {
   };
   const navigate = (next: View) => {
     if (sessionActive && next !== "session") { notify("Per uscire tieni premuto Termina per 4 secondi"); return; }
+    if (next !== "session") { sessionReadyRef.current = false; setSessionReady(false); }
     if (next !== view) window.history.pushState({ lgView: next }, "", window.location.pathname);
     setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1586,14 +1590,43 @@ export default function HomePage() {
     setView("session");
   };
   const compileSession = (selectedExercises: Exercise[]) => compileExercises(selectedExercises, visibleLibrary);
-  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => { const plan = compileSession(selectedExercises); if (!plan.length || !activeChild) return; localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY); const returnView = options?.returnView ?? "session"; sessionReturnView.current = returnView; window.history.replaceState({ lgView: returnView }, "", window.location.pathname); window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname); setSessionPlan(plan); setSessionRunId(crypto.randomUUID()); setSessionChildId(activeChild.id); setSessionStartedAt(new Date().toISOString()); setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") }); setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null); setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false); setSessionPaused(false); setAwaitingNextExercise(false); setQuickExerciseToSave(quickExercise ?? null); setSessionActive(true); setView("session"); };
-  const startSequenceById = (sequenceId: string) => {
+  const beginSession = (selectedExercises: Exercise[], quickExercise?: Exercise, options?: { ready?: boolean; trial?: boolean; returnView?: View; title?: string; source?: "sequence" | "quick" }) => {
+    const plan = compileSession(selectedExercises);
+    if (!plan.length || !activeChild) return;
+    const ready = options?.ready === true;
+    if (!ready) localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    const returnView = options?.returnView ?? "session";
+    sessionReturnView.current = returnView;
+    window.history.replaceState({ lgView: returnView }, "", window.location.pathname);
+    if (!ready) window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
+    setSessionPlan(plan);
+    setSessionRunId(crypto.randomUUID());
+    setSessionChildId(activeChild.id);
+    setSessionStartedAt(ready ? "" : new Date().toISOString());
+    setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") });
+    setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null);
+    setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false);
+    sessionPausedRef.current = false; setSessionPaused(false); setAwaitingNextExercise(false);
+    setQuickExerciseToSave(quickExercise ?? null);
+    sessionReadyRef.current = ready;
+    setSessionReady(ready); setSessionActive(!ready); setView("session");
+  };
+  const startPreparedSession = () => {
+    if (!sessionReadyRef.current || !sessionPlan.length || view !== "session") return;
+    sessionReadyRef.current = false; // Atomic even if PC and phone press Inizia together.
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
+    setSessionStartedAt(new Date().toISOString());
+    setSessionReady(false); setSessionActive(true);
+  };
+  const cancelPreparedSession = () => { sessionReadyRef.current = false; setSessionReady(false); };
+  const startSequenceById = (sequenceId: string, ready = false) => {
     const sequence = visibleSequences.find((item) => item.id === sequenceId);
     if (!sequence) return;
     const selected = sequence.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
     setActiveSequenceId(sequence.id);
     setSequences((current) => current.map((item) => item.id === sequence.id ? { ...item, lastUsedAt: new Date().toISOString() } : item));
-    beginSession(selected, undefined, { title: sequence.title, source: "sequence" });
+    beginSession(selected, undefined, { ready, title: sequence.title, source: "sequence" });
   };
   const createQuickExercise = (config: QuickStartConfig) => {
     const requiresArtwork = config.activity === "articles" || config.activity === "naming" || config.activity === "sentence-matching" || (config.activity === "recognition" && config.presentation === "images");
@@ -1608,10 +1641,10 @@ export default function HomePage() {
     if (config.activity === "naming") return { ...base, title: "Avvio rapido · Mix and vary", kind: "naming" as const, namingItemIds: candidates.map((item) => item.id), namingCategories: [] };
     return { ...base, title: "Avvio rapido · Trova la parola", kind: "recognition" as const, recognitionMode: "random" as const, recognitionItemIds: candidates.map((item) => item.id), recognitionCategories: [], recognitionSyllables: config.recognitionSyllables, distractorCount: config.distractorCount, distractorSource: config.distractorSource, presentation: config.presentation, autoPronounce: config.autoPronounce };
   };
-  const startQuickSession = (config: QuickStartConfig) => {
+  const startQuickSession = (config: QuickStartConfig, ready = false) => {
     const exercise = createQuickExercise(config);
     setSessionPresentation(config.presentation);
-    beginSession([exercise], exercise, { title: exercise.title, source: "quick" });
+    beginSession([exercise], exercise, { ready, title: exercise.title, source: "quick" });
   };
   const tryExercise = (exerciseId: string) => { const exercise = visibleExercises.find((item) => item.id === exerciseId); if (exercise) beginSession([exercise], undefined, { trial: true, returnView: "exercises" }); };
   const chooseAnswer = (answerId: string) => {
@@ -1643,6 +1676,7 @@ export default function HomePage() {
     notify(`Aiuto registrato: ${label}`);
   };
   const closeActiveSession = () => {
+    cancelPreparedSession();
     const exitModalMarker = modalHistoryMarker.current;
     if (exitModalMarker) modalHistoryMarker.current = null;
     localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
@@ -1757,6 +1791,11 @@ export default function HomePage() {
   };
   const handleRemoteCommand = (event: RemoteControllerEvent) => {
     const command = event.command;
+    if (sessionReadyRef.current) {
+      if (command === "start") startPreparedSession();
+      return;
+    }
+    if (!sessionActive || command === "start") return;
     const disposition = remoteCommandDisposition(command, sessionPausedRef.current, awaitingNextExercise);
     if (disposition === "ignore") return;
     // Check actual PC bounds too: a stale/forged phone snapshot cannot skip past the plan.
@@ -1812,13 +1851,14 @@ export default function HomePage() {
   const remotePrompt = currentKind === "number-quantity"
     ? `Tocca ${currentExercise?.quantityTarget ?? currentExercise?.quantityMin ?? 1} ${quantityObjectLabel(currentExercise?.quantityObject ?? "candy", currentExercise?.quantityTarget ?? currentExercise?.quantityMin ?? 1)}`
     : promptWord ?? currentContentWord;
-  const remoteSnapshot: RemoteSessionSnapshot | null = sessionActive && sessionRunId && activeChild && currentExercise ? {
+  const remoteSnapshot: RemoteSessionSnapshot | null = (sessionActive || sessionReady) && sessionRunId && activeChild && currentExercise ? {
     sessionId: sessionRunId,
     childName: activeChild.firstName,
     sessionTitle: sessionDescriptor.title,
     exerciseTitle: currentExercise.title,
     exerciseKind: currentKind,
-    prompt: remotePrompt,
+    prompt: sessionReady ? "" : remotePrompt,
+    phase: sessionReady ? "ready" : "active",
     currentIndex: sessionIndex,
     total: sessionExercises.length,
     answerState,
@@ -1830,7 +1870,7 @@ export default function HomePage() {
     updatedAt: 0,
   } : null;
   const remoteHost = useRemoteSessionHost({
-    enabled: Boolean(!controllerToken && sessionActive && !sessionFromSharedLink && !sessionIsTrial && therapist && activeChild),
+    enabled: Boolean(!controllerToken && (sessionActive || (sessionReady && view === "session")) && !sessionFromSharedLink && !sessionIsTrial && therapist && activeChild),
     sessionId: sessionRunId,
     childId: sessionChildId || activeChild?.id || "",
     snapshot: remoteSnapshot,
@@ -1929,6 +1969,8 @@ export default function HomePage() {
     setRealtimeControllerSessionId(null);
     setSessionPaused(false);
     setSessionActive(false);
+    sessionReadyRef.current = false;
+    setSessionReady(false);
     setAwaitingNextExercise(false);
     setRecoveryCandidate(null);
     setView("home");
@@ -1984,11 +2026,11 @@ export default function HomePage() {
     <div className="app-shell">
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content">
-        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
+        <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive || sessionReady ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
         {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
-        {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={sessionActive && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
+        {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={(sessionActive || sessionReady) && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView key={sessionWizardKey} onStartPrepared={startPreparedSession} onCancelPrepared={cancelPreparedSession} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
@@ -2040,6 +2082,14 @@ function PublicPreviewError() {
 
 /* QRCode generates an in-memory data URL; Next Image cannot optimize this transient asset. */
 /* eslint-disable @next/next/no-img-element */
+function ReadyPairing({ host }: { host: RemoteHostState }) {
+  return <aside className="ready-pairing" aria-label="Collega il telefono con QR Realtime">
+    {host.qrDataUrl ? <img src={host.qrDataUrl} width={240} height={240} alt="Scansiona per collegare il telefono e avviare la sessione" /> : <span role="status">{host.status === "error" ? host.error : "Preparazione QR…"}</span>}
+    <small role="status">{host.status === "connected" ? "Telefono collegato · puoi premere Inizia" : "Scansiona per collegare il telefono"}</small>
+    {host.status === "error" && <button type="button" className="ghost-button" onClick={() => void host.refreshPairing()}>Rigenera QR</button>}
+  </aside>;
+}
+
 function RemoteHostBadge({ host }: { host: RemoteHostState }) {
   const [panel, setPanel] = useState<{ open: boolean; status: RemoteHostState["status"] }>({ open: false, status: host.status });
   if (panel.status !== host.status) setPanel({ open: host.status === "connected" ? false : panel.open, status: host.status });
@@ -2055,7 +2105,6 @@ function RemoteHostBadge({ host }: { host: RemoteHostState }) {
       <span className="remote-status-dot" aria-hidden="true" />
     </button>
     {panelOpen && <div className="remote-host-panel">
-      <div className="remote-transport-picker"><label>Modalità collegamento<select aria-label="Modalità collegamento del telefono" value={host.transport ?? "classic"} disabled={host.status === "creating"} onChange={(event) => { if ((host.status === "connected" || host.status === "lost") && !window.confirm("Cambiare modalità scollega il telefono corrente. Dovrai scansionare il nuovo QR. Continuare?")) return; void host.selectTransport?.(event.target.value === "do" ? "do" : "classic"); }}><option value="classic">Classico · attuale</option><option value="do">Realtime DO · prova</option></select></label><small>{host.transport === "do" ? "Connessione WebSocket tramite Durable Object." : "Metodo attuale con polling. Selezionato per impostazione predefinita."}</small></div>
       {host.qrDataUrl && <img src={host.qrDataUrl} alt="QR per aprire la console adulta sul telefono" />}
       <div><strong>{statusLabel}</strong><p>{host.status === "connected" ? "L’avanzamento è controllato dal telefono." : host.status === "lost" ? "La sessione continua con i controlli locali finché il telefono non torna online." : "Apri il QR da un telefono e accedi con il profilo adulto."}</p></div>
       {host.status === "error" && <><small>{host.error}</small><button className="ghost-button" type="button" onClick={() => void host.refreshPairing()}><RefreshCw />Riprova</button></>}
@@ -2186,7 +2235,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
   };
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
-    if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false) === "ignore") return;
+    if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false, state.snapshot?.awaitingNextExercise, state.snapshot?.phase) === "ignore") return;
     if (command === "previous_activity" && state.snapshot?.canPreviousActivity !== true) return;
     if (command === "next_activity" && state.snapshot?.canNextActivity !== true) return;
     if (command === "finish" && state.snapshot?.canNextActivity !== false) return;
@@ -2221,8 +2270,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
   const snapshot = state.snapshot;
   const connected = state.status === "connected";
   const exerciseControlsEnabled = connected && !snapshot?.paused;
-  const supportsShuffle = snapshot?.exerciseKind === "recognition" || snapshot?.exerciseKind === "sentence-matching" || snapshot?.exerciseKind === "word-categories";
-  const supportsJudgement = snapshot?.exerciseKind === "naming" || snapshot?.exerciseKind === "number-quantity";
+  const controls = remoteExerciseControls(snapshot?.exerciseKind);
 
   return <main className="remote-controller-page">
     <header><div><span className="brand-mark brand-logo" aria-hidden="true" /><span><small>CONSOLE ADULTA</small><strong>{therapist.firstName} {therapist.lastName}</strong></span></div><div><button type="button" onClick={() => leaveController(false)}><Home />Home</button><button type="button" onClick={() => leaveController(true)} aria-label="Esci dall'account"><LogOut />Esci</button></div></header>
@@ -2234,7 +2282,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
       {commandFeedback.phase === "sending" ? <RefreshCw /> : commandFeedback.phase === "sent" ? <Check /> : <X />}
       <span><strong>{commandFeedback.label}</strong><small>{commandFeedback.phase === "sending" ? "Invio al PC…" : commandFeedback.phase === "sent" ? "Comando inviato" : "Invio non riuscito"}</small></span>
     </div>}
-    {snapshot ? <>
+    {snapshot?.phase === "ready" ? <section className="remote-now-card remote-ready-card"><span>{snapshot.childName}</span><h1>PRONTI?</h1><p>{snapshot.sessionTitle}</p><button className="primary-button large" type="button" data-feedback={feedbackFor("start")} disabled={!connected || commandFeedback?.phase === "sending"} onClick={() => send("start")}><Play fill="currentColor" />Inizia</button><small>Gli altri controlli saranno disponibili dopo l’avvio.</small></section> : snapshot ? <>
       <section className="remote-now-card"><span>{snapshot.childName} · {snapshot.currentIndex + 1} di {snapshot.total}</span><h1>{snapshot.exerciseTitle}</h1><p>{snapshot.prompt || snapshot.sessionTitle}</p><div><small>{snapshot.answerState === "correct" ? "Risposta corretta" : snapshot.answerState === "wrong" ? "Risposta errata" : "In attesa della risposta"}</small>{snapshot.paused && <strong>IN PAUSA</strong>}</div></section>
       <section className="remote-command-grid">
         <button type="button" data-feedback={feedbackFor("previous")} disabled={!exerciseControlsEnabled || snapshot.currentIndex === 0} onClick={() => send("previous")}><ChevronLeft />Passo precedente</button>
@@ -2244,12 +2292,12 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
       </section>
       {snapshot.canNextActivity === false && <section className="remote-command-row"><button type="button" data-feedback={feedbackFor("finish")} disabled={!exerciseControlsEnabled} onClick={() => { if (window.confirm("Concludere la sessione e mostrare la festa finale? Le prove non svolte non saranno segnate come corrette.")) send("finish"); }}><Check />Concludi sessione</button></section>}
       <section className="remote-command-row">
-        <button type="button" data-feedback={feedbackFor("speak")} disabled={!exerciseControlsEnabled} onClick={() => send("speak")}><Volume2 />Riascolta</button>
+        {controls.speak && <button type="button" data-feedback={feedbackFor("speak")} disabled={!exerciseControlsEnabled} onClick={() => send("speak")}><Volume2 />Riascolta</button>}
         <button type="button" data-feedback={feedbackFor("toggle_audio")} disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
-        {supportsShuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!exerciseControlsEnabled} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
+        {controls.shuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!exerciseControlsEnabled} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
         <button type="button" data-feedback={feedbackFor(snapshot.paused ? "resume" : "pause")} disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
       </section>
-      {supportsJudgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_wrong")}><X />Errata</button>{snapshot.exerciseKind === "naming" && <button data-feedback={feedbackFor("mark_helped")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_correct")}><Check />Corretta</button>{snapshot.exerciseKind === "number-quantity" && <button data-feedback={feedbackFor("retry")} disabled={!exerciseControlsEnabled} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
+      {controls.judgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_wrong")}><X />Errata</button>{controls.helped && <button data-feedback={feedbackFor("mark_helped")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_correct")}><Check />Corretta</button>{controls.retry && <button data-feedback={feedbackFor("retry")} disabled={!exerciseControlsEnabled} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
       <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" data-feedback={feedbackFor("help", { label })} disabled={!exerciseControlsEnabled} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
       <button className="remote-end-button" data-feedback={feedbackFor("end")} type="button" disabled={!connected} onClick={() => { if (window.confirm("Interrompere la sessione sul PC?")) send("end"); }}><Square />Interrompi sessione</button>
     </> : <section className="remote-waiting"><Wifi /><h1>{state.status === "error" ? "Collegamento non disponibile" : "Connessione alla sessione"}</h1><p>{state.error || "Il collegamento si completa automaticamente."}</p></section>}
@@ -2414,9 +2462,9 @@ function ExercisesView({ exercises, sequences, activeSequence, therapists, showS
 }
 
 type SessionNavigationProps = { canPrevious: boolean; canForward: boolean; onPrevious: () => void; onForward: () => void };
-type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; remoteConnected?: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string) => void; onStartQuick: (config: QuickStartConfig) => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
+type SessionViewProps = { active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; remoteConnected?: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string, ready?: boolean) => void; onStartQuick: (config: QuickStartConfig, ready?: boolean) => void; onStartPrepared?: () => void; onCancelPrepared?: () => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
 
-function SessionView({ active, complete, fromSharedLink, isTrial, remoteConnected = false, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
+function SessionView({ active, complete, fromSharedLink, isTrial, remoteConnected = false, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, onStartPrepared, onCancelPrepared, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
   const [step, setStep] = useState<"choose" | "quick" | "review" | "ready">("choose");
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
@@ -2442,15 +2490,16 @@ function SessionView({ active, complete, fromSharedLink, isTrial, remoteConnecte
   const reviewTitle = source === "quick" ? quick.activity === "recognition" ? "Trova la parola" : quick.activity === "sentence-matching" ? "Abbina la frase" : quick.activity === "number-quantity" ? "Numero quantità" : quick.activity === "articles" ? "Articolo IL / LA" : quick.activity === "naming" ? "Mix and vary" : "Parola nella categoria" : reviewSequence?.title ?? "Sequenza";
   const toggleQuickCategory = (category: string) => setQuick((current) => current.categoryNames.includes(category) ? { ...current, categoryNames: current.categoryNames.filter((item) => item !== category), itemIds: current.itemIds.filter((id) => library.find((item) => item.id === id)?.category !== category) } : current.categoryNames.length < 4 ? { ...current, categoryNames: [...current.categoryNames, category] } : current);
   const chooseSequence = (id: string) => { setSource("sequence"); setReviewSequenceId(id); setStep("review"); };
-  const beginReviewed = () => { if (source === "quick") onStartQuick(quick); else if (reviewSequenceId) onStartSequence(reviewSequenceId); };
+  const beginReviewed = (ready = false) => { if (source === "quick") onStartQuick(quick, ready); else if (reviewSequenceId) onStartSequence(reviewSequenceId, ready); };
+  const readyHost = useContext(RemoteHostContext);
   const previewLabel = fromSharedLink ? "Anteprima" : isTrial ? "Prova" : undefined;
   const navigationProps = { canPrevious, canForward, onPrevious, onForward };
 
   if (!active && complete) return <div className="page session-setup session-complete-screen"><span className="complete-check"><Check /></span><span className="eyebrow">SESSIONE COMPLETATA</span><h1>Attività salvata</h1><p>Risposte, errori e aiuti sono disponibili nello storico di {activeChild.firstName}.</p><label className="completion-comment">Valutazione della sessione<textarea rows={4} value={completionDraft} onChange={(event) => setCompletionDraft(event.target.value)} placeholder="Annota partecipazione, attenzione, difficoltà o progressi osservati…" /></label><button className="ghost-button" type="button" onClick={() => onSaveCompletionComment(completionDraft)}><Save />Salva valutazione</button>{quickCanBeSaved && <button className="ghost-button" type="button" onClick={onSaveQuick}><Save />Salva l’avvio rapido come sequenza</button>}<button className="primary-button large" type="button" onClick={onCloseComplete}><BarChart3 />Apri storico e progressi</button></div>;
   if (!active && step === "choose") return <div className="page session-wizard"><div className="wizard-heading"><span className="session-big-icon"><Play /></span><div><span className="eyebrow">NUOVA SESSIONE</span><h1>Cosa facciamo oggi?</h1><p>Scegli una sequenza già configurata oppure avvia un’attività veloce.</p></div><button className="sound-toggle setup" type="button" onClick={onToggleSound} aria-pressed={soundEffects}>{soundEffects ? <Volume2 /> : <VolumeX />}{soundEffects ? "Suoni attivi" : "Suoni disattivati"}</button></div><section className="wizard-panel"><span className="choice-label">1 · Bambino</span><div className="wizard-child-list">{childProfiles.map((child) => <button type="button" key={child.id} className={activeChild.id === child.id ? "selected" : ""} onClick={() => onSelectChild(child.id)}><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><strong>{child.firstName} {child.lastName}</strong>{activeChild.id === child.id && <Check />}</button>)}</div></section><section className="wizard-panel"><div className="section-heading"><div><span className="choice-label">2 · Sequenze preparate</span><h2>Scegli una nuvoletta</h2></div><span>{sequences.length} disponibili</span></div>{sortedSequences.length ? <div className="sequence-cloud-grid">{sortedSequences.map((sequence) => <button type="button" className="sequence-cloud" key={sequence.id} disabled={!sequence.exerciseIds.length} onClick={() => chooseSequence(sequence.id)}><Cloud /><strong>{sequence.title}</strong><small>{sequence.exerciseIds.length} esercizi{showSequenceOwners ? ` · ${therapistName(sequence.therapistId)}` : ""}</small><ChevronRight /></button>)}</div> : <div className="empty-mini"><Cloud /><p>Nessuna sequenza disponibile.</p><small>Puoi crearne una nella sezione Configurazione oppure usare l’avvio rapido.</small></div>}</section><section className="wizard-paths single-path"><button type="button" onClick={() => setStep("quick")}><span><Sparkles /></span><strong>Avvio rapido</strong><small>Scegli attività e parole senza salvarle</small><ChevronRight /></button></section></div>;
   if (!active && step === "quick") return <div className="page session-wizard"><WizardBack onClick={() => setStep("choose")} /><div className="wizard-heading compact"><div><span className="eyebrow">AVVIO RAPIDO</span><h1>Configura l’attività</h1><p>Questa configurazione non verrà salvata automaticamente.</p></div></div><section className="wizard-panel"><span className="choice-label">Tipologia</span><div className="mode-picker activity-picker wizard-activity-picker"><button className={quick.activity === "recognition" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "recognition", selection: "all", itemIds: [] }))}><BookOpenCheck /><strong>Trova la parola</strong><small>Parola e distrattori casuali</small></button><button className={quick.activity === "sentence-matching" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "sentence-matching", selection: "all", itemIds: [] }))}><ImagePlus /><strong>Abbina la frase</strong><small>Frase e scene di azioni</small></button><button className={quick.activity === "articles" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "articles", selection: "all", itemIds: [] }))}><Library /><strong>Articolo IL / LA</strong><small>Classifica una foto alla volta</small></button><button className={quick.activity === "word-categories" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "word-categories", selection: "categories", itemIds: [] }))}><FolderHeart /><strong>Parola nella categoria</strong><small>Scegli la categoria corretta</small></button><button className={quick.activity === "naming" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "naming", selection: "all", itemIds: [] }))}><MousePointer2 /><strong>Mix and vary</strong><small>Nomina una foto alla volta</small></button><button className={quick.activity === "number-quantity" ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, activity: "number-quantity", selection: "all", itemIds: [] }))}><Candy /><strong>Numero quantità</strong><small>Seleziona il numero richiesto</small></button></div></section>{quick.activity !== "number-quantity" && <section className="wizard-panel"><span className="choice-label">{quick.activity === "sentence-matching" ? "Scene di azioni" : "Parole e immagini"}</span><div className="selection-tabs">{((quick.activity === "sentence-matching" ? ["all", "items"] : ["all", "categories", "items"]) as QuickSelection[]).map((selection) => <button key={selection} type="button" className={quick.selection === selection ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, selection, itemIds: selection === "items" ? current.itemIds : [] }))}>{selection === "all" ? (quick.activity === "sentence-matching" ? "Tutte le scene" : "Tutta la libreria") : selection === "categories" ? "Per categoria" : "Scelta manuale"}</button>)}</div>{quick.activity !== "sentence-matching" && (quick.selection === "categories" || quick.activity === "word-categories") && <><div className="builder-label">Categorie <span>{quick.categoryNames.length} scelte{quick.activity === "word-categories" ? " · minimo 2, massimo 4" : ""}</span></div><div className="filter-chips">{categoryNames.map((category) => <button type="button" key={category} className={quick.categoryNames.includes(category) ? "selected" : ""} onClick={() => toggleQuickCategory(category)}>{category}</button>)}</div></>}{quick.selection === "items" && <><div className="builder-label">{quick.activity === "sentence-matching" ? "Scene" : "Elementi"} <span>{quick.itemIds.length} scelti</span></div>{quickSearchField}<div className="builder-grid compact-words quick-item-grid">{filteredQuickSelectable.map((item) => <button type="button" key={item.id} className={quick.itemIds.includes(item.id) ? "selected" : ""} onClick={() => setQuick((current) => ({ ...current, itemIds: current.itemIds.includes(item.id) ? current.itemIds.filter((id) => id !== item.id) : [...current.itemIds, item.id] }))}><strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong><span>{quick.activity === "sentence-matching" ? `${item.subject} · ${item.verb}` : item.category}{quick.activity === "articles" ? ` · ${articleFor(item)}` : ""}</span>{quick.itemIds.includes(item.id) && <i><Check /></i>}</button>)}</div></>}</section>}<section className="wizard-panel wizard-settings"><label>Numero di turni<input type="number" min={1} max={50} value={quick.rounds} onChange={(event) => setQuick((current) => ({ ...current, rounds: Math.max(1, Number(event.target.value)) }))} /></label>{quick.activity === "recognition" && <><RecognitionRandomParameterFields distractorCount={quick.distractorCount} distractorSource={quick.distractorSource} syllables={quick.recognitionSyllables} onDistractorCountChange={(distractorCount) => setQuick((current) => ({ ...current, distractorCount }))} onDistractorSourceChange={(distractorSource) => setQuick((current) => ({ ...current, distractorSource }))} onSyllablesChange={(recognitionSyllables) => setQuick((current) => ({ ...current, recognitionSyllables }))} /><RecognitionPresentationFields presentation={quick.presentation} autoPronounce={quick.autoPronounce} onPresentationChange={(next) => { setQuick((current) => ({ ...current, presentation: next })); setPresentation(next); }} onAutoPronounceChange={(autoPronounce) => setQuick((current) => ({ ...current, autoPronounce }))} /></>}{quick.activity === "sentence-matching" && <><label>Immagini per turno<select value={quick.sentenceOptionCount} onChange={(event) => { const sentenceOptionCount = Number(event.target.value) as SentenceOptionCount; setQuick((current) => ({ ...current, sentenceOptionCount, sentenceDifficulty: sentenceOptionCount === 2 ? 1 : current.sentenceDifficulty })); }}><option value={2}>2 immagini</option><option value={4}>4 immagini</option></select></label><label>Gradi di libertà<select value={quick.sentenceDifficulty} onChange={(event) => setQuick((current) => ({ ...current, sentenceDifficulty: Number(event.target.value) as SentenceDifficulty }))}><option value={1}>1 · cambia l’azione</option><option value={2} disabled={quick.sentenceOptionCount !== 4}>2 · cambiano soggetto e azione</option></select></label></>}{quick.activity === "number-quantity" && <><label>Quantità minima<input type="number" min={1} max={10} value={quick.quantityMin} onChange={(event) => setQuick((current) => ({ ...current, quantityMin: Math.min(10, Math.max(1, Number(event.target.value))) }))} /></label><label>Quantità massima<input type="number" min={quick.quantityMin} max={10} value={quick.quantityMax} onChange={(event) => setQuick((current) => ({ ...current, quantityMax: Math.min(10, Math.max(current.quantityMin, Number(event.target.value))) }))} /></label><label>Oggetti<select value={quick.quantityObjectSet} onChange={(event) => setQuick((current) => ({ ...current, quantityObjectSet: event.target.value as QuantityObjectSet }))}><option value="mixed">Casuali a ogni turno</option><option value="candy">Caramelle</option><option value="ladybug">Coccinelle</option><option value="stone">Sassolini</option></select></label><label>Secondi di inattività<input type="number" min={1} max={10} value={quick.quantityIdleSeconds} onChange={(event) => setQuick((current) => ({ ...current, quantityIdleSeconds: Math.min(10, Math.max(1, Number(event.target.value))) }))} /></label><QuantityLearningOptions speakNumbers={quick.quantitySpeakNumbers} errorless={quick.quantityErrorless} onSpeakNumbersChange={(quantitySpeakNumbers) => setQuick((current) => ({ ...current, quantitySpeakNumbers }))} onErrorlessChange={(quantityErrorless) => setQuick((current) => ({ ...current, quantityErrorless }))} /><label className="check-line quick-wide-setting"><input type="checkbox" disabled={quick.quantityErrorless} checked={quick.quantityAutoComplete} onChange={(event) => setQuick((current) => ({ ...current, quantityAutoComplete: event.target.checked }))} /><span><strong>Rilevamento automatico in insegnamento</strong><small>In valutazione conferma sempre l’adulto.</small></span></label></>}</section>{!quickValid && <p className="wizard-error">{quick.activity === "sentence-matching" ? `Servono scene compatibili: ${quick.sentenceDifficulty === 2 ? "almeno due soggetti e due azioni con tutte le combinazioni" : `almeno ${quick.sentenceOptionCount} azioni dello stesso soggetto`}.` : "Scegli abbastanza elementi e categorie per avviare questa attività."}</p>}<div className="wizard-footer"><button className="ghost-button" onClick={() => setStep("choose")}>Annulla</button><button className="primary-button" disabled={!quickValid} onClick={() => { setSource("quick"); setStep("review"); }}><ChevronRight />Continua</button></div></div>;
-  if (!active && step === "review") return <div className="page session-wizard review-step"><WizardBack onClick={() => setStep(source === "quick" ? "quick" : "choose")} /><span className="eyebrow">RIEPILOGO</span><h1>{reviewTitle}</h1><div className="review-card"><div><span>Bambino</span><strong>{activeChild.firstName} {activeChild.lastName}</strong></div><div><span>Contenuto</span><strong>{source === "quick" ? `${reviewCount} turni` : `${reviewCount} esercizi`}</strong></div><div><span>Origine</span><strong>{source === "quick" ? "Avvio rapido" : "Sequenza salvata"}</strong></div></div><section className="wizard-panel"><span className="choice-label">Modalità della sessione</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Valutazione</strong><small>Misura il primo tentativo</small></button></div></section><div className="wizard-footer"><button className="ghost-button" onClick={() => setStep(source === "quick" ? "quick" : "choose")}>Indietro</button><button className="primary-button large" disabled={!reviewCount} onClick={() => setStep("ready")}><ChevronRight />Continua</button></div></div>;
-  if (!active && step === "ready") return <div className="page ready-screen"><span className="ready-cloud"><Cloud /></span><span className="eyebrow">{activeChild.firstName.toLocaleUpperCase("it-IT")}</span><h1>PRONTI?</h1><p>{reviewTitle} · {mode === "test" ? "Valutazione" : "Insegnamento"}</p><div><button className="ghost-button" onClick={() => setStep("review")}>Indietro</button><button className="primary-button large" onClick={beginReviewed}><Play fill="currentColor" />Inizia</button></div></div>;
+  if (!active && step === "review") return <div className="page session-wizard review-step"><WizardBack onClick={() => setStep(source === "quick" ? "quick" : "choose")} /><span className="eyebrow">RIEPILOGO</span><h1>{reviewTitle}</h1><div className="review-card"><div><span>Bambino</span><strong>{activeChild.firstName} {activeChild.lastName}</strong></div><div><span>Contenuto</span><strong>{source === "quick" ? `${reviewCount} turni` : `${reviewCount} esercizi`}</strong></div><div><span>Origine</span><strong>{source === "quick" ? "Avvio rapido" : "Sequenza salvata"}</strong></div></div><section className="wizard-panel"><span className="choice-label">Modalità della sessione</span><div className="mode-picker"><button className={mode === "teaching" ? "selected" : ""} onClick={() => setMode("teaching")}><Sparkles /><strong>Insegnamento</strong><small>Guida, mostra e ripeti</small></button><button className={mode === "test" ? "selected" : ""} onClick={() => setMode("test")}><BookOpenCheck /><strong>Valutazione</strong><small>Misura il primo tentativo</small></button></div></section><div className="wizard-footer"><button className="ghost-button" onClick={() => setStep(source === "quick" ? "quick" : "choose")}>Indietro</button><button className="primary-button large" disabled={!reviewCount} onClick={() => { beginReviewed(true); setStep("ready"); }}><ChevronRight />Continua</button></div></div>;
+  if (!active && step === "ready") return <div className="page ready-screen"><div className="ready-layout"><section><span className="ready-cloud"><Cloud /></span><span className="eyebrow">{activeChild.firstName.toLocaleUpperCase("it-IT")}</span><h1>PRONTI?</h1><p>{reviewTitle} · {mode === "test" ? "Valutazione" : "Insegnamento"}</p><div className="ready-actions"><button className="ghost-button" onClick={() => { onCancelPrepared?.(); setStep("review"); }}>Indietro</button><button className="primary-button large" onClick={onStartPrepared ?? (() => beginReviewed())}><Play fill="currentColor" />Inizia</button></div></section>{readyHost && <ReadyPairing host={readyHost} />}</div></div>;
   if (exercise && exerciseKind(exercise) === "articles") return <ArticleSortSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "word-categories") return <WordCategorySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;

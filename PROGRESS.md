@@ -134,7 +134,7 @@
 
 1. Eseguire QA browser su `Abbina la frase`, pairing QR automatico e primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.
-3. Verificare sul campo la modalità QR `Realtime DO`, soprattutto sospensione Android/iOS, rete instabile, sostituzione del telefono e ritorno esplicito al metodo classico; mantenere `Classico` come predefinito.
+3. Verificare sul campo QR Realtime da `PRONTI?`, avvio da entrambi i dispositivi, sospensione Android/iOS, rete instabile e sostituzione del telefono; il metodo classico resta solo compatibilità per client precedenti.
 4. Approvare e completare la matrice definitiva dei permessi server-side per genitore e supervisore, partendo dai vincoli già applicati alle scritture.
 5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
@@ -144,6 +144,11 @@
 10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
+
+- Accoppiamento anticipato nella schermata `PRONTI?`: QR Realtime subito visibile, avvio dal PC o dal telefono già collegato, stesso piano/ID/socket dopo Inizia e nessun altro controllo sul telefono prima dell’avvio. Comandi pre-avvio bloccati anche dal DO; uscita dal riepilogo chiude la preparazione. Nuovi QR esclusivamente DO, senza selettore Classico; API storiche mantenute per compatibilità. Nessun nuovo APK necessario.
+- Verificati i comandi contestuali sulle sei tipologie: Mischia per riconoscimento/frasi/categorie, valutazione per Mix and vary e Numero quantità, corretta con aiuto solo per Mix and vary e Riprova solo per Numero quantità. Riascolta è esposto solo dove il prompt vocale è implementato (riconoscimento/frasi/quantità), evitando pulsanti senza effetto nelle altre attività.
+- Numero quantità: conteggio aggiornato pronunciato anche togliendo spunte, incluso zero, rispettando l’opzione vocale; l’apprendimento senza errori resta bloccato dopo la quantità corretta. Bersagli estratti senza reinserimento nell’intervallo configurato; soltanto esaurito il giro ne inizia uno nuovo, evitando ripetizioni consecutive al confine quando sono disponibili almeno due numeri. Nessuna modifica ai risultati storici o alle preferenze salvate.
+- Verifiche QR pre-avvio/quantità: 170 test dominio superati, typecheck e build verdi, lint con i soli tre avvisi `<img>` preesistenti. Test Miniflare DO/WebSocket e Worker completo superati, inclusi rifiuto dei comandi nello stato ready, start idempotente, stessa connessione dopo start, replay e chiusura. Resa visiva e scansione da confermare sul dispositivo; nessuna migrazione dati o ricompilazione APK.
 
 - APK 0.1.2: App Links verificati sul dominio esistente, QR Classico/DO ricevuti sia all’avvio sia ad app già aperta, firma invariata e controllo automatico della corrispondenza con `assetlinks.json`. Nessun nuovo permesso e nessuna migrazione dati. Verifica dell’associazione Android e scansione reale da confermare sul telefono; istruzioni di fallback in `android/README.md`.
 - Controller adulto: intento QR preservato durante login e reload, con priorità sul recupero della sessione locale (che non viene cancellata); aggiornamenti PWA rinviati mentre la console è aperta. Precedente/successiva attività limitati dai confini reali del piano, esposti anche negli snapshot Classico/DO. Nell’ultima attività è disponibile `Concludi sessione`, distinta da interruzione, con festa finale e soli tentativi realmente registrati; comando tracciato nello schema D1 storico senza migrazione. Test di regressione su intenti, scadenza, confini e protocollo realtime.
