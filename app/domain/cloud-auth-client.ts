@@ -36,6 +36,7 @@ export async function logoutFromCloud(fetcher: Fetcher): Promise<void> {
 export function cloudLoginErrorMessage(error: unknown): string {
   if (error instanceof CloudLoginError) {
     if (error.status === 401) return "Email o PIN non corretti.";
+    if (error.code === "pin_reset_required") return "Questo PIN usa una configurazione non compatibile con il cloud. Chiedi all’amministratore di reimpostarlo e attendere la conferma del salvataggio cloud prima di accedere.";
     if (error.status === 429) return error.retryAfter ? `Troppi tentativi. Attendi ${error.retryAfter} secondi prima di riprovare.` : "Troppi tentativi. Attendi qualche minuto prima di riprovare.";
     if (error.code === "pin_verification_unavailable") return "La verifica del PIN sul server non è disponibile. Non significa che il PIN sia errato: riprova tra poco.";
   }

@@ -1,10 +1,21 @@
 const PIN_HASH_PREFIX = "pbkdf2-sha256";
-const PIN_HASH_ITERATIONS = 120_000;
+export const CLOUD_PIN_MAX_ITERATIONS = 100_000;
+const PIN_HASH_ITERATIONS = CLOUD_PIN_MAX_ITERATIONS;
 const SALT_BYTES = 16;
 const HASH_BYTES = 32;
 
 export class PinVerificationUnavailableError extends Error {
   constructor() { super("pin_verification_unavailable"); }
+}
+
+export class PinResetRequiredError extends Error {
+  constructor() { super("pin_reset_required"); }
+}
+
+export function pinRequiresCloudReset(storedHash: string | undefined) {
+  if (!storedHash || !isVersionedPinHash(storedHash)) return false;
+  const iterations = Number(storedHash.split("$")[1]);
+  return Number.isSafeInteger(iterations) && iterations > CLOUD_PIN_MAX_ITERATIONS;
 }
 
 function toBase64Url(bytes: Uint8Array) {
@@ -47,7 +58,7 @@ export async function hashPinForStorage(pin: string) {
   return `${PIN_HASH_PREFIX}$${PIN_HASH_ITERATIONS}$${toBase64Url(salt)}$${toBase64Url(derived)}`;
 }
 
-export async function verifyStoredPin(pin: string, storedHash: string) {
+export async function verifyStoredPin(pin: string, storedHash: string, options: { cloud?: boolean } = {}) {
   if (isVersionedPinHash(storedHash)) {
     const [prefix, rawIterations, rawSalt, rawHash, ...extra] = storedHash.split("$");
     const iterations = Number(rawIterations);
@@ -57,6 +68,9 @@ export async function verifyStoredPin(pin: string, storedHash: string) {
     try { expected = fromBase64Url(rawHash); salt = fromBase64Url(rawSalt); }
     catch { return false; }
     if (expected.length !== HASH_BYTES || salt.length !== SALT_BYTES) return false;
+    // Never reinterpret the stored count or truncate it: the derived hash would
+    // differ. Recovery requires a newly generated hash via the adult admin UI.
+    if (options.cloud && iterations > CLOUD_PIN_MAX_ITERATIONS) throw new PinResetRequiredError();
     try { return constantTimeEqual(await derivePin(pin, salt, iterations), expected); }
     catch { throw new PinVerificationUnavailableError(); }
   }

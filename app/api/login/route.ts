@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { loginRateLimits, therapistCredentials, userStates } from "../../../db/schema";
 import { CHATGPT_SESSION_COOKIE, CHATGPT_SESSION_DURATION_SECONDS, createCloudSession, hashText } from "../../chatgpt-auth";
 import { loginRetryAfterSeconds, nextLoginFailure, type LoginRateState } from "../../domain/login-rate-limit";
-import { PinVerificationUnavailableError, verifyStoredPin } from "../../domain/pin-credentials";
+import { PinResetRequiredError, PinVerificationUnavailableError, verifyStoredPin } from "../../domain/pin-credentials";
 
 type SavedTherapist = { id: string; email: string; firstName?: string; lastName?: string; pinHash?: string };
 
@@ -44,6 +44,7 @@ async function invalidCredentials(keys: string[], now: number) {
 export async function POST(request: Request) {
   try { return await login(request); }
   catch (error) {
+    if (error instanceof PinResetRequiredError) return Response.json({ error: "pin_reset_required" }, { status: 503 });
     if (!(error instanceof PinVerificationUnavailableError)) throw error;
     const diagnosticId = crypto.randomUUID();
     console.error("pin_verification_unavailable", { diagnosticId });
@@ -78,7 +79,7 @@ async function login(request: Request) {
       let therapists: SavedTherapist[] = [];
       try { therapists = (JSON.parse(row.payload) as { therapists?: SavedTherapist[] }).therapists ?? []; } catch { continue; }
       for (const item of therapists) {
-        if (item.email?.trim().toLowerCase() !== loginEmail || !item.pinHash || !await verifyStoredPin(input.pin, item.pinHash)) continue;
+        if (item.email?.trim().toLowerCase() !== loginEmail || !item.pinHash || !await verifyStoredPin(input.pin, item.pinHash, { cloud: true })) continue;
         const displayName = `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() || loginEmail;
         credential = { loginEmail, ownerUserId: row.userId, therapistId: item.id, pinHash: item.pinHash, displayName, updatedAt: now };
         await db.insert(therapistCredentials).values(credential).onConflictDoUpdate({ target: therapistCredentials.loginEmail, set: credential });
@@ -88,7 +89,7 @@ async function login(request: Request) {
     }
   }
 
-  if (!credential || !await verifyStoredPin(input.pin, credential.pinHash)) return invalidCredentials(keys, now);
+  if (!credential || !await verifyStoredPin(input.pin, credential.pinHash, { cloud: true })) return invalidCredentials(keys, now);
   await db.delete(loginRateLimits).where(inArray(loginRateLimits.keyHash, keys));
   const token = await createCloudSession({ userId: credential.ownerUserId, email: loginEmail, displayName: credential.displayName, fullName: credential.displayName }, credential.therapistId);
   const response = Response.json({ ok: true, therapistId: credential.therapistId });

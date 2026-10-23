@@ -28,6 +28,7 @@ test("a rejection, unavailable network or malformed success never opens a local 
 test("PIN errors, technical failures and rate limits have distinct safe messages", async () => {
   assert.match(cloudLoginErrorMessage(new CloudLoginError(401, "invalid_credentials")), /non corretti/);
   assert.match(cloudLoginErrorMessage(new CloudLoginError(503, "pin_verification_unavailable")), /Non significa che il PIN sia errato/);
+  assert.match(cloudLoginErrorMessage(new CloudLoginError(503, "pin_reset_required")), /amministratore di reimpostarlo/);
   assert.match(cloudLoginErrorMessage(new Error("secret-internal-detail")), /Accesso non effettuato/);
   assert.doesNotMatch(cloudLoginErrorMessage(new Error("secret-internal-detail")), /secret-internal-detail/);
   await assert.rejects(loginToCloud(async () => Response.json({ error: "too_many_attempts" }, { status: 429, headers: { "retry-after": "30" } }), "demo@example.test", "1357"), (error: unknown) => {

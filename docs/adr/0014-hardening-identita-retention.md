@@ -8,7 +8,7 @@ La review ha rilevato che i PIN brevi usavano SHA-256 senza fattore di costo, il
 
 ## Decisione
 
-- I PIN nuovi o modificati usano `PBKDF2-HMAC-SHA-256`, 120.000 iterazioni, sale casuale da 16 byte e risultato da 32 byte. Il formato versionato è `pbkdf2-sha256$iterazioni$sale$hash`.
+- I PIN nuovi o modificati usano `PBKDF2-HMAC-SHA-256`, **100.000 iterazioni** (correzione approvata il 23 ottobre 2026; inizialmente 120.000), sale casuale da 16 byte e risultato da 32 byte. Il formato versionato è `pbkdf2-sha256$iterazioni$sale$hash`.
 - Gli hash SHA-256 già presenti restano verificabili durante la transizione; il confronto con PIN storici in chiaro viene rimosso. Quando un adulto o l’amministratore cambia il PIN, viene scritto soltanto il formato nuovo.
 - L’architettura corrente conserva le credenziali anche nello snapshot necessario al client. Per questo non viene introdotto un pepper server-side che il browser non potrebbe usare. Prima del pilot il PIN dovrà uscire dallo snapshot tramite un endpoint credenziali dedicato; in quel passaggio si valuterà Argon2id o PBKDF2 con pepper gestito come secret.
 - Il login limita con chiavi pseudonimizzate sia l’email normalizzata sia l’indirizzo di rete. La quinta risposta errata in una finestra di 15 minuti blocca per 30 secondi; gli errori successivi raddoppiano il blocco fino a 15 minuti. Un accesso riuscito azzera entrambe le chiavi.
@@ -37,3 +37,11 @@ Il logout disabilita subito il pannello, interrompe refresh e nuovi autosalvatag
 Un errore del servizio crittografico durante PBKDF2 non viene più trasformato in PIN errato: produce `503 pin_verification_unavailable`, con solo identificativo diagnostico casuale nei log e senza incrementare gli errori di credenziali. Gli errori di formato e i PIN diversi restano rifiutati. Messaggi client distinti per 401, 429 e indisponibilità tecnica; nessun dettaglio crittografico o personale esposto.
 
 `pnpm test:auth` esegue il Worker compilato su D1 sintetico: login PBKDF2, refresh, revoca, cambio adulto, rifiuto del PIN errato e vista per ruolo. Sono richieste build preliminare e QA del passaggio fra profili sul dispositivo; il test non prova né modifica le credenziali di produzione.
+
+## Compatibilità PBKDF2 produzione — riduzione approvata il 23 ottobre 2026
+
+L’utente approva esplicitamente la riduzione da 120.000 a 100.000 iterazioni e il recupero tramite reimpostazione amministrativa. Il limite Cloudflare di produzione non è applicato dal runtime locale: i test precedenti non riproducevano questo vincolo, come descritto dagli sviluppatori in https://github.com/cloudflare/workerd/issues/1346. La riduzione del fattore di costo è un compromesso consapevole per la demo, non un’approvazione di sicurezza per dati reali. Restano sale casuale, confronto a tempo costante, rate limit e autenticazione server-side.
+
+Gli hash già creati non vengono modificati né reinterpretati con un numero di iterazioni diverso. Il login cloud rileva i parametri superiori al limite e risponde `503 pin_reset_required`, senza creare una sessione o incrementare gli errori di PIN. È una segnalazione di compatibilità, non una conferma del PIN fornito. L’amministratore vede l’avviso accanto ai profili interessati e usa il normale campo `Nuovo PIN`, poi `Salva modifiche ai profili` e attende la conferma cloud prima di uscire. Può reinserire lo stesso PIN, senza comunicarlo all’assistente. Il nuovo hash passa dalle API autorizzate esistenti e aggiorna snapshot, tabelle e credenziali; nessuna migrazione D1, reset diretto del database o modifica a esercizi/statistiche. Lo sblocco locale di una sessione già autenticata può ancora verificare i vecchi hash nel browser; non è un fallback di login.
+
+Test con tetto rigido a 100.000 sia su WebCrypto unitario sia nel Worker completo di `pnpm test:auth`, oltre ai test legacy SHA-256. La prova integra hash sintetico a 120.000, rifiuto senza tentativi errati, reimpostazione amministrativa via API dello stato, login e lettura con lo stesso PIN a 100.000. Nessun segreto o hash reale nei test o log.

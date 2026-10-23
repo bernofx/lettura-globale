@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { pbkdf2Sync } from "node:crypto";
 import { loginRetryAfterSeconds, nextLoginFailure } from "../app/domain/login-rate-limit.ts";
-import { hashPinForStorage, isVersionedPinHash, PinVerificationUnavailableError, verifyStoredPin } from "../app/domain/pin-credentials.ts";
+import { hashPinForStorage, isVersionedPinHash, pinRequiresCloudReset, PinResetRequiredError, PinVerificationUnavailableError, verifyStoredPin } from "../app/domain/pin-credentials.ts";
 import { SHARED_LAUNCH_LIFETIME_MS, sharedLaunchExpiresAt, sharedLaunchIsAvailable } from "../app/domain/shared-launch-policy.ts";
 
 test("i PIN nuovi usano PBKDF2 con sale e quelli SHA-256 esistenti restano validi", async () => {
@@ -14,6 +15,38 @@ test("i PIN nuovi usano PBKDF2 con sale e quelli SHA-256 esistenti restano valid
   assert.equal(await verifyStoredPin("2468", first), true);
   assert.equal(await verifyStoredPin("0000", first), false);
   assert.equal(await verifyStoredPin("1234", "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"), true);
+});
+
+test("generation and verification respect the production 100000-iteration ceiling", async (context) => {
+  const original = crypto.subtle.deriveBits.bind(crypto.subtle);
+  const calls: number[] = [];
+  const derive = context.mock.method(crypto.subtle, "deriveBits", async (...args: Parameters<typeof original>) => {
+    const count = (args[0] as Pbkdf2Params).iterations;
+    if (count > 100_000) throw new DOMException("Synthetic production iteration cap", "NotSupportedError");
+    calls.push(count);
+    return original(...args);
+  });
+  try {
+    const hash = await hashPinForStorage("1357");
+    assert.equal(hash.split("$")[1], "100000");
+    assert.equal(pinRequiresCloudReset(hash), false);
+    assert.equal(await verifyStoredPin("1357", hash, { cloud: true }), true);
+    assert.equal(await verifyStoredPin("1358", hash, { cloud: true }), false);
+    assert.deepEqual(calls, [100000, 100000, 100000]);
+  } finally { derive.mock.restore(); }
+});
+
+test("legacy 120000 hashes are preserved, flagged for reset, and never silently truncated", async () => {
+  const salt = Buffer.alloc(16, 7);
+  const oldHash = `pbkdf2-sha256$120000$${salt.toString("base64url")}$${pbkdf2Sync("1357", salt, 120000, 32, "sha256").toString("base64url")}`;
+  assert.equal(pinRequiresCloudReset(oldHash), true);
+  assert.equal(pinRequiresCloudReset(undefined), false);
+  assert.equal(pinRequiresCloudReset("03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"), false);
+  assert.equal(await verifyStoredPin("1357", oldHash), true, "local unlock remains compatible");
+  await assert.rejects(verifyStoredPin("1357", oldHash, { cloud: true }), PinResetRequiredError);
+  const reset = await hashPinForStorage("1357");
+  assert.equal(await verifyStoredPin("1357", reset, { cloud: true }), true);
+  assert.notEqual(reset, oldHash);
 });
 
 test("il quinto errore blocca il login e il ritardo cresce fino al limite", () => {
