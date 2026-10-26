@@ -40,6 +40,7 @@ test("repairs a verified-but-empty relational shadow in bounded D1 batches", asy
   sqlite.exec(readFileSync(new URL("../drizzle/0012_sentence_matching.sql", import.meta.url), "utf8"));
   sqlite.exec(readFileSync(new URL("../drizzle/0013_sound_preferences.sql", import.meta.url), "utf8"));
   sqlite.exec(readFileSync(new URL("../drizzle/0015_quantity_learning_options.sql", import.meta.url), "utf8"));
+  sqlite.exec(readFileSync(new URL("../drizzle/0016_category_images.sql", import.meta.url), "utf8"));
   sqlite.prepare("INSERT INTO user_states (user_id, email, payload, schema_version, revision, created_at, updated_at) VALUES (?, ?, ?, 1, 4, ?, ?)")
     .run(accountId, "adult@example.test", rawState, now, now);
   sqlite.prepare("INSERT INTO data_migrations (account_id, migration_key, source_revision, source_checksum, status, details, started_at, completed_at) VALUES (?, ?, 4, ?, 'verified', '{}', ?, ?)")

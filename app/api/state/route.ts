@@ -58,6 +58,7 @@ export async function GET(request: Request) {
           // the client can migrate its existing local selection instead of replacing
           // it with relational defaults.
           if (!(state && typeof state === "object" && "soundPreferences" in state)) delete rebuilt.soundPreferences;
+          if (state && typeof state === "object" && "categorySymbols" in state && !rebuilt.categorySymbols) rebuilt.categorySymbols = {};
           responseState = rebuilt;
           dataSource = "relational";
         }

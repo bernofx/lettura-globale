@@ -1,3 +1,4 @@
+import { categoryImageError } from "./category-images.ts";
 import { compileSessionPlan, type SessionExercise, type SessionPlanLibraryItem } from "./session-compilation.ts";
 import { articleFor } from "./article-classification.ts";
 import { hasArtwork } from "./library-availability.ts";
@@ -24,6 +25,7 @@ export function validateSharedExercises(exercises: SessionExercise[], library: S
     if (kind === "articles" && references.some((id) => id && !articleFor(byId.get(id)!))) return fail("invalid_configuration");
     if (kind === "word-categories" && references.some((id) => id && !exercise.categoryNames?.includes(byId.get(id)!.category))) return fail("invalid_configuration");
     if (kind === "recognition" && exercise.recognitionMode !== "random" && (!exercise.promptId || !exercise.optionIds?.includes(exercise.promptId))) return fail("invalid_configuration");
+    if (categoryImageError(exercise, active)) return fail("missing_reference");
     if (kind === "word-categories" && (!exercise.categoryNames || exercise.categoryNames.length < 2 || exercise.categoryNames.length > 4)) return fail("invalid_configuration");
     try {
       let serial = 0;

@@ -1,3 +1,4 @@
+import { snapshotCategorySymbols, type CategorySymbols } from "../../domain/category-images";
 import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sharedLaunches, userStates } from "../../../db/schema";
@@ -29,6 +30,7 @@ type SharedExercise = Record<string, unknown> & {
   sentenceItemIds?: string[];
 };
 type StoredState = {
+  categorySymbols?: CategorySymbols;
   library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; image?: unknown; emoji?: unknown; deleted?: boolean }>;
   exercises?: SharedExercise[];
   sequences?: Array<{ id?: string; title?: string; exerciseIds?: string[]; deleted?: boolean }>;
@@ -83,28 +85,34 @@ export async function POST(request: Request) {
   const repaired = deduplicateLibraryPlaceholders((state.library ?? []) as (SessionPlanLibraryItem & DeduplicableLibraryItem)[]);
   for (let index = 0; index < selectedExercises.length; index++) selectedExercises[index] = remapExerciseReferences(selectedExercises[index], repaired.replacements);
   const availableLibrary = repaired.items.filter((item) => !item.deleted);
+  const targetLibrary = availableLibrary.filter((item) => !item.categorySymbolOnly);
   const referencedIds = new Set<string>();
   for (const exercise of selectedExercises) {
     if (exercise.kind === "articles") exercise.articleItemIds?.forEach((id) => referencedIds.add(id));
     else if (exercise.kind === "word-categories") {
+      if (exercise.categoryShowSymbols) {
+        const symbols = snapshotCategorySymbols(exercise.categoryNames, state.categorySymbols);
+        exercise.categorySymbolIds = symbols;
+        Object.values(symbols).forEach((id) => referencedIds.add(id));
+      }
       if (exercise.categoryItemIds?.length) exercise.categoryItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => exercise.categoryNames?.includes(item.category)).forEach((item) => referencedIds.add(item.id));
+      else availableLibrary.filter((item) => !item.categorySymbolOnly && exercise.categoryNames?.includes(item.category)).forEach((item) => referencedIds.add(item.id));
     }
     else if (exercise.kind === "naming") {
       if (exercise.namingItemIds?.length) exercise.namingItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => hasArtwork(item) && (!exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? ""))).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+      else targetLibrary.filter((item) => hasArtwork(item) && (!exercise.namingCategories?.length || exercise.namingCategories.includes(item.category ?? ""))).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     }
     else if (exercise.kind === "number-quantity") {
       // This exercise uses vector objects and needs no library assets.
     }
     else if (exercise.kind === "sentence-matching") {
       if (exercise.sentenceItemIds?.length) exercise.sentenceItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.forEach((item) => { if (item.id && item.contentKind === "sentence") referencedIds.add(item.id); });
+      else targetLibrary.forEach((item) => { if (item.id && item.contentKind === "sentence") referencedIds.add(item.id); });
     }
     else if (exercise.recognitionMode === "random") {
       if (exercise.promptId) referencedIds.add(exercise.promptId);
       if (!exercise.promptId && exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
+      else targetLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     } else {
       if (exercise.promptId) referencedIds.add(exercise.promptId);
       exercise.optionIds?.forEach((id) => referencedIds.add(id));

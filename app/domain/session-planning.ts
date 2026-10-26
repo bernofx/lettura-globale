@@ -1,6 +1,7 @@
 import { matchesSyllableFilter, type SyllableFilter } from "./syllabification.ts";
 
 export type QuickCandidate = {
+  categorySymbolOnly?: boolean;
   id: string;
   category: string;
   syllableCount?: number;
@@ -19,7 +20,7 @@ export type QuickFilterConfig = {
 export function filterQuickCandidates<T extends QuickCandidate>(candidates: T[], config: QuickFilterConfig) {
   const allowedIds = config.selection === "items" ? new Set(config.itemIds) : null;
   const allowedCategories = config.selection === "categories" || config.activity === "word-categories" ? new Set(config.categoryNames) : null;
-  return candidates.filter((item) => (!allowedIds || allowedIds.has(item.id)) && (!allowedCategories || allowedCategories.has(item.category)) && (config.activity !== "recognition" || matchesSyllableFilter(item, config.recognitionSyllables)));
+  return candidates.filter((item) => !item.categorySymbolOnly && (!allowedIds || allowedIds.has(item.id)) && (!allowedCategories || allowedCategories.has(item.category)) && (config.activity !== "recognition" || matchesSyllableFilter(item, config.recognitionSyllables)));
 }
 
 export function quickStartIsValid(config: QuickFilterConfig, candidateCount: number) {

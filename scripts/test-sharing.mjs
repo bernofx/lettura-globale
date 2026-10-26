@@ -88,6 +88,36 @@ try {
   assert.equal(oldResponse.status, 422);
   assert.equal((await oldResponse.json()).error, "incomplete_preview");
   assert.equal(await db.prepare("SELECT payload FROM shared_launches WHERE token=?").bind(oldToken).first("payload"), JSON.stringify(brokenPayload), "old snapshots stay immutable");
+  const categoriesBefore = await (await read()).json();
+  const categoryExercise = { id: "categories", title: "Categorie visuali", kind: "word-categories", optionIds: [], categoryNames: ["Animali", "Cibi"], categoryItemIds: ["new-dog", "mela"], categoryShowSymbols: true, categoryShowTargetImage: true, categorySpeakWord: true, rounds: 2, updatedAt: new Date().toISOString() };
+  const categoryState = { ...categoriesBefore.state,
+    categorySymbols: { Animali: "symbol-animals", Cibi: "symbol-food", "Non condivisa": "private-symbol" },
+    library: [...categoriesBefore.state.library,
+      { id: "symbol-animals", word: "Animali", category: "Simboli", remoteImageId: "test-symbol", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
+      { id: "symbol-food", word: "Cibi", category: "Simboli", emoji: "🍽", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
+      { id: "private-symbol", word: "Privato", category: "Privato", emoji: "📕", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" }],
+    exercises: [...categoriesBefore.state.exercises, categoryExercise] };
+  const categoryWrite = await request("/api/state/changes", { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(buildStateChange(categoriesBefore.state, categoryState, crypto.randomUUID(), categoriesBefore.revision)) });
+  assert.equal(categoryWrite.status, 200);
+  const categoryRevision = (await categoryWrite.json()).revision;
+  const categoryReload = await (await read()).json();
+  assert.deepEqual(categoryReload.state.categorySymbols, categoryState.categorySymbols);
+  assert.equal(categoryReload.dataSource, "relational", JSON.stringify(await (await request("/api/state/relational-status", { headers: { cookie } })).json()));
+  assert.equal(categoryReload.state.exercises.find((item) => item.id === "categories").categorySpeakWord, true);
+  const categoryShare = await share(categoryRevision, "categories", "exercise");
+  assert.equal(categoryShare.status, 201);
+  const categoryToken = (await categoryShare.json()).token;
+  const categoryPublic = await request(`/api/shared-launch/${categoryToken}`);
+  assert.equal(categoryPublic.status, 200);
+  const categoryPayload = await categoryPublic.json();
+  assert.deepEqual(categoryPayload.exercises[0].categorySymbolIds, { Animali: "symbol-animals", Cibi: "symbol-food" });
+  assert.equal(categoryPayload.library.some((item) => item.id === "private-symbol"), false);
+  assert.ok(categoryPayload.library.find((item) => item.id === "symbol-animals").image.includes(categoryToken));
+  const missingSymbols = { ...categoryReload.state, categorySymbols: { Animali: "symbol-animals" } };
+  const missingWrite = await request("/api/state/changes", { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(buildStateChange(categoryReload.state, missingSymbols, crypto.randomUUID(), categoryReload.revision)) });
+  assert.equal(missingWrite.status, 200);
+  assert.equal((await share((await missingWrite.json()).revision, "categories", "exercise")).status, 422);
+  assert.equal((await request(`/api/shared-launch/${categoryToken}`)).status, 200, "old shared category mappings remain frozen");
   const latest = await (await read()).json();
   const invalid = { ...latest.state, exercises: [...latest.state.exercises, { ...fixed, id: "invalid", promptId: "missing", optionIds: ["missing", "mela"] }] };
   const writeInvalid = await request("/api/state/changes", { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(buildStateChange(latest.state, invalid, crypto.randomUUID(), latest.revision)) });

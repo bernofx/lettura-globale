@@ -86,6 +86,8 @@ La demo è pubblicata direttamente su Cloudflare Workers e gli aggiornamenti app
 
 ## Dati essenziali
 
+Parola nella categoria offre pronuncia iniziale, immagine della parola e simboli delle categorie, configurabili separatamente. La nuova sezione Categorie della libreria deriva dagli elementi e conserva nel cloud associazioni esplicite alle immagini, senza scelta casuale. Una configurazione che richiede simboli mancanti viene bloccata. Le anteprime includono soltanto gli asset necessari. Vedi ADR 0018.
+
 Entità previste: adult users, child profile, words, images, image variants, licenses, exercises, sequences, sessions, session items, attempts, assistance events e audit events.
 
 Vincoli fondamentali:

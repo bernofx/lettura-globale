@@ -161,21 +161,22 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   tables.account_preferences.push({ account_id: accountId, active_child_id: optionalString(state.activeChildId), active_sequence_id: optionalString(state.activeSequenceId), theme_palette: string(appearance.palette, "violet"), control_shape: string(appearance.shape, "soft"), sound_wrong: string(sounds.wrong, "classic"), sound_correct: string(sounds.correct, "classic"), sound_finish: string(sounds.finish, "fanfare"), sound_select: string(sounds.select, "plin"), revision: 1, updated_at: now });
 
   const library = list(state.library);
-  const categoryNames = new Set<string>(["Altro"]);
+  const categorySymbols = object(state.categorySymbols) ?? {};
+  const categoryNames = new Set<string>(["Altro", ...Object.keys(categorySymbols)]);
   library.forEach((item) => categoryNames.add(string(item.category, "Altro")));
   for (const exercise of list(state.exercises)) {
     strings(exercise.categoryNames).forEach((name) => categoryNames.add(name));
     strings(exercise.recognitionCategories).forEach((name) => categoryNames.add(name));
     strings(exercise.namingCategories).forEach((name) => categoryNames.add(name));
   }
-  for (const name of categoryNames) tables.categories.push({ account_id: accountId, name, normalized_name: normalized(name), deleted_at: null, created_at: now, updated_at: now });
+  for (const name of categoryNames) tables.categories.push({ account_id: accountId, name, normalized_name: normalized(name), symbol_library_item_id: optionalString(categorySymbols[name]), deleted_at: null, created_at: now, updated_at: now });
 
   for (const [position, item] of library.entries()) {
     const id = string(item.id);
     if (!id) { warnings.push("library_item_without_id"); continue; }
     const hasMedia = Boolean(item.remoteImageId || item.image || item.imageKey || item.emoji);
     if (hasMedia) tables.media_assets.push({ account_id: accountId, id, r2_object_id: optionalString(item.remoteImageId), local_path: optionalString(item.image) ?? optionalString(item.imageKey), image_path: optionalString(item.image), image_key: optionalString(item.imageKey), emoji: optionalString(item.emoji), source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), is_private_upload: item.privateUpload ? 1 : 0, deleted_at: deletedTime(item.deleted, now), created_at: now });
-    tables.library_items.push({ account_id: accountId, id, word: string(item.word, "Elemento archiviato"), normalized_word: normalized(string(item.word, "Elemento archiviato")), category_name: string(item.category, "Altro"), content_kind: optionalString(item.contentKind), phrase_structure: optionalString(item.phraseStructure), subject_text: optionalString(item.subject), verb_text: optionalString(item.verb), complement_text: optionalString(item.complement), article: optionalString(item.article), syllabification: optionalString(item.syllabification), syllable_count: integer(item.syllableCount), syllable_status: optionalString(item.syllableStatus), media_asset_id: hasMedia ? id : null, source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), position, deleted_at: deletedTime(item.deleted, now), created_at: now, updated_at: now });
+    tables.library_items.push({ account_id: accountId, id, word: string(item.word, "Elemento archiviato"), normalized_word: normalized(string(item.word, "Elemento archiviato")), category_name: string(item.category, "Altro"), category_symbol_only: item.categorySymbolOnly ? 1 : 0, content_kind: optionalString(item.contentKind), phrase_structure: optionalString(item.phraseStructure), subject_text: optionalString(item.subject), verb_text: optionalString(item.verb), complement_text: optionalString(item.complement), article: optionalString(item.article), syllabification: optionalString(item.syllabification), syllable_count: integer(item.syllableCount), syllable_status: optionalString(item.syllableStatus), media_asset_id: hasMedia ? id : null, source_name: string(item.source), source_url: optionalString(item.sourceUrl), license_name: string(item.license), license_url: optionalString(item.licenseUrl), author: string(item.author), position, deleted_at: deletedTime(item.deleted, now), created_at: now, updated_at: now });
   }
 
   const libraryIds = new Set(tables.library_items.map((item) => String(item.id)));
@@ -191,8 +192,8 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
     const updatedAt = time(exercise.updatedAt, now);
     const semanticKind = string(exercise.kind, "recognition");
     const persistedKind = semanticKind === "number-quantity" || semanticKind === "sentence-matching" ? "recognition" : semanticKind;
-    tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: persistedKind, semantic_kind: semanticKind === persistedKind ? null : semanticKind, recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), sentence_option_count: integer(exercise.sentenceOptionCount), sentence_difficulty: integer(exercise.sentenceDifficulty), quantity_min: integer(exercise.quantityMin), quantity_max: integer(exercise.quantityMax), quantity_object_set: optionalString(exercise.quantityObjectSet), quantity_auto_complete: exercise.quantityAutoComplete ? 1 : 0, quantity_speak_numbers: exercise.quantitySpeakNumbers ? 1 : 0, quantity_errorless: exercise.quantityErrorless ? 1 : 0, quantity_idle_seconds: integer(exercise.quantityIdleSeconds) ?? 3, source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
-    if (typeof exercise.promptId === "string") addExerciseItems(id, "prompt", [exercise.promptId]);
+    tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: persistedKind, semantic_kind: semanticKind === persistedKind ? null : semanticKind, recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), category_speak_word: exercise.categorySpeakWord ? 1 : 0, category_show_target_image: exercise.categoryShowTargetImage ? 1 : 0, category_show_symbols: exercise.categoryShowSymbols ? 1 : 0, auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), sentence_option_count: integer(exercise.sentenceOptionCount), sentence_difficulty: integer(exercise.sentenceDifficulty), quantity_min: integer(exercise.quantityMin), quantity_max: integer(exercise.quantityMax), quantity_object_set: optionalString(exercise.quantityObjectSet), quantity_auto_complete: exercise.quantityAutoComplete ? 1 : 0, quantity_speak_numbers: exercise.quantitySpeakNumbers ? 1 : 0, quantity_errorless: exercise.quantityErrorless ? 1 : 0, quantity_idle_seconds: integer(exercise.quantityIdleSeconds) ?? 3, source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
+    if (typeof exercise.promptId === "string" && exercise.promptId) addExerciseItems(id, "prompt", [exercise.promptId]);
     addExerciseItems(id, "option", strings(exercise.optionIds));
     addExerciseItems(id, "recognition_pool", semanticKind === "sentence-matching" ? strings(exercise.sentenceItemIds) : strings(exercise.recognitionItemIds));
     addExerciseItems(id, "article_pool", strings(exercise.articleItemIds));
@@ -343,7 +344,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     return definedEntries([
       ["id", row.id], ["word", row.word], ["image", media?.image_path], ["imageKey", media?.image_key], ["remoteImageId", media?.r2_object_id], ["emoji", media?.emoji],
       ["category", row.category_name], ["source", row.source_name], ["sourceUrl", row.source_url], ["license", row.license_name], ["licenseUrl", row.license_url], ["author", row.author],
-      ["contentKind", row.content_kind], ["phraseStructure", row.phrase_structure], ["subject", row.subject_text], ["verb", row.verb_text], ["complement", row.complement_text],
+      ["categorySymbolOnly", row.category_symbol_only ? true : undefined], ["contentKind", row.content_kind], ["phraseStructure", row.phrase_structure], ["subject", row.subject_text], ["verb", row.verb_text], ["complement", row.complement_text],
       ["article", row.article], ["syllabification", row.syllabification], ["syllableCount", row.syllable_count], ["syllableStatus", row.syllable_status], ["privateUpload", media?.is_private_upload ? true : undefined], ["deleted", row.deleted_at === null ? undefined : true],
     ]);
   });
@@ -353,6 +354,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     ["id", row.id], ["title", row.title], ["kind", row.semantic_kind ?? (row.quantity_min != null || row.quantity_max != null || row.quantity_object_set != null ? "number-quantity" : row.kind)], ["promptId", exerciseRole(row.id, "prompt")[0]], ["optionIds", exerciseRole(row.id, "option")],
     ["articleItemIds", exerciseRole(row.id, "article_pool").length ? exerciseRole(row.id, "article_pool") : undefined],
     ["categoryItemIds", exerciseRole(row.id, "category_pool").length ? exerciseRole(row.id, "category_pool") : undefined],
+    ["categorySpeakWord", row.category_speak_word ? true : undefined], ["categoryShowTargetImage", row.category_show_target_image ? true : undefined], ["categoryShowSymbols", row.category_show_symbols ? true : undefined],
     ["categoryNames", categoryRole(row.id, "category_target").length ? categoryRole(row.id, "category_target") : undefined],
     ["recognitionMode", row.recognition_mode], [row.semantic_kind === "sentence-matching" ? "sentenceItemIds" : "recognitionItemIds", exerciseRole(row.id, "recognition_pool").length ? exerciseRole(row.id, "recognition_pool") : undefined],
     ["sentenceOptionCount", row.sentence_option_count], ["sentenceDifficulty", row.sentence_difficulty],
@@ -385,6 +387,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     }),
     ...(session.deleted_at === null ? {} : { deletedAt: iso(session.deleted_at) }),
   }));
+  const categorySymbols = Object.fromEntries(tables.categories.filter((row) => row.symbol_library_item_id).map((row) => [String(row.name), String(row.symbol_library_item_id)]));
   const preferences = tables.account_preferences[0];
   return {
     schemaVersion: 1 as const,
@@ -392,6 +395,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
     activeChildId: preferences?.active_child_id ?? "",
     ...(preferences?.active_sequence_id ? { activeSequenceId: preferences.active_sequence_id } : {}),
     library, exercises, sequences, attempts, helps, sessionHistory,
+    ...(Object.keys(categorySymbols).length ? { categorySymbols } : {}),
     appearance: { palette: preferences?.theme_palette ?? "violet", shape: preferences?.control_shape ?? "soft" },
     soundPreferences: { wrong: preferences?.sound_wrong ?? "classic", correct: preferences?.sound_correct ?? "classic", finish: preferences?.sound_finish ?? "fanfare", select: preferences?.sound_select ?? "plin" },
   };

@@ -86,6 +86,7 @@ export function relationalTablesForChange(change: StateChangeRequest) {
   if (change.collections.sessionHistory) add("adult_profiles", "children", "sessions", "session_items", "session_item_content", "session_item_responses", "session_item_help_labels");
   if (change.collections.attempts) add("adult_profiles", "children", "attempts", "attempt_options");
   if (change.collections.helps) add("adult_profiles", "children", "help_events");
+  if ("categorySymbols" in change.values) add("categories");
   if (Object.keys(change.values).length) add("account_preferences");
   return [...tables];
 }
@@ -129,7 +130,7 @@ export async function prepareRelationalChange(options: {
   }
   if (change.collections.therapists) upsert("adult_child_access", tables.adult_child_access.filter((row) => therapistIds.includes(String(row.adult_id))));
 
-  if (change.collections.library || change.collections.exercises) {
+  if (change.collections.library || change.collections.exercises || "categorySymbols" in change.values) {
     const categoryNames = tables.categories.map((row) => String(row.name));
     statements.push(database.prepare(`UPDATE categories SET normalized_name = ? || name WHERE account_id = ? AND name NOT IN (${categoryNames.map(() => "?").join(", ")}) AND EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)`).bind(`pending-${accountId}-${operationId}-`, accountId, ...categoryNames, accountId, operationId));
     upsert("categories", tables.categories);
@@ -207,7 +208,7 @@ export async function prepareRelationalChange(options: {
   }
   if (change.collections.therapists) for (const id of change.collections.therapists.removedIds.filter((id) => !tables.adult_profiles.some((row) => row.id === id))) statements.push(guardedDelete(database, "adult_profiles", "id = ?", [id], accountId, operationId));
   if (change.collections.children) for (const id of change.collections.children.removedIds.filter((id) => !tables.children.some((row) => row.id === id))) statements.push(guardedDelete(database, "children", "id = ?", [id], accountId, operationId));
-  if (change.collections.library || change.collections.exercises) {
+  if (change.collections.library || change.collections.exercises || "categorySymbols" in change.values) {
     const categoryNames = tables.categories.map((row) => String(row.name));
     statements.push(database.prepare(`DELETE FROM categories WHERE account_id = ? AND name NOT IN (${categoryNames.map(() => "?").join(", ")}) AND EXISTS (SELECT 1 FROM state_operations WHERE account_id = ? AND operation_id = ?)`).bind(accountId, ...categoryNames, accountId, operationId));
   }

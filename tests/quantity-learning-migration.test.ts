@@ -14,6 +14,7 @@ test("migra lo schema storico e conserva opzioni, tentativi e storico senza erro
   db.exec(readFileSync(new URL("../drizzle/0015_quantity_learning_options.sql", import.meta.url), "utf8"));
   const legacy = db.prepare("SELECT title, quantity_speak_numbers, quantity_errorless FROM exercises WHERE id = 'old'").get();
   assert.deepEqual({ ...legacy }, { title: "Legacy", quantity_speak_numbers: 0, quantity_errorless: 0 });
+  for (const entry of journal.entries.filter((entry) => entry.idx > 15)) db.exec(readFileSync(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8"));
   const state = {
     schemaVersion: 1, therapists: [{ id: "adult", firstName: "Demo", email: "demo@example.test", role: "Terapista", childIds: ["child"] }], children: [{ id: "child", firstName: "Demo" }], library: [], sequences: [], helps: [],
     exercises: [{ id: "q", title: "Conta", kind: "number-quantity", optionIds: [], quantityMin: 3, quantityMax: 3, quantitySpeakNumbers: true, quantityErrorless: true }],

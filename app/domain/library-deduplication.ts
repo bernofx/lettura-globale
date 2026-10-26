@@ -1,4 +1,5 @@
 export type DeduplicableLibraryItem = {
+  categorySymbolOnly?: boolean;
   id: string;
   word: string;
   category?: string;
@@ -17,12 +18,12 @@ function normalizedWord(word: string) {
 }
 
 function isUploadedPhoto(item: DeduplicableLibraryItem) {
-  return Boolean(item.privateUpload && (item.remoteImageId || item.imageKey || item.image));
+  return Boolean(!item.categorySymbolOnly && item.privateUpload && (item.remoteImageId || item.imageKey || item.image));
 }
 
 function isEmptyPlaceholder(item: DeduplicableLibraryItem) {
   const placeholderSource = /immagine da aggiungere|catalogo demo/i.test(item.source ?? "");
-  return !item.privateUpload && !item.image && !item.imageKey && !item.remoteImageId && Boolean(item.emoji || placeholderSource);
+  return !item.categorySymbolOnly && !item.privateUpload && !item.image && !item.imageKey && !item.remoteImageId && Boolean(item.emoji || placeholderSource);
 }
 
 export function deduplicateLibraryPlaceholders<T extends DeduplicableLibraryItem>(items: T[]) {

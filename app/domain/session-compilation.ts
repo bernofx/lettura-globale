@@ -4,6 +4,8 @@ import type { SyllableFilter } from "./syllabification.ts";
 import { createQuantityRounds, type QuantityObject, type QuantityObjectSet } from "./quantity-exercise.ts";
 import { createSentenceMatchingRounds, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./sentence-matching.ts";
 
+import { categoryImageError, snapshotCategorySymbols, type CategorySymbols } from "./category-images.ts";
+
 export type SessionActivity = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
 export type SessionExercise = {
   id: string;
@@ -14,6 +16,10 @@ export type SessionExercise = {
   articleItemIds?: string[];
   categoryItemIds?: string[];
   categoryNames?: string[];
+  categorySpeakWord?: boolean;
+  categoryShowTargetImage?: boolean;
+  categoryShowSymbols?: boolean;
+  categorySymbolIds?: CategorySymbols;
   recognitionMode?: "fixed" | "random";
   recognitionItemIds?: string[];
   recognitionCategories?: string[];
@@ -48,6 +54,7 @@ export type SessionPlanLibraryItem = LibraryMediaItem & {
   category: string;
   article?: "IL" | "LA" | null;
   syllableCount?: number;
+  categorySymbolOnly?: boolean;
   contentKind?: "word" | "sentence";
   phraseStructure?: PhraseStructure;
   subject?: string;
@@ -61,6 +68,7 @@ export function completesSequenceExercise(current: SessionExercise | undefined, 
 }
 
 type CompileOptions<T extends SessionPlanLibraryItem> = {
+  categorySymbols?: CategorySymbols;
   articleFor: (item: T) => "IL" | "LA" | null | undefined;
   random?: () => number;
   createId?: () => string;
@@ -76,6 +84,8 @@ function shuffled<T>(items: T[], random: () => number) {
 }
 
 export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: SessionExercise[], library: T[], options: CompileOptions<T>) {
+  const allLibrary = library;
+  library = library.filter((item) => !item.categorySymbolOnly);
   const random = options.random ?? Math.random;
   const createId = options.createId ?? (() => crypto.randomUUID());
 
@@ -110,10 +120,12 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
     }
 
     if (kind === "word-categories") {
+      const categorySymbolIds = snapshotCategorySymbols(exercise.categoryNames, options.categorySymbols ?? exercise.categorySymbolIds);
+      if (categoryImageError(exercise, allLibrary, categorySymbolIds)) return [];
       const categories = new Set(exercise.categoryNames ?? []);
       const candidates = library.filter((item) => categories.has(item.category));
       return pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6, random)
-        .map((id, index) => round(index, { categoryItemIds: [id] }));
+        .map((id, index) => round(index, { categoryItemIds: [id], ...(exercise.categoryShowSymbols ? { categorySymbolIds } : {}) }));
     }
 
     if (kind === "number-quantity") {
