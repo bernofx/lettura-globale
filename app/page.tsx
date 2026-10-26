@@ -39,7 +39,7 @@ import { appendSaveJournal, readSaveJournal } from "./domain/save-journal";
 import { quantityAnswerId, quantityIdleDecision, quantityObjectLabel, quantitySelectionDecision, type QuantityAnswerMethod, type QuantityObject, type QuantityObjectSet } from "./domain/quantity-exercise";
 import { defaultSoundPreferences, hydrateSoundPreferences, soundAsset, soundOptions, type SoundCue, type SoundPreferences } from "./domain/sound-preferences";
 import { buildExcelProgressCsv } from "./domain/progress-csv";
-import { waitForSpeechVoices } from "./domain/speech-readiness";
+import { createBrowserSpeechPlayer } from "./domain/browser-speech";
 import { controllerSessionView, remoteExerciseControls, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
 import { RealtimeSocket } from "./realtime-socket";
@@ -487,61 +487,32 @@ function shuffled<T>(items: T[]) {
   return result;
 }
 
-let speechRequestId = 0;
 let currentAudioVolume = 1;
+let browserSpeechPlayer: ReturnType<typeof createBrowserSpeechPlayer> | undefined;
 
 function cancelSpeech() {
   stopAndroidSpeech();
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  browserSpeechPlayer?.cancel();
+}
+
+function reportSpeechUnavailable() {
+  window.dispatchEvent(new Event("lg-speech-unavailable"));
 }
 
 function speakWord(word: string, onComplete?: () => void) {
+  cancelSpeech();
+  if (currentAudioVolume <= 0) { onComplete?.(); return () => {}; }
   const nativeCancel = startAndroidSpeech(androidBridge(), window, word, currentAudioVolume, onComplete);
   if (nativeCancel) return nativeCancel;
-  if (!("speechSynthesis" in window)) { onComplete?.(); return () => undefined; }
-  const synthesis = window.speechSynthesis;
-  const requestId = ++speechRequestId;
-  synthesis.cancel();
-  let completed = false;
-  let fallback = 0;
-  const finish = () => {
-    if (completed || requestId !== speechRequestId) return;
-    completed = true;
-    window.clearTimeout(fallback);
-    onComplete?.();
-  };
-  const speakAttempt = async (retried: boolean) => {
-    const voices = await waitForSpeechVoices(synthesis, retried ? 250 : 1200);
-    if (completed || requestId !== speechRequestId) return;
-    const utterance = new SpeechSynthesisUtterance(`${word}!`);
-    utterance.lang = "it-IT";
-    const italianVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith("it"));
-    const preferredVoice = italianVoices.find((voice) => /elsa|isabella|google.*ital/i.test(voice.name)) ?? italianVoices.find((voice) => voice.localService) ?? italianVoices[0];
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.rate = 0.72;
-    utterance.pitch = 1;
-    utterance.volume = currentAudioVolume;
-    utterance.onend = finish;
-    utterance.onerror = () => {
-      window.clearTimeout(fallback);
-      fallback = 0;
-      if (!retried && requestId === speechRequestId) {
-        window.setTimeout(() => void speakAttempt(true), 160);
-        return;
-      }
-      finish();
-    };
-    if (onComplete) fallback = window.setTimeout(finish, Math.max(3000, Math.min(7000, 1500 + word.length * 300)));
-    synthesis.speak(utterance);
-  };
-  void speakAttempt(false);
-  return () => {
-    if (requestId !== speechRequestId) return;
-    speechRequestId += 1;
-    completed = true;
-    window.clearTimeout(fallback);
-    synthesis.cancel();
-  };
+  if (!("speechSynthesis" in window)) { reportSpeechUnavailable(); onComplete?.(); return () => {}; }
+  browserSpeechPlayer ??= createBrowserSpeechPlayer({
+    synthesis: window.speechSynthesis,
+    utterance: (text) => new SpeechSynthesisUtterance(text),
+    schedule: (callback, delay) => window.setTimeout(callback, delay),
+    clear: (id) => window.clearTimeout(id),
+    unavailable: reportSpeechUnavailable,
+  });
+  return browserSpeechPlayer.speak(word, currentAudioVolume, onComplete);
 }
 
 type FeedbackSound = "correct" | "wrong";
@@ -599,6 +570,7 @@ function prepareFeedbackSound(url: string) {
 }
 
 function primeFeedbackSounds() {
+  try { if ("speechSynthesis" in window) window.speechSynthesis.getVoices(); } catch { /* A cold engine is handled by the player when speech is requested. */ }
   preloadFeedbackSounds();
   const context = feedbackContext();
   if (context?.state === "suspended") void context.resume().catch(() => undefined);
@@ -766,7 +738,6 @@ export default function HomePage() {
   const [sharedPreviewStatus, setSharedPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
   const [wrongAnswerId, setWrongAnswerId] = useState<string | null>(null);
-  const spokenPromptKey = useRef("");
   const wrongFeedbackTimer = useRef<number | null>(null);
   const handledSharedLaunch = useRef("");
 
@@ -1488,15 +1459,18 @@ export default function HomePage() {
     return () => window.clearTimeout(launchTimer);
   }, [activeChild, backendInitialized, backendStatus, notify, pendingSharedLaunch, setActiveSequenceId, therapist, visibleExercises, visibleLibrary, visibleSequences, categorySymbols]);
 
+  const initialPromptText = currentExercise && (exerciseKind(currentExercise) === "sentence-matching" || (exerciseKind(currentExercise) === "recognition" && (currentExercise.autoPronounce ?? currentPresentation === "words"))) ? promptWord : "";
+  const initialPromptId = currentExercise?.id;
   useEffect(() => {
-    const kind = currentExercise ? exerciseKind(currentExercise) : undefined;
-    const shouldAutoPronounce = kind === "sentence-matching" || (currentExercise?.autoPronounce ?? currentPresentation === "words");
-    if (!sessionActive || awaitingNextExercise || !currentExercise || (kind !== "recognition" && kind !== "sentence-matching") || !shouldAutoPronounce || !promptWord) return;
-    const promptKey = `${sessionRunId}:${currentExercise.id}:${sessionIndex}`;
-    if (spokenPromptKey.current === promptKey) return;
-    spokenPromptKey.current = promptKey;
-    speakWord(promptWord);
-  }, [sessionActive, awaitingNextExercise, currentExercise, currentPresentation, sessionIndex, sessionRunId, promptWord]);
+    if (!sessionActive || awaitingNextExercise || !initialPromptText) return;
+    return speakWord(initialPromptText);
+  }, [sessionActive, awaitingNextExercise, initialPromptId, initialPromptText, sessionIndex, sessionRunId]);
+
+  useEffect(() => {
+    const unavailable = () => notify("La voce non è partita. Tocca la parola o il tasto Riascolta per riprovare.", 4500);
+    window.addEventListener("lg-speech-unavailable", unavailable);
+    return () => window.removeEventListener("lg-speech-unavailable", unavailable);
+  }, [notify]);
 
   useEffect(() => {
     if (!sessionActive) return;
@@ -1790,6 +1764,7 @@ export default function HomePage() {
   const nextExercise = (options?: { skipTransition?: boolean }) => {
     if (sessionPausedRef.current) return;
     if (!sessionAdvanceGuard.current.claim(sessionRunId, sessionIndex)) return;
+    cancelSpeech();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
       wrongFeedbackTimer.current = null;
@@ -3157,7 +3132,7 @@ function WordCategorySession({ previewLabel, exercise, library, mode, manualAdva
     }
   };
   const categoryDrag = usePointerDrop(!currentId || Boolean(correctId), (category) => place(category, currentId), { selector: "[data-category]", dataKey: "category" });
-  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${categoryDrag.offset.active ? "pointer-dragging" : ""}`} style={categoryDrag.offset.active ? { transform: `translate3d(${categoryDrag.offset.x}px, ${categoryDrag.offset.y}px, 0)` } : undefined} onClick={(event) => { if (categoryDrag.consumeDraggedClick()) { event.preventDefault(); return; } setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={categoryDrag.onPointerDown} onPointerMove={categoryDrag.onPointerMove} onPointerUp={categoryDrag.onPointerUp} onPointerCancel={categoryDrag.onPointerCancel}>{exercise.categoryShowTargetImage && <span className="category-target-art"><Artwork item={currentItem} eager /></span>}<span>{currentItem.word.toLocaleUpperCase("it-IT")}</span>{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categoryOrder.length}`}>{categoryOrder.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}>{exercise.categoryShowSymbols && library.find((item) => item.id === exercise.categorySymbolIds?.[category]) && <span className="category-symbol-art"><Artwork item={library.find((item) => item.id === exercise.categorySymbolIds?.[category])!} eager /></span>}<span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
+  return <div className="session-screen article-session word-category-session"><div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Parola → categoria</span><strong>{exercise.title}</strong></div><div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div><div className="article-body"><p className="instruction">Metti la parola nella categoria giusta.</p>{completed ? <div className="article-complete"><span className="complete-check"><Check /></span><h2>Ottimo lavoro!</h2><p>Tutte le parole sono state classificate.</p><button className="primary-button large" onClick={onComplete}>{currentIndex === total - 1 ? (previewLabel ? "Chiudi" : "Concludi") : "Prossimo esercizio"}</button></div> : currentItem ? <><div className="word-category-tray"><button type="button" draggable={false} aria-pressed={selectedId === currentId} aria-label={`${currentItem.word}. Trascina la parola nella categoria corretta oppure tocca per selezionarla${wrongId === currentId ? ". Scelta errata" : ""}`} className={`word-category-card ${selectedId === currentId ? "selected" : ""} ${wrongId === currentId ? "wrong-return" : ""} ${correctId === currentId ? "correct" : ""} ${categoryDrag.offset.active ? "pointer-dragging" : ""}`} style={categoryDrag.offset.active ? { transform: `translate3d(${categoryDrag.offset.x}px, ${categoryDrag.offset.y}px, 0)` } : undefined} onClick={(event) => { if (categoryDrag.consumeDraggedClick()) { event.preventDefault(); return; } if (exercise.categorySpeakWord && !correctId) speakWord(currentItem.word); setSelectedId((current) => current === currentId ? null : currentId); }} onPointerDown={categoryDrag.onPointerDown} onPointerMove={categoryDrag.onPointerMove} onPointerUp={categoryDrag.onPointerUp} onPointerCancel={categoryDrag.onPointerCancel}>{exercise.categoryShowTargetImage && <span className="category-target-art"><Artwork item={currentItem} eager /></span>}<span>{currentItem.word.toLocaleUpperCase("it-IT")}</span>{correctId === currentId && <i className="choice-mark correct-mark"><Check /></i>}</button></div><div className={`article-boxes category-count-${categoryOrder.length}`}>{categoryOrder.map((category) => <button type="button" data-category={category} className={`article-dropbox word-category-box ${wrongCategory === category ? "wrong" : ""} ${correctCategory === category ? "correct" : ""}`} key={category} aria-label={`${category}${wrongCategory === category ? ". Scelta errata" : ""}`} onClick={() => place(category)}>{exercise.categoryShowSymbols && library.find((item) => item.id === exercise.categorySymbolIds?.[category]) && <span className="category-symbol-art"><Artwork item={library.find((item) => item.id === exercise.categorySymbolIds?.[category])!} eager /></span>}<span>{category.toLocaleUpperCase("it-IT")}</span><small>{correctCategory === category ? "Corretto" : "Tocca qui"}</small></button>)}</div><p className={wrongId ? "article-feedback wrong" : correctId ? "article-feedback correct" : "article-feedback"} role="status">{feedback}</p></> : <div className="feedback wrong" role="alert">Nessuna parola disponibile per queste categorie.</div>}</div>{!previewLabel && currentId && <HelpDock onHelp={(label) => onHelp(label, currentId)} />}</div>;
 }
 
 function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {

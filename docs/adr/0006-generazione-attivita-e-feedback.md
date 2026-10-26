@@ -24,4 +24,24 @@ Configurare un esercizio distinto per ogni parola rendeva rigida la programmazio
 
 ## Conseguenze
 
+### Affidabilità della pronuncia iniziale — 26 ottobre 2026
+
+Il percorso browser mantiene una richiesta vocale attiva e un riferimento forte
+all’utterance fino alla fine. Attende le voci a motore freddo; con voci già pronte
+il comando resta sincrono, anche per il tocco manuale su mobile. Il primo turno
+non viene più marcato come pronunciato prima dell’avvio: l’effetto segue
+l’identità del turno e cancella la richiesta quando il turno non è più visibile.
+
+Un watchdog verifica start/boundary. Se non arriva alcun evento e il motore non
+risulta in riproduzione, esegue un solo recupero controllato. Un evento start
+tardivo annulla il recupero; dopo un avvio osservato non ripete il testo. Se il
+motore risulta speaking senza eventi, non presume silenzio e non rischia una
+doppia pronuncia. Dopo il limite segnala all’adulto di riprovare con un tocco;
+not-allowed viene segnalato subito, senza tentare di aggirare l’autoplay.
+
+Cambio turno, uscita, pausa e nuove richieste invalidano anche attese delle voci,
+retry e callback obsolete. Il completamento del feedback resta idempotente e
+non cambia la registrazione dei tentativi. La voce nativa Android resta sul
+bridge esistente; nessuna nuova APK, migrazione, preferenza o dato salvato.
+
 La generazione casuale non richiede scritture aggiuntive sul backend: D1 conserva soltanto la configurazione e gli eventi già previsti. Le statistiche distinguono riconoscimento, articolo e classificazione per categoria. Le categorie della libreria diventano dati didattici e devono quindi essere curate dall'adulto.

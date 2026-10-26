@@ -4,7 +4,8 @@ export type SpeechVoiceSource<T> = {
   removeEventListener: (type: "voiceschanged", listener: () => void) => void;
 };
 
-export function waitForSpeechVoices<T>(source: SpeechVoiceSource<T>, timeoutMs = 1000): Promise<T[]> {
+export function waitForSpeechVoices<T>(source: SpeechVoiceSource<T>, timeoutMs = 1000, signal?: AbortSignal): Promise<T[]> {
+  if (signal?.aborted) return Promise.resolve([]);
   const available = source.getVoices();
   if (available.length) return Promise.resolve(available);
 
@@ -15,6 +16,7 @@ export function waitForSpeechVoices<T>(source: SpeechVoiceSource<T>, timeoutMs =
       settled = true;
       clearTimeout(timeout);
       source.removeEventListener("voiceschanged", onVoicesChanged);
+      signal?.removeEventListener("abort", onAbort);
       resolve(voices);
     };
     const onVoicesChanged = () => {
@@ -22,6 +24,8 @@ export function waitForSpeechVoices<T>(source: SpeechVoiceSource<T>, timeoutMs =
       if (voices.length) finish(voices);
     };
     const timeout = setTimeout(() => finish(source.getVoices()), timeoutMs);
+    const onAbort = () => finish([]);
+    signal?.addEventListener("abort", onAbort, { once: true });
     source.addEventListener("voiceschanged", onVoicesChanged);
     onVoicesChanged();
   });

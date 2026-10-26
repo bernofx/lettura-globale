@@ -35,3 +35,17 @@ test("non resta bloccato se il browser non carica le voci", async () => {
   }, 1);
   assert.deepEqual(voices, []);
 });
+
+test("annulla subito l’attesa delle voci e rimuove il listener", async () => {
+  const controller = new AbortController();
+  let listeners = 0;
+  const pending = waitForSpeechVoices({
+    getVoices: () => [],
+    addEventListener: () => { listeners++; },
+    removeEventListener: () => { listeners--; },
+  }, 10000, controller.signal);
+  assert.equal(listeners, 1);
+  controller.abort();
+  assert.deepEqual(await pending, []);
+  assert.equal(listeners, 0);
+});
