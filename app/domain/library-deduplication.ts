@@ -1,6 +1,8 @@
 export type DeduplicableLibraryItem = {
   id: string;
   word: string;
+  category?: string;
+  contentKind?: string;
   image?: string;
   imageKey?: string;
   remoteImageId?: string;
@@ -34,15 +36,24 @@ export function deduplicateLibraryPlaceholders<T extends DeduplicableLibraryItem
 
   const replacements = new Map<string, string>();
   for (const matches of activeByWord.values()) {
-    const uploaded = matches.find(isUploadedPhoto);
-    if (!uploaded) continue;
     for (const candidate of matches) {
-      if (candidate.id !== uploaded.id && isEmptyPlaceholder(candidate)) replacements.set(candidate.id, uploaded.id);
+      if (!isEmptyPlaceholder(candidate) || candidate.contentKind === "sentence") continue;
+      const uploaded = matches.filter((item) => isUploadedPhoto(item) && item.category === candidate.category && item.contentKind !== "sentence");
+      if (uploaded.length === 1) replacements.set(candidate.id, uploaded[0].id);
     }
   }
 
+  // A placeholder may already have been archived by an older client without
+  // updating exercises. Repair only an unambiguous uploaded replacement in the
+  // same category; never revive deleted media or guess between real photos.
+  for (const item of items) {
+    if (!item.deleted || !item.category || item.contentKind === "sentence" || !isEmptyPlaceholder(item) || !/immagine da aggiungere|catalogo demo/i.test(item.source ?? "")) continue;
+    const matches = (activeByWord.get(normalizedWord(item.word)) ?? []).filter((candidate) => isUploadedPhoto(candidate) && candidate.category === item.category && candidate.contentKind !== "sentence");
+    if (matches.length === 1) replacements.set(item.id, matches[0].id);
+  }
+
   return {
-    items: items.map((item) => replacements.has(item.id) ? { ...item, deleted: true } : item),
+    items: items.map((item) => replacements.has(item.id) && !item.deleted ? { ...item, deleted: true } : item),
     replacements,
   };
 }

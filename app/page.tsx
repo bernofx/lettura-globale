@@ -8,13 +8,17 @@ import { SessionAdvanceGuard } from "./domain/session-advance";
 import { activityNavigation } from "./domain/session-navigation";
 import { PENDING_CONTROLLER_LAUNCH_KEY, resolveControllerLaunch } from "./domain/controller-launch";
 import { CELEBRATION_DURATION_MS } from "./domain/celebration";
+import { articleFor } from "./domain/article-classification";
+import { remapExerciseReferences } from "./domain/exercise-library-references";
+import { validateSharedExercises } from "./domain/shared-preview-validation";
+import { cloudSaveCanSettle, prepareCloudShare } from "./domain/share-preparation";
 import { playBalloonPop } from "./domain/balloon-audio";
 import { NumericField } from "./components/numeric-field";
 import { correctMatchSpeech, createCorrectMatchFeedback } from "./domain/correct-match-feedback";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
-import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads, remapLibraryId, remapLibraryIds } from "./domain/library-deduplication";
+import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads } from "./domain/library-deduplication";
 import { feedbackStartOffset } from "./domain/feedback-audio";
 import { buildSessionHistoryItems, historyItemUsesArtwork, type HistoryImageSnapshot, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
@@ -276,15 +280,6 @@ const initialNamingExercise: Exercise = { id: "ex-mix-and-vary", title: "Mix and
 const initialExercises: Exercise[] = [initialRandomRecognitionExercise, initialArticleExercise, initialWordCategoryExercise, initialNamingExercise, ...initialRecognitionExercises];
 const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: [initialRandomRecognitionExercise.id, initialArticleExercise.id, initialWordCategoryExercise.id], therapistId: "admin-giuseppe" }];
 const helpTypes = ["Indicazione verbale", "Gesto", "Riduci le opzioni", "Evidenzia", "Dimostrazione"];
-const articlesById: Record<string, Article> = {
-  mela: "LA", gatto: "IL", pane: "IL", casa: "LA", palla: "LA", sole: "IL", fiore: "IL",
-  cane: "IL", pesce: "IL", mucca: "LA", banana: "LA", pera: "LA", latte: "IL", sedia: "LA",
-  letto: "IL", porta: "LA", libro: "IL", matita: "LA", scarpa: "LA", mano: "LA", luna: "LA",
-  treno: "IL", barca: "LA", bocca: "LA", schiena: "LA", telefono: "IL", pigiama: "IL",
-  bicicletta: "LA", gallo: "IL", gelato: "IL", maiale: "IL", coniglio: "IL", maglietta: "LA",
-  piadina: "LA", giacca: "LA", camion: "IL", granchio: "IL", "coca-cola": "LA", carota: "LA",
-};
-const articleFor = (item: LibraryItem) => item.article !== undefined ? item.article ?? undefined : articlesById[item.id];
 const exerciseKind = (exercise: Exercise): SessionActivity => exercise.kind ?? "recognition";
 const libraryCategories = ["Azioni", "Animali", "Parti del corpo", "Vestiti", "Oggetti della natura", "Cibi", "Casa", "Trasporti", "Oggetti", "Scuola", "Luoghi", "Giochi", "Persone", "Altro"];
 const initialAdministrator: Therapist = { id: "admin-giuseppe", firstName: "Giuseppe", lastName: "Bernasconi", email: "giuseppe.bernasconi@letturaglobale.demo", role: "Amministratore", pinHash: "a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972", childIds: ["child-luca", "child-sara"] };
@@ -322,16 +317,7 @@ function hydrateExercises(items: Exercise[]) {
 }
 
 function remapExerciseLibraryIds(exercise: Exercise, replacements: Map<string, string>): Exercise {
-  return {
-    ...exercise,
-    promptId: remapLibraryId(exercise.promptId, replacements),
-    optionIds: remapLibraryIds(exercise.optionIds, replacements) ?? [],
-    articleItemIds: remapLibraryIds(exercise.articleItemIds, replacements),
-    categoryItemIds: remapLibraryIds(exercise.categoryItemIds, replacements),
-    recognitionItemIds: remapLibraryIds(exercise.recognitionItemIds, replacements),
-    namingItemIds: remapLibraryIds(exercise.namingItemIds, replacements),
-    sentenceItemIds: remapLibraryIds(exercise.sentenceItemIds, replacements),
-  };
+  return remapExerciseReferences(exercise, replacements);
 }
 
 function hydrateSequences(items: Sequence[]) {
@@ -725,6 +711,8 @@ export default function HomePage() {
   const lastSyncedBackendState = useRef<BackendState | null>(null);
   const localFallbackBaseline = useRef<BackendState | null>(null);
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const backendPendingWrites = useRef(0);
+  const sharingLaunch = useRef(false);
   const granularWritesUnavailable = useRef(false);
   const localMediaRepairing = useRef(false);
   const lastBackendSaveError = useRef("");
@@ -925,13 +913,14 @@ export default function HomePage() {
   useEffect(() => {
     if (!pendingSharedPreviewToken) return;
     let cancelled = false;
-    fetch(`/api/shared-launch/${encodeURIComponent(pendingSharedPreviewToken)}`, { cache: "no-store" })
+    fetchWithTimeout(`/api/shared-launch/${encodeURIComponent(pendingSharedPreviewToken)}`, { cache: "no-store" }, 8000)
       .then(async (response) => {
         if (!response.ok) throw new Error("preview_load_failed");
         return response.json() as Promise<SharedPreviewPayload>;
       })
       .then((payload) => {
         if (cancelled || payload.schemaVersion !== 1 || !payload.exercises?.length || !Array.isArray(payload.library)) throw new Error("invalid_preview");
+        if (validateSharedExercises(payload.exercises, payload.library)) throw new Error("incomplete_preview");
         const plan = compileExercises(payload.exercises, payload.library.filter((item) => !item.deleted));
         if (!plan.length) throw new Error("empty_preview");
         setSharedPreview(payload);
@@ -1099,9 +1088,10 @@ export default function HomePage() {
     if (!libraryLoaded || !exercisesLoaded) return;
     const deduplicated = deduplicateLibraryPlaceholders(library);
     if (!deduplicated.replacements.size) return;
-    setLibrary(deduplicated.items);
-    setExercises((current) => current.map((exercise) => remapExerciseLibraryIds(exercise, deduplicated.replacements)));
-  }, [library, libraryLoaded, exercisesLoaded, setLibrary, setExercises]);
+    if (deduplicated.items.some((item, index) => item !== library[index])) setLibrary(deduplicated.items);
+    const repaired = exercises.map((exercise) => remapExerciseLibraryIds(exercise, deduplicated.replacements));
+    if (repaired.some((exercise, index) => exercise !== exercises[index])) setExercises(repaired);
+  }, [library, exercises, libraryLoaded, exercisesLoaded, setLibrary, setExercises]);
 
   useEffect(() => {
     if (!allLocalDataLoaded || backendInitialized) return;
@@ -1214,7 +1204,18 @@ export default function HomePage() {
     return () => window.clearTimeout(watchdog);
   }, [backendInitialized, backendStatus, backendRetryKey]);
 
+  const settleBackendSaveStatus = useCallback(() => {
+    const baseline = lastSyncedBackendState.current;
+    if (!baseline || !loggedInTherapistId || logoutState !== "idle") return;
+    const current = backendStateForStorage(localBootstrapSnapshot.current);
+    const dirty = Boolean(buildStateChange(baseline, current, crypto.randomUUID(), backendRevision.current));
+    if (!cloudSaveCanSettle(backendPendingWrites.current, backendSaveTimer.current !== null, dirty)) return;
+    clearPendingCloudSave();
+    setBackendStatus((status) => status === "syncing" ? "ready" : status);
+  }, [loggedInTherapistId, logoutState]);
+
   const enqueueBackendSave = useCallback((snapshot: BackendState) => {
+    backendPendingWrites.current += 1;
     const requestedSnapshot = snapshot;
     let attemptedOperationId = "";
     const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
@@ -1283,7 +1284,7 @@ export default function HomePage() {
           ? syncedSnapshot
           : backendStateForStorage(localBootstrapSnapshot.current);
         const stillDirty = Boolean(buildStateChange(syncedSnapshot, currentSnapshot, crypto.randomUUID(), result.revision));
-        if (stillDirty) setBackendStatus("syncing");
+        if (stillDirty || backendPendingWrites.current > 1 || backendSaveTimer.current !== null) setBackendStatus("syncing");
         else {
           clearPendingCloudSave();
           setBackendStatus("ready");
@@ -1291,10 +1292,13 @@ export default function HomePage() {
       }).catch((error) => {
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_failed", operationId: attemptedOperationId, ...saveErrorDetails(error) });
         throw error;
+      }).finally(() => {
+        backendPendingWrites.current -= 1;
+        settleBackendSaveStatus();
       });
     backendSaveQueue.current = task;
     return task;
-  }, [loggedInTherapistId, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
+  }, [loggedInTherapistId, settleBackendSaveStatus, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
@@ -1309,18 +1313,18 @@ export default function HomePage() {
     if (!baseline) return;
     const pendingChange = buildStateChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current);
     if (!pendingChange) {
-      clearPendingCloudSave();
-      return;
+      const idleTimer = window.setTimeout(settleBackendSaveStatus, 0);
+      return () => window.clearTimeout(idleTimer);
     }
     storePendingCloudSave(pendingChange);
-    window.setTimeout(() => setBackendStatus("syncing"), 0);
+    const statusTimer = window.setTimeout(() => setBackendStatus("syncing"), 0);
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = window.setTimeout(() => {
       backendSaveTimer.current = null;
       void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
     }, 500);
-    return () => { if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
-  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, enqueueBackendSave]);
+    return () => { window.clearTimeout(statusTimer); if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
+  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, enqueueBackendSave, settleBackendSaveStatus]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
@@ -1555,10 +1559,32 @@ export default function HomePage() {
     }
   };
   const shareLaunch = async (launch: SharedLaunch, title: string) => {
+    if (sharingLaunch.current) return;
+    sharingLaunch.current = true;
     let url = "";
     try {
-      const response = await fetch("/api/shared-launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(launch) });
-      if (!response.ok) throw new Error("share_create_failed");
+      if (!backendInitialized || !loggedInTherapistId || logoutState !== "idle" || !navigator.onLine) throw new Error("share_sync_pending");
+      if (backendSaveTimer.current !== null) window.clearTimeout(backendSaveTimer.current);
+      backendSaveTimer.current = null;
+      const revision = await prepareCloudShare(
+        () => enqueueBackendSave(backendStateForStorage(localBootstrapSnapshot.current)),
+        () => {
+          const baseline = lastSyncedBackendState.current;
+          return !baseline || Boolean(buildStateChange(baseline, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current));
+        },
+        () => backendRevision.current,
+      );
+      const response = await fetchWithTimeout("/api/shared-launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...launch, revision }) }, 8000);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({})) as { error?: string; exerciseId?: string };
+        if (error.error === "incomplete_exercise") {
+          const exercise = exercises.find((item) => item.id === error.exerciseId);
+          notify(exercise ? `Controlla “${exercise.title}”: contiene elementi mancanti o una configurazione non utilizzabile.` : "La sequenza contiene un esercizio incompleto. Controlla immagini e configurazione prima di condividere.");
+          return;
+        }
+        if (response.status === 409) throw new Error("share_sync_pending");
+        throw new Error("share_create_failed");
+      }
       const { token, expiresAt } = await response.json() as { token: string; expiresAt: number };
       url = buildSharedPreviewUrl(window.location.origin, token);
       const expiryLabel = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric" }).format(expiresAt);
@@ -1571,9 +1597,9 @@ export default function HomePage() {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      if (!url) { notify("Non è stato possibile creare il link"); return; }
+      if (!url) { notify(error instanceof Error && error.message === "share_sync_pending" ? "Condivisione sospesa: completa il salvataggio cloud e riprova." : "Non è stato possibile creare il link. Le modifiche devono essere salvate nel cloud."); return; }
       try { await navigator.clipboard.writeText(url); notify("Link copiato negli appunti"); } catch { notify("Non è stato possibile copiare il link"); }
-    }
+    } finally { sharingLaunch.current = false; }
   };
   const navigate = (next: View) => {
     if (sessionActive && next !== "session") { notify("Per uscire tieni premuto Termina per 4 secondi"); return; }
@@ -2114,8 +2140,12 @@ function SessionRecoveryDialog({ saved, childName, onResume, onDiscard }: { save
   return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="session-recovery-title"><div className="modal recovery-modal"><span className="auth-icon"><RefreshCw /></span><span className="eyebrow">SESSIONE INTERROTTA</span><h2 id="session-recovery-title">Riprendere da dove eri rimasto?</h2><p><strong>{saved.descriptor.title}</strong> con {childName}, passaggio {position} di {saved.plan.length}.</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={onDiscard}>Scarta</button><button className="primary-button" type="button" onClick={onResume}><Play />Riprendi</button></div></div></div>;
 }
 
+function UnavailableExercise({ onExit }: { onExit: () => void }) {
+  return <main className="auth-page"><section className="login-card" role="alert"><h1>Esercizio incompleto</h1><p>La parola o una delle immagini non è disponibile. Controlla la configurazione prima di riprovare.</p><button className="primary-button" onClick={onExit}>Chiudi attività</button></section></main>;
+}
+
 function PublicPreviewError() {
-  return <main className="auth-page public-preview-error"><section className="login-card"><div className="auth-icon"><AlertTriangle /></div><span className="eyebrow">ANTEPRIMA</span><h1>Link non disponibile</h1><p>Questa anteprima non esiste più oppure il collegamento non è valido.</p><button className="primary-button large" onClick={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }}>Torna alla home</button></section></main>;
+  return <main className="auth-page public-preview-error"><section className="login-card"><div className="auth-icon"><AlertTriangle /></div><span className="eyebrow">ANTEPRIMA</span><h1>Link non disponibile</h1><p>Questa anteprima è incompleta, scaduta o non disponibile. Chiedi a chi l’ha creata di controllare gli esercizi e generare un nuovo link.</p><button className="primary-button large" onClick={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }}>Torna alla home</button></section></main>;
 }
 
 /* QRCode generates an in-memory data URL; Next Image cannot optimize this transient asset. */
@@ -2535,7 +2565,7 @@ function SessionView({ active, complete, fromSharedLink, isTrial, remoteConnecte
   if (exercise && exerciseKind(exercise) === "naming") return <NamingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "number-quantity") return <NumberQuantitySession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} onAttempt={onClassificationAttempt} onComplete={onClassificationComplete} onHelp={onHelp} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
   if (exercise && exerciseKind(exercise) === "sentence-matching" && prompt) return <SentenceMatchingSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} exercise={exercise} prompt={prompt} library={library} mode={mode} manualAdvance={remoteConnected} currentIndex={currentIndex} total={total} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
-  if (!exercise || !prompt) return null;
+  if (!exercise || !prompt) return <UnavailableExercise onExit={onExit} />;
   return <RecognitionSession key={`${exercise.id}:${currentIndex}`} previewLabel={previewLabel} mode={mode} manualAdvance={remoteConnected} presentation={presentation} currentIndex={currentIndex} total={total} exercise={exercise} prompt={prompt} library={library} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={onChoose} onHelp={onHelp} onNext={onNext} onExit={onExit} soundEffects={soundEffects} onToggleSound={onToggleSound} {...navigationProps} />;
 }
 

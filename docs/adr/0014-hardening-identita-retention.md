@@ -24,6 +24,14 @@ La review ha rilevato che i PIN brevi usavano SHA-256 senza fattore di costo, il
 - Il rate limit è condiviso tra istanze Worker perché persistito in D1 e non registra email o indirizzi di rete in chiaro.
 - La revoca è effettiva alla richiesta successiva e non dipende dalle cache del browser o della CDN.
 
+## Coerenza delle condivisioni — 26 ottobre 2026
+
+Il client completa i salvataggi pendenti prima di condividere e invia la revisione confermata. Il server rifiuta una revisione diversa senza emettere un token; i client precedenti senza revisione mantengono compatibilità, ma restano soggetti alla validazione dei contenuti. Ogni attività deve avere riferimenti utilizzabili e produrre turni validi, senza saltare silenziosamente esercizi rotti o modificare modalità e filtri dell’adulto.
+
+La riparazione automatica riguarda solo i segnaposto demo archiviati con una sostituzione univoca: stessa parola normalizzata, stessa categoria e una sola foto caricata attiva. Non ripristina media cancellati, non sceglie fra fotografie ambigue, non modifica tentativi o storico e non estende l’accesso ai media. Gli esercizi live corretti seguono la normale coda autorizzata; la creazione di un nuovo snapshot applica la stessa regola prima di selezionare i soli elementi condivisi. La lettura pubblica non consulta la libreria privata per “riparare” link esistenti.
+
+Gli snapshot emessi restano immutabili. Un link incompleto preesistente risponde `422 incomplete_preview` ed è mostrato come non utilizzabile, invece di una pagina vuota; il proprietario deve generarne uno nuovo. Nessuna modifica a scadenza, revoca, R2, dati personali o schema D1. Test API locali con dati sintetici in `pnpm test:sharing`.
+
 ## Verifica
 
 Test automatici coprono compatibilità dei PIN, sale casuale, soglie e limite del blocco, scadenza/revoca e migrazione dei link esistenti. La visibilità dello stato è coperta da casi amministratore e terapista.

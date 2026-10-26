@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 23 ottobre 2026
+**Aggiornato:** 26 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -144,6 +144,13 @@
 10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
+
+- Condivisione coerente con l’editor: flush della coda seriale e del debounce prima del POST, controllo che non restino modifiche locali e revisione attesa verificata dal server. Salvataggi falliti, modifiche sopraggiunte e revisioni concorrenti bloccano la creazione del link; le impostazioni casuale/fisso e l’origine dei distrattori non vengono cambiate.
+- Riferimenti storici ai segnaposto: recupero soltanto se il vecchio elemento demo, già archiviato, ha una sola foto caricata attiva della stessa parola e categoria; aggiornamento idempotente degli esercizi live tramite normale autosalvataggio e dei nuovi snapshot al momento della creazione. Nessun ripristino di foto reali cancellate, sostituzione ambigua o modifica allo storico. Mappa IL/LA condivisa fra sessioni e validazione server.
+- Anteprime validate per ogni attività prima della creazione e dell’avvio; errore esplicito per elementi mancanti, configurazioni senza turni e snapshot vecchi incompleti. Timeout del caricamento a 8 secondi e schermata di errore al posto del render vuoto. I link già emessi restano immutabili: per incorporare correzioni bisogna ricondividere. Nessuna modifica diretta al database di produzione o ampliamento dei permessi.
+- Stato di sincronizzazione: conteggio dei task seriali, riconciliazione anche dopo operazioni senza modifiche e cancellazione del timer differito “Salvataggio…” quando la schedulazione cambia. Il giallo si può chiudere solo con coda e debounce vuoti e copia locale uguale all’ultima confermata; non viene forzato il verde in presenza di dati pendenti. Cache PWA v38, nessun nuovo APK o migrazione.
+- Verifiche condivisione: 197 test superati, typecheck e build verdi, lint con i tre avvisi `<img>` preesistenti. `pnpm test:sharing` passa sul Worker completo/D1 sintetico: recupero segnaposto, modifica/rimozione prima della condivisione, revisione attesa, modalità casuale/mixed, accesso pubblico senza identità privata, contenuti non validi e immutabilità dei vecchi link. Resa browser/dispositivo da confermare.
+- Passano anche i test completi `test:auth`, `test:state-read` e `test:realtime --app-build`; lo stato storico resta invariato e nessun contenuto reale è stato inserito nelle prove o aggiornato direttamente in produzione.
 
 - Compatibilità PIN Cloudflare: parametro dei PIN nuovi/reimpostati portato a 100.000 iterazioni dopo approvazione esplicita, mantenendo algoritmo, sale, controllo server e rate limit. Gli hash a 120.000 restano intatti e richiedono reimpostazione amministrativa, segnalata nei profili e con `pin_reset_required` nel login; non sono trattati come PIN errato e non creano sessioni. Si può reimpostare lo stesso PIN tramite il normale salvataggio cloud. Nessun reset diretto di credenziali, schema o statistiche; cache PWA v37. ADR 0014 aggiornato con compromesso e procedura.
 - Test PBKDF2 estesi con un limite di produzione esplicito, assente nel runtime locale standard. La prova API include il recupero di un profilo sintetico a 120.000 tramite modifica amministrativa e successivo login a 100.000, senza cambiare il PIN in chiaro né incrementare gli errori per un formato incompatibile.
