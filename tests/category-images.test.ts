@@ -53,6 +53,7 @@ test("i turni congelano solo le associazioni richieste e non estraggono i simbol
 });
 test("i simboli dedicati sono esclusi da avvio rapido e riconoscimento", () => {
   assert.deepEqual(availableForRecognition(library, "words").map((item) => item.id), ["dog", "apple"]);
+  assert.deepEqual(compileSessionPlan([{ ...exercise, kind: "naming", rounds: 10 }], library, { articleFor: () => null }).flatMap((item) => item.namingItemIds).sort(), ["apple", "dog"]);
   assert.deepEqual(filterQuickCandidates(library, { activity: "word-categories", selection: "all", categoryNames: ["Animali", "Cibi", "Simboli"], itemIds: [] }).map((item) => item.id), ["dog", "apple"]);
 });
 test("il mapping passa dalle modifiche granulari, anche con rimozione esplicita", () => {
