@@ -9,6 +9,7 @@ import { SessionAdvanceGuard } from "./domain/session-advance";
 import { activityNavigation } from "./domain/session-navigation";
 import { PENDING_CONTROLLER_LAUNCH_KEY, resolveControllerLaunch } from "./domain/controller-launch";
 import { CELEBRATION_DURATION_MS } from "./domain/celebration";
+import { shouldDeferAppUpdate } from "./domain/app-update";
 import { articleFor } from "./domain/article-classification";
 import { remapExerciseReferences } from "./domain/exercise-library-references";
 import { validateSharedExercises } from "./domain/shared-preview-validation";
@@ -761,7 +762,7 @@ export default function HomePage() {
 
   useEffect(() => {
     sessionActiveRef.current = sessionActive || sessionReady;
-    if (!sessionActive && !sessionReady && !controllerActiveRef.current && pendingAppReload.current) window.location.reload();
+    if (pendingAppReload.current && !shouldDeferAppUpdate(window.location.search, sessionActiveRef.current, controllerActiveRef.current)) window.location.reload();
   }, [sessionActive, sessionReady, controllerToken]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
@@ -786,7 +787,7 @@ export default function HomePage() {
       const version = typeof event.data?.version === "string" ? event.data.version : "";
       if (event.data?.type !== "lettura-globale:update-ready" || !version || sessionStorage.getItem("lg-active-app-version") === version) return;
       sessionStorage.setItem("lg-active-app-version", version);
-      if (sessionActiveRef.current || controllerActiveRef.current) pendingAppReload.current = true;
+      if (shouldDeferAppUpdate(window.location.search, sessionActiveRef.current, controllerActiveRef.current)) pendingAppReload.current = true;
       else window.location.reload();
     };
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
@@ -912,7 +913,8 @@ export default function HomePage() {
         setSessionActive(true);
         setView("session");
         setSharedPreviewStatus("ready");
-        window.history.replaceState({}, "", window.location.pathname);
+        // Keep the public token until explicit exit: refresh, first-install SW
+        // updates and copying the address must reopen the preview, not adult login.
       })
       .catch(() => { if (!cancelled) setSharedPreviewStatus("error"); });
     return () => { cancelled = true; };
