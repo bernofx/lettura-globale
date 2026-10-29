@@ -20,6 +20,10 @@ const subjects = [
   { id: "cane", label: "Il cane" },
   { id: "bimbo", label: "Il bimbo" },
   { id: "mamma", label: "La mamma" },
+  { id: "coniglio", label: "Il coniglio" },
+  { id: "cavallo", label: "Il cavallo" },
+  { id: "panda", label: "Il panda" },
+  { id: "scimmia", label: "La scimmia" },
 ] as const;
 
 const verbs = ["mangia", "dorme", "corre", "salta", "gioca"] as const;

@@ -1,10 +1,14 @@
 import { matchesSyllableFilter, type SyllableFilter } from "./syllabification.ts";
+import { isWordCategoryContent } from "./word-category-content.ts";
 
 export type ActivityCandidate = {
   id: string;
   word: string;
   category: string;
   syllableCount?: number;
+  contentKind?: "word" | "sentence";
+  phraseStructure?: string;
+  categorySymbolOnly?: boolean;
 };
 
 export type RandomRecognitionConfig = {
@@ -90,6 +94,6 @@ export function createRandomRecognitionRounds(candidates: ActivityCandidate[], c
 
 export function pickCategoryRoundIds(candidates: ActivityCandidate[], allowedIds: string[] | undefined, rounds: number, random: () => number = Math.random) {
   const allowed = allowedIds?.length ? new Set(allowedIds) : null;
-  const pool = candidates.filter((item) => !allowed || allowed.has(item.id));
+  const pool = candidates.filter((item) => isWordCategoryContent(item) && (!allowed || allowed.has(item.id)));
   return promptOrder(pool, Math.min(Math.max(1, rounds), pool.length), random).map((item) => item.id);
 }

@@ -89,10 +89,11 @@ try {
   assert.equal((await oldResponse.json()).error, "incomplete_preview");
   assert.equal(await db.prepare("SELECT payload FROM shared_launches WHERE token=?").bind(oldToken).first("payload"), JSON.stringify(brokenPayload), "old snapshots stay immutable");
   const categoriesBefore = await (await read()).json();
-  const categoryExercise = { id: "categories", title: "Categorie visuali", kind: "word-categories", optionIds: [], categoryNames: ["Animali", "Cibi"], categoryItemIds: ["new-dog", "mela"], categoryShowSymbols: true, categoryShowTargetImage: true, categorySpeakWord: true, rounds: 2, updatedAt: new Date().toISOString() };
+  const categoryExercise = { id: "categories", title: "Categorie visuali", kind: "word-categories", optionIds: [], categoryNames: ["Animali", "Cibi", "Azioni"], categoryItemIds: ["new-dog", "mela", "sentence-test"], categoryShowSymbols: true, categoryShowTargetImage: true, categorySpeakWord: true, rounds: 2, updatedAt: new Date().toISOString() };
   const categoryState = { ...categoriesBefore.state,
     categorySymbols: { Animali: "symbol-animals", Cibi: "symbol-food", "Non condivisa": "private-symbol" },
     library: [...categoriesBefore.state.library,
+      { id: "sentence-test", word: "La mamma mangia", category: "Azioni", contentKind: "sentence", phraseStructure: "subject-verb", subject: "La mamma", verb: "mangia", image: "/images/actions/mamma-mangia.webp", source: "Test", license: "CC0", author: "Demo" },
       { id: "symbol-animals", word: "Animali", category: "Simboli", remoteImageId: "test-symbol", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
       { id: "symbol-food", word: "Cibi", category: "Simboli", emoji: "🍽", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
       { id: "private-symbol", word: "Privato", category: "Privato", emoji: "📕", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" }],
@@ -110,6 +111,9 @@ try {
   const categoryPublic = await request(`/api/shared-launch/${categoryToken}`);
   assert.equal(categoryPublic.status, 200);
   const categoryPayload = await categoryPublic.json();
+  assert.deepEqual(categoryPayload.exercises[0].categoryNames, ["Animali", "Cibi"]);
+  assert.deepEqual(categoryPayload.exercises[0].categoryItemIds, ["new-dog", "mela"]);
+  assert.equal(categoryPayload.library.some((item) => item.id === "sentence-test"), false, "sentence scenes never enter a category preview");
   assert.deepEqual(categoryPayload.exercises[0].categorySymbolIds, { Animali: "symbol-animals", Cibi: "symbol-food" });
   assert.equal(categoryPayload.library.some((item) => item.id === "private-symbol"), false);
   assert.ok(categoryPayload.library.find((item) => item.id === "symbol-animals").image.includes(categoryToken));

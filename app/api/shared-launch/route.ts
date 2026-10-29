@@ -5,6 +5,7 @@ import { sharedLaunches, userStates } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
 import { hasArtwork } from "../../domain/library-availability";
+import { isWordCategoryContent, wordCategoryNames } from "../../domain/word-category-content";
 import { sharedLaunchExpiresAt } from "../../domain/shared-launch-policy";
 import { deduplicateLibraryPlaceholders, type DeduplicableLibraryItem } from "../../domain/library-deduplication";
 import { remapExerciseReferences } from "../../domain/exercise-library-references";
@@ -85,18 +86,24 @@ export async function POST(request: Request) {
   const repaired = deduplicateLibraryPlaceholders((state.library ?? []) as (SessionPlanLibraryItem & DeduplicableLibraryItem)[]);
   for (let index = 0; index < selectedExercises.length; index++) selectedExercises[index] = remapExerciseReferences(selectedExercises[index], repaired.replacements);
   const availableLibrary = repaired.items.filter((item) => !item.deleted);
+  const availableById = new Map(availableLibrary.map((item) => [item.id, item]));
   const targetLibrary = availableLibrary.filter((item) => !item.categorySymbolOnly);
   const referencedIds = new Set<string>();
   for (const exercise of selectedExercises) {
     if (exercise.kind === "articles") exercise.articleItemIds?.forEach((id) => referencedIds.add(id));
     else if (exercise.kind === "word-categories") {
+      exercise.categoryNames = wordCategoryNames(availableLibrary, exercise.categoryNames ?? []);
+      if (exercise.categoryItemIds?.length) {
+        exercise.categoryItemIds = exercise.categoryItemIds.filter((id) => !availableById.has(id) || isWordCategoryContent(availableById.get(id)!));
+        if (!exercise.categoryItemIds.length) return Response.json({ error: "incomplete_exercise", exerciseId: exercise.id, reason: "empty_exercise" }, { status: 422 });
+      }
       if (exercise.categoryShowSymbols) {
         const symbols = snapshotCategorySymbols(exercise.categoryNames, state.categorySymbols);
         exercise.categorySymbolIds = symbols;
         Object.values(symbols).forEach((id) => referencedIds.add(id));
       }
       if (exercise.categoryItemIds?.length) exercise.categoryItemIds.forEach((id) => referencedIds.add(id));
-      else availableLibrary.filter((item) => !item.categorySymbolOnly && exercise.categoryNames?.includes(item.category)).forEach((item) => referencedIds.add(item.id));
+      else availableLibrary.filter((item) => isWordCategoryContent(item) && exercise.categoryNames?.includes(item.category)).forEach((item) => referencedIds.add(item.id));
     }
     else if (exercise.kind === "naming") {
       if (exercise.namingItemIds?.length) exercise.namingItemIds.forEach((id) => referencedIds.add(id));

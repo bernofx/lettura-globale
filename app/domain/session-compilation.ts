@@ -1,4 +1,5 @@
 import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor } from "./activity-generation.ts";
+import { availableForWordCategories, wordCategoryNames } from "./word-category-content.ts";
 import { availableForRecognition, hasArtwork, type LibraryMediaItem } from "./library-availability.ts";
 import type { SyllableFilter } from "./syllabification.ts";
 import { createQuantityRounds, type QuantityObject, type QuantityObjectSet } from "./quantity-exercise.ts";
@@ -120,12 +121,14 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
     }
 
     if (kind === "word-categories") {
-      const categorySymbolIds = snapshotCategorySymbols(exercise.categoryNames, options.categorySymbols ?? exercise.categorySymbolIds);
-      if (categoryImageError(exercise, allLibrary, categorySymbolIds)) return [];
-      const categories = new Set(exercise.categoryNames ?? []);
-      const candidates = library.filter((item) => categories.has(item.category));
+      const categoryNames = wordCategoryNames(library, exercise.categoryNames ?? []);
+      if (categoryNames.length < 2) return [];
+      const categorySymbolIds = snapshotCategorySymbols(categoryNames, options.categorySymbols ?? exercise.categorySymbolIds);
+      if (categoryImageError({ ...exercise, categoryNames }, allLibrary, categorySymbolIds)) return [];
+      const categories = new Set(categoryNames);
+      const candidates = availableForWordCategories(library).filter((item) => categories.has(item.category));
       return pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6, random)
-        .map((id, index) => round(index, { categoryItemIds: [id], ...(exercise.categoryShowSymbols ? { categorySymbolIds } : {}) }));
+        .map((id, index) => round(index, { categoryNames, categoryItemIds: [id], ...(exercise.categoryShowSymbols ? { categorySymbolIds } : {}) }));
     }
 
     if (kind === "number-quantity") {

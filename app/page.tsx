@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy
 import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { categoryImageError, type CategorySymbols } from "./domain/category-images";
+import { availableForWordCategories, isWordCategoryContent, wordCategoryNames } from "./domain/word-category-content";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
 import { activityNavigation } from "./domain/session-navigation";
@@ -1377,7 +1378,8 @@ export default function HomePage() {
     ...exercise,
     optionIds: exercise.optionIds.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && (exercise.presentation === "words" || hasArtwork(item))); }),
     articleItemIds: exercise.articleItemIds?.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && hasArtwork(item) && articleFor(item)); }),
-    categoryItemIds: exercise.categoryItemIds?.filter((id) => visibleIds.has(id)),
+    categoryItemIds: exercise.categoryItemIds?.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && isWordCategoryContent(item)); }),
+    categoryNames: exerciseKind(exercise) === "word-categories" ? wordCategoryNames(visibleLibrary, exercise.categoryNames ?? []) : exercise.categoryNames,
     recognitionItemIds: exercise.recognitionItemIds?.filter((id) => visibleIds.has(id)),
     sentenceItemIds: exercise.sentenceItemIds?.filter((id) => visibleIds.has(id)),
     namingItemIds: exercise.namingItemIds?.filter((id) => { const item = visibleLibraryById.get(id); return Boolean(item && hasArtwork(item)); }),
@@ -2553,8 +2555,8 @@ function SessionView({ categorySymbols = {}, active, complete, fromSharedLink, i
   const [step, setStep] = useState<"choose" | "quick" | "review" | "ready">("choose");
   const [source, setSource] = useState<"sequence" | "quick">("sequence");
   const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
-  const categoryNames = useMemo(() => Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
-  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", matchAutoPronounce: false, quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantitySpeakNumbers: false, quantityErrorless: false, quantityIdleSeconds: 5, sentenceOptionCount: 2, sentenceDifficulty: 1 }));
+  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: wordCategoryNames(library).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", matchAutoPronounce: false, quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantitySpeakNumbers: false, quantityErrorless: false, quantityIdleSeconds: 5, sentenceOptionCount: 2, sentenceDifficulty: 1 }));
+  const categoryNames = useMemo(() => quick.activity === "word-categories" ? wordCategoryNames(library) : Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library, quick.activity]);
   const [quickSearch, setQuickSearch] = useState("");
   const [completionDraft, setCompletionDraft] = useState(completionComment);
   const sortedSequences = useMemo(() => [...sequences].sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.title.localeCompare(b.title, "it")), [sequences]);
@@ -2563,7 +2565,7 @@ function SessionView({ categorySymbols = {}, active, complete, fromSharedLink, i
   const articleLibrary = library.filter((item) => !item.categorySymbolOnly && hasArtwork(item) && articleFor(item));
   const sentenceLibrary = library.filter(isSimpleSentenceScene);
   const quickRequiresArtwork = quick.activity === "naming" || (quick.activity === "recognition" && quick.presentation === "images");
-  const quickBase = quick.activity === "articles" ? articleLibrary : quick.activity === "sentence-matching" ? sentenceLibrary : quickRequiresArtwork ? library.filter((item) => !item.categorySymbolOnly && hasArtwork(item)) : library.filter((item) => !item.categorySymbolOnly);
+  const quickBase = quick.activity === "word-categories" ? availableForWordCategories(library) : quick.activity === "articles" ? articleLibrary : quick.activity === "sentence-matching" ? sentenceLibrary : quickRequiresArtwork ? library.filter((item) => !item.categorySymbolOnly && hasArtwork(item)) : library.filter((item) => !item.categorySymbolOnly);
   const quickSelectable = quick.activity === "word-categories" ? quickBase.filter((item) => quick.categoryNames.includes(item.category)) : quickBase;
   const normalizedQuickSearch = quickSearch.trim().toLocaleLowerCase("it-IT");
   const filteredQuickSelectable = quickSelectable.filter((item) => !normalizedQuickSearch || `${item.word} ${item.category}`.toLocaleLowerCase("it-IT").includes(normalizedQuickSearch));
@@ -3078,9 +3080,9 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
 }
 
 function WordCategorySession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
-  const categories = useMemo(() => exercise.categoryNames ?? [], [exercise.categoryNames]);
+  const categories = useMemo(() => wordCategoryNames(library, exercise.categoryNames ?? []), [exercise.categoryNames, library]);
   const [categoryOrder, setCategoryOrder] = useState(() => shuffled(categories));
-  const candidates = useMemo(() => library.filter((item) => !item.categorySymbolOnly && categories.includes(item.category)), [library, categories]);
+  const candidates = useMemo(() => availableForWordCategories(library).filter((item) => categories.includes(item.category)), [library, categories]);
   const [initialIds] = useState(() => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
   const [remainingIds, setRemainingIds] = useState(initialIds);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -3360,12 +3362,12 @@ function ExerciseBuilder({ categorySymbols, kind, exercise, library, onClose, on
   const [itemSearch, setItemSearch] = useState("");
   const articleCandidates = useMemo(() => library.filter((item) => hasArtwork(item) && articleFor(item)), [library]);
   const [articleItemIds, setArticleItemIds] = useState<string[]>(exercise?.articleItemIds ?? articleCandidates.slice(0, 6).map((item) => item.id));
-  const availableCategories = useMemo(() => Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library]);
+  const availableCategories = useMemo(() => kind === "word-categories" ? wordCategoryNames(library) : Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [kind, library]);
   const defaultCategoryNames = ["Cibi", "Animali", "Trasporti"].filter((category) => availableCategories.includes(category));
   const [categorySpeakWord, setCategorySpeakWord] = useState(exercise?.categorySpeakWord ?? false);
   const [categoryShowTargetImage, setCategoryShowTargetImage] = useState(exercise?.categoryShowTargetImage ?? false);
   const [categoryShowSymbols, setCategoryShowSymbols] = useState(exercise?.categoryShowSymbols ?? false);
-  const [categoryNames, setCategoryNames] = useState<string[]>(exercise?.categoryNames ?? defaultCategoryNames);
+  const [categoryNames, setCategoryNames] = useState<string[]>(() => wordCategoryNames(library, exercise?.categoryNames ?? defaultCategoryNames));
   const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? defaultCategoryNames.flatMap((category) => library.filter((item) => item.category === category).slice(0, 3).map((item) => item.id)));
   const [rounds, setRounds] = useState(exercise?.rounds ?? 6);
   const [quantityMin, setQuantityMin] = useState(exercise?.quantityMin ?? 1);
@@ -3441,7 +3443,7 @@ function ExerciseBuilder({ categorySymbols, kind, exercise, library, onClose, on
     return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Categorie IL / LA</h2><p>Scegli le immagini disponibili e quante mostrarne, una alla volta, durante ogni esecuzione.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Classifica IL o LA" /></label><CorrectMatchPronunciation kind="articles" checked={autoPronounce} onChange={setAutoPronounce} /><label>Numero di turni<NumericField min={1} max={Math.max(1, selectedIds.length)} value={finalRounds} onValueChange={(nextValue) => setRounds(nextValue)} /></label><div className="builder-label">Immagini da classificare <span>{selectedIds.length} scelte</span></div>{itemSearchField}<div className="builder-grid">{articleCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => toggleArticleItem(item.id)} aria-pressed={selectedIds.includes(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")} · {articleFor(item)}</span>{selectedIds.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!selectedIds.length} onClick={saveArticleExercise}><Save />Salva esercizio</button></div></div></div>;
   }
   if (kind === "word-categories") {
-    const eligibleItems = library.filter((item) => !item.categorySymbolOnly && categoryNames.includes(item.category));
+    const eligibleItems = availableForWordCategories(library).filter((item) => categoryNames.includes(item.category));
     const selectedIds = categoryItemIds.filter((id) => eligibleItems.some((item) => item.id === id));
     const toggleCategory = (category: string) => setCategoryNames((current) => current.includes(category) ? current.filter((value) => value !== category) : current.length < 4 ? [...current, category] : current);
     const toggleCategoryItem = (id: string) => setCategoryItemIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
