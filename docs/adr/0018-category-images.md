@@ -47,3 +47,17 @@ Test dominio, SQLite storico e Worker/Miniflare completo: default, round-trip,
 scritture granulari, esclusione dei simboli dai pool, blocco delle immagini
 mancanti, snapshot immutabili e perimetro pubblico. Verifica visiva/touch e
 ascolto sui dispositivi restano parte della QA sul campo.
+
+## Aggiornamento approvato — 29 ottobre 2026
+
+Su richiesta dell’utente, dodici categorie standard ricevono simboli generici
+dedicati, con associazioni fisse e modificabili. I WebP generati con ImageGen sono
+distribuiti come asset statici con metadati di fonte e licenza; le schede hanno
+`categorySymbolOnly` e non entrano nei pool degli esercizi.
+
+Le associazioni mancanti si inizializzano soltanto all’introduzione delle rispettive
+schede nel catalogo dell’account. L’esistenza degli ID persistiti, anche archiviati,
+impedisce di reintrodurre associazioni successivamente rimosse. Le scelte precedenti
+non sono sostituite; categorie personalizzate restano esplicite e senza fallback.
+Catalogo e mappa passano dalla coda cloud esistente, insieme e senza scritture D1
+dirette. I link già creati rimangono immutabili. Nessuna nuova migrazione.

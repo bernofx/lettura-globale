@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy
 import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { categoryImageError, type CategorySymbols } from "./domain/category-images";
+import { categorySymbolCatalog, seedDefaultCategorySymbols } from "./domain/category-symbol-catalog";
 import { availableForWordCategories, isWordCategoryContent, wordCategoryNames } from "./domain/word-category-content";
 import { filterQuickCandidates, quickStartIsValid } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
@@ -148,6 +149,7 @@ function clearPendingCloudSave() {
 }
 
 const stockItems: LibraryItem[] = [
+  ...categorySymbolCatalog,
   ...actionSceneCatalog,
   { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "gatto", word: "Gatto", image: "/images/demo/gatto.png", category: "Animali", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
@@ -306,7 +308,7 @@ function hydrateLibrary(items: LibraryItem[]) {
     const demoItem = stockItems.find((candidate) => candidate.id === item.id);
     const hydratedItem = demoItem?.image && !item.privateUpload ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
     const normalizedItem = { ...hydratedItem, category: normalizeLearningCategory(hydratedItem.category) };
-    return normalizedItem.contentKind === "sentence" ? normalizedItem : hydrateSyllables(normalizedItem);
+    return normalizedItem.contentKind === "sentence" || normalizedItem.categorySymbolOnly ? normalizedItem : hydrateSyllables(normalizedItem);
   });
 }
 
@@ -709,7 +711,7 @@ export default function HomePage() {
   const [sessionMode, setSessionMode] = useState<Mode>("test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [soundVolume, setSoundVolume] = useStoredState<number>("lg-sound-volume", 100, (saved) => Math.min(100, Math.max(0, Number(saved) || 0)));
-  const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", {});
+  const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
@@ -1028,7 +1030,7 @@ export default function HomePage() {
       setHelps(saved.helps ?? []);
       setSessionHistory(saved.sessionHistory ?? []);
       setAppearance(hydrateAppearance(saved.appearance));
-      setCategorySymbols(saved.categorySymbols ?? {});
+      setCategorySymbols(seedDefaultCategorySymbols(saved.categorySymbols ?? {}, saved.library ?? []));
       if (saved.soundPreferences) setSoundPreferences(hydrateSoundPreferences(saved.soundPreferences));
       backendHydrating.current = false;
       setBackendStatus("ready");
@@ -1132,7 +1134,7 @@ export default function HomePage() {
         setHelps(restoredState.helps ?? []);
         setSessionHistory(restoredState.sessionHistory ?? []);
         setAppearance(hydrateAppearance(restoredState.appearance));
-        setCategorySymbols(restoredState.categorySymbols ?? {});
+        setCategorySymbols(seedDefaultCategorySymbols(restoredState.categorySymbols ?? {}, restoredState.library ?? []));
         setSoundPreferences(hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences));
         backendHydrating.current = false;
         setBackendInitialized(true);
@@ -1150,7 +1152,7 @@ export default function HomePage() {
         const remote = await uploadRemoteImage(crypto.randomUUID(), localImage);
         migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
       }
-      const migrated: BackendState = { ...local, library: migratedLibrary };
+      const migrated: BackendState = { ...local, library: migratedLibrary, categorySymbols: seedDefaultCategorySymbols(local.categorySymbols ?? {}, []) };
       const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(result.revision) }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
       if (!saveResponse.ok) throw new Error("backend_migration_failed");
       const saveResult = await saveResponse.json() as { revision: number };
@@ -1158,6 +1160,7 @@ export default function HomePage() {
       backendRevision.current = saveResult.revision;
       lastSyncedBackendState.current = backendStateForStorage(migrated);
       setLibrary(migratedLibrary);
+      setCategorySymbols(migrated.categorySymbols ?? {});
       backendHydrating.current = false;
       setBackendInitialized(true);
       setBackendStatus("ready");
@@ -1255,7 +1258,7 @@ export default function HomePage() {
           setHelps(syncedSnapshot.helps ?? []);
           setSessionHistory(syncedSnapshot.sessionHistory ?? []);
           setAppearance(hydrateAppearance(syncedSnapshot.appearance));
-          setCategorySymbols(syncedSnapshot.categorySymbols ?? {});
+          setCategorySymbols(seedDefaultCategorySymbols(syncedSnapshot.categorySymbols ?? {}, syncedSnapshot.library ?? []));
           setSoundPreferences(hydrateSoundPreferences(syncedSnapshot.soundPreferences));
           backendHydrating.current = false;
         }

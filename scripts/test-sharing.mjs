@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildStateChange } from "../app/domain/state-changes.ts";
+import { categorySymbolCatalog, seedDefaultCategorySymbols } from "../app/domain/category-symbol-catalog.ts";
 
 const require = createRequire(import.meta.resolve("wrangler/package.json"));
 const { Miniflare } = require("miniflare");
@@ -91,8 +92,9 @@ try {
   const categoriesBefore = await (await read()).json();
   const categoryExercise = { id: "categories", title: "Categorie visuali", kind: "word-categories", optionIds: [], categoryNames: ["Animali", "Cibi", "Azioni"], categoryItemIds: ["new-dog", "mela", "sentence-test"], categoryShowSymbols: true, categoryShowTargetImage: true, categorySpeakWord: true, rounds: 2, updatedAt: new Date().toISOString() };
   const categoryState = { ...categoriesBefore.state,
-    categorySymbols: { Animali: "symbol-animals", Cibi: "symbol-food", "Non condivisa": "private-symbol" },
+    categorySymbols: { ...seedDefaultCategorySymbols({}, categoriesBefore.state.library), Animali: "symbol-animals", Cibi: "symbol-food", "Non condivisa": "private-symbol" },
     library: [...categoriesBefore.state.library,
+      ...categorySymbolCatalog,
       { id: "sentence-test", word: "La mamma mangia", category: "Azioni", contentKind: "sentence", phraseStructure: "subject-verb", subject: "La mamma", verb: "mangia", image: "/images/actions/mamma-mangia.webp", source: "Test", license: "CC0", author: "Demo" },
       { id: "symbol-animals", word: "Animali", category: "Simboli", remoteImageId: "test-symbol", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
       { id: "symbol-food", word: "Cibi", category: "Simboli", emoji: "🍽", categorySymbolOnly: true, source: "Test", license: "CC0", author: "Demo" },
