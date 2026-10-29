@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BALLOON_COLORS, CELEBRATION_DURATION_MS, popCelebrationBalloon } from "../app/domain/celebration.ts";
+import { BALLOON_COUNT, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, popCelebrationBalloon } from "../app/domain/celebration.ts";
 
 test("ogni palloncino scoppia una volta sola senza modificare lo stato precedente", () => {
   const initial = new Set<number>();
@@ -13,8 +13,23 @@ test("ogni palloncino scoppia una volta sola senza modificare lo stato precedent
 
 test("si possono scoppiare tutti i palloncini, senza cambiare la durata della festa", () => {
   let popped: ReadonlySet<number> = new Set();
-  for (let index = 0; index < BALLOON_COLORS.length; index++) popped = popCelebrationBalloon(popped, index);
-  assert.equal(popped.size, 8);
-  for (const invalid of [-1, 8, 1.5, Number.NaN]) assert.equal(popCelebrationBalloon(popped, invalid), popped);
-  assert.equal(CELEBRATION_DURATION_MS, 6_000);
+  for (let index = 0; index < BALLOON_COUNT; index++) popped = popCelebrationBalloon(popped, index);
+  assert.equal(popped.size, 80);
+  for (const invalid of [-1, BALLOON_COUNT, 1.5, Number.NaN]) assert.equal(popCelebrationBalloon(popped, invalid), popped);
+  assert.equal(CELEBRATION_DURATION_MS, 20_000);
+});
+
+test("nuove ondate fino agli ultimi secondi con ID unici e al massimo 32 elementi montati", () => {
+  const all = new Set<number>();
+  for (let wave = 0; wave < BALLOON_WAVE_COUNT; wave++) {
+    const balloons = celebrationBalloons(wave);
+    assert.ok(balloons.length <= 32);
+    const fresh = balloons.filter((item) => item.wave === wave);
+    assert.equal(fresh.length, 8);
+    for (const item of fresh) { assert.equal(all.has(item.id), false); all.add(item.id); }
+  }
+  assert.equal(all.size, BALLOON_COUNT);
+  assert.equal((BALLOON_WAVE_COUNT - 1) * BALLOON_WAVE_INTERVAL_MS, 18_000);
+  assert.deepEqual(celebrationBalloons(1000), celebrationBalloons(BALLOON_WAVE_COUNT - 1));
+  assert.deepEqual(celebrationBalloons(-1), celebrationBalloons(0));
 });

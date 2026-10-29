@@ -18,7 +18,7 @@ export async function playBalloonPop(context: AudioContext | null, volume: numbe
     filter.Q.value = 0.7;
     const start = context.currentTime;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(0.28 * level, start + 0.002);
+    gain.gain.linearRampToValueAtTime(0.56 * level, start + 0.002);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     source.connect(filter);
     filter.connect(gain);

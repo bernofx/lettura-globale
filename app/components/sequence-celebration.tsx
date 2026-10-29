@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, type CSSProperties } from "react";
-import { BALLOON_COLORS, CELEBRATION_DURATION_MS, popCelebrationBalloon } from "../domain/celebration";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { X } from "lucide-react";
+import { BALLOON_COLORS, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, popCelebrationBalloon } from "../domain/celebration";
 
 const confettiColors = ["#ee6f8b", "#ffc65f", "#80cbb1", "#9c8de6", "#76b8ed"];
 const burstDirections = Array.from({ length: 8 }, (_, index) => ({
@@ -10,7 +11,18 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
   "--burst-angle": `${index * 45}deg`,
 } as CSSProperties));
 
-export function SequenceCelebration({ onPop }: { onPop?: () => void }) {
+export function SequenceCelebration({ onPop, onClose }: { onPop?: () => void; onClose: () => void }) {
+  const [wave, setWave] = useState(0);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    closeRef.current?.focus({ preventScroll: true });
+    const timer = window.setInterval(() => setWave((current) => Math.min(current + 1, BALLOON_WAVE_COUNT - 1)), BALLOON_WAVE_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, []);
   const [popped, setPopped] = useState<ReadonlySet<number>>(() => new Set());
   const poppedRef = useRef(popped);
   const pop = (index: number) => {
@@ -20,12 +32,22 @@ export function SequenceCelebration({ onPop }: { onPop?: () => void }) {
     setPopped(next);
     onPop?.();
   };
-  return <div className="sequence-celebration" role="region" aria-label="Festa di fine sequenza: tocca i palloncini per farli scoppiare" style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}>
+  return <div className="sequence-celebration" role="dialog" aria-modal="true" aria-label="Festa di fine sequenza: tocca i palloncini per farli scoppiare" style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
+    onKeyDown={(event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([tabindex="-1"])'));
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!controls.includes(document.activeElement as HTMLButtonElement)) { event.preventDefault(); first?.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }}>
+    <button ref={closeRef} type="button" className="celebration-close" aria-label="Chiudi il gioco dei palloncini" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onClose(); }}><X aria-hidden="true" /></button>
     <div className="celebration-glow" aria-hidden="true" />
     <span className="celebration-instruction">Fai scoppiare i palloncini!</span>
     <span className="celebration-status" role="status" aria-live="polite">{popped.size > 0 ? `${popped.size} palloncini scoppiati` : "Tocca un palloncino"}</span>
-    {BALLOON_COLORS.map((color, index) => <span key={index} className="celebration-balloon-flight" style={{ left: `calc(${(index + 0.5) * 100 / BALLOON_COLORS.length}% - clamp(22px, 3.5vw, 38px))`, animationDelay: `${index * 0.24}s`, "--balloon-color": color, "--rest-y": `${15 + (index % 3) * 17}%` } as CSSProperties}>
-      <button type="button" className={`celebration-balloon ${popped.has(index) ? "popped" : ""}`} disabled={popped.has(index)} aria-label={`Scoppia il palloncino ${index + 1}`}
+    {celebrationBalloons(wave).map(({ id: index, slot, color, wave: flight }) => <span key={index} className="celebration-balloon-flight" data-current-wave={flight === wave} style={{ left: `calc(${((slot + flight * 3) % BALLOON_COLORS.length + 0.5) * 100 / BALLOON_COLORS.length}% - clamp(22px, 3.5vw, 38px))`, animationDelay: `${slot * 0.24}s`, "--balloon-color": color, "--rest-y": `${15 + (slot % 3) * 17}%` } as CSSProperties}>
+      <button type="button" className={`celebration-balloon ${popped.has(index) ? "popped" : ""}`} disabled={popped.has(index)} tabIndex={flight === wave ? 0 : -1} aria-label={`Scoppia il palloncino ${index + 1}`}
         onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); pop(index); }}
         onClick={(event) => { event.stopPropagation(); pop(index); }}>
         <span className="celebration-balloon-body" aria-hidden="true" />

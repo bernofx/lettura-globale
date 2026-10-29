@@ -23,13 +23,20 @@ function audio(state = "running", rejectResume = false) {
 test("lo scoppio è breve, proporzionato al volume e libera i nodi audio", async () => {
   const { context, events } = audio();
   await playBalloonPop(context, 0.5);
-  assert.deepEqual(events.peaks, [0.14]);
+  assert.deepEqual(events.peaks, [0.28]);
   assert.deepEqual(events.starts, [12]);
   assert.equal(events.stops[0] - events.starts[0] < 0.15, true);
   events.sources[0].onended?.();
   assert.equal(events.disconnects, 3);
   await playBalloonPop(context, 1);
+  assert.equal(events.peaks[1], 0.56);
   assert.equal(events.sources.length, 2, "tocchi diversi possono suonare senza interrompere gli altri");
+});
+
+test("l'aumento dello scoppio non supera il massimo quando il volume è fuori intervallo", async () => {
+  const { context, events } = audio();
+  await playBalloonPop(context, 2);
+  assert.deepEqual(events.peaks, [0.56]);
 });
 
 test("audio disattivato, non disponibile o bloccato non avvia alcuno scoppio", async () => {

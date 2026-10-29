@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 26 ottobre 2026
+**Aggiornato:** 29 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -145,6 +145,8 @@
 
 ## Verifiche della versione corrente
 
+- Festa finale estesa a 20 secondi, con nuove ondate di otto palloncini ogni due secondi (80 complessivi, al massimo 32 montati insieme). X sempre in alto a destra, compatibile con safe-area mobile, chiusura anche via Escape e timer cancellati all'uscita. Effetto scoppio aumentato di circa 6 dB, rispettando volume e mute. Movimento ridotto con una sola ondata statica visibile; nessuna nuova statistica, preferenza, migrazione o APK. Cache PWA v42.
+- Verifiche festa: 220 test superati, typecheck e build verdi; lint con i tre avvisi img preesistenti. Test su ondate, limite degli elementi simultanei, identità/unicità degli scoppi, volume aumentato e mute. Resa, chiusura touch e volume percepito sui dispositivi restano da confermare.
 - Anteprime pubbliche: token conservato nella URL fino all'uscita esplicita, così ricaricamento e copia dell'indirizzo non perdono la condivisione. L'aggiornamento PWA viene rinviato anche durante il caricamento iniziale e nell'intervallo fra risposta API e commit React, non soltanto quando la sessione risulta già attiva. Cache PWA v41; autenticazione adulta e snapshot condivisi invariati, nessuna migrazione. Verificati 218 test, typecheck e build; lint con i tre avvisi img preesistenti. La riproduzione su iPhone del destinatario resta da confermare.
 - Pronuncia iniziale resa più robusta nel percorso browser comune: una richiesta attiva, utterance mantenuta in memoria, conferma start/boundary, un solo recupero in caso di silenzio e cancellazione anche durante attesa voci. Nessuna ripetizione dopo avvio osservato o mentre il motore risulta speaking. Blocco autoplay o fallimento persistente segnalati con invito a riascoltare manualmente; nessuna promessa di aggirare i limiti del browser.
 - Trova la parola e Frasi non marcano più il prompt come pronunciato prima dell’avvio; l’effetto segue l’identità del turno e si annulla all’uscita. Le altre chiamate browser riusano lo stesso gestore; il bridge nativo Android resta invariato. Nuova richiesta, cambio turno, pausa e uscita non possono riattivare una vecchia attesa delle voci. Dati, statistiche, condivisioni e preferenze invariate; cache PWA v40, nessuna migrazione o APK.
