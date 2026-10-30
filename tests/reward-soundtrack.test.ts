@@ -2,16 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { createRewardMusic, REWARD_SOUNDTRACK } from "../app/domain/reward-soundtrack.ts";
+import { createRewardMusic, REWARD_SOUNDTRACK, rewardMusicRange } from "../app/domain/reward-soundtrack.ts";
 
 function fixture(state = "running") {
-  const sources: Array<{ loop: boolean; buffer: unknown; starts: number; stops: number; disconnects: number; connect: () => void; disconnect: () => void; start: () => void; stop: () => void }> = [];
+  const events = new EventTarget();
+  const sources: Array<{ loop: boolean; loopStart: number; loopEnd: number; offset: number; buffer: unknown; starts: number; stops: number; disconnects: number; connect: () => void; disconnect: () => void; start: (when?: number, offset?: number) => void; stop: () => void }> = [];
   const gains: Array<{ gain: { value: number }; connect: () => void; disconnect: () => void }> = [];
   const context = {
+    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), dispatchEvent: events.dispatchEvent.bind(events),
     state, destination: {}, resumes: 0,
     resume: async () => { context.resumes++; context.state = "running"; },
     createBufferSource: () => {
-      const node = { loop: false, buffer: null as unknown, starts: 0, stops: 0, disconnects: 0, connect: () => {}, disconnect: () => { node.disconnects++; }, start: () => { node.starts++; }, stop: () => { node.stops++; } };
+      const node = { loop: false, loopStart: 0, loopEnd: 0, offset: 0, buffer: null as unknown, starts: 0, stops: 0, disconnects: 0, connect: () => {}, disconnect: () => { node.disconnects++; }, start: (...args: number[]) => { node.starts++; node.offset = args[1] ?? 0; }, stop: () => { node.stops++; } };
       sources.push(node); return node;
     },
     createGain: () => { const node = { gain: { value: 0 }, connect: () => {}, disconnect: () => {} }; gains.push(node); return node; },
@@ -99,5 +101,38 @@ test("a gesture can release an indefinitely pending resume without creating dupl
   await flush(); assert.equal(f.sources.length, 0);
   player.retry(); await flush();
   assert.equal(f.context.resumes, 2); assert.equal(f.sources.length, 1);
+  player.stop();
+});
+
+test("system interruption recovers automatically, even without touching the game", async () => {
+  const f = fixture("interrupted");
+  f.context.resume = async () => { f.context.resumes++; };
+  const player = createRewardMusic(f.audio, async () => buffer, 1);
+  await flush(); assert.equal(f.context.resumes, 1); assert.equal(f.sources.length, 0);
+  f.context.state = "running";
+  f.context.dispatchEvent(new Event("statechange"));
+  await flush(); assert.equal(f.sources.length, 1); assert.equal(player.isPlaying(), true);
+  player.stop();
+  assert.equal(player.isPlaying(), false);
+  f.context.dispatchEvent(new Event("statechange"));
+  await flush(); assert.equal(f.sources.length, 1);
+});
+
+test("ten-second silent intro is skipped at automatic start AND on every loop, without altering audio", async () => {
+  const samples = new Float32Array(3100);
+  samples.fill(0.3, 1000, 3000);
+  const original = samples.slice();
+  const audio = { numberOfChannels: 1, sampleRate: 100, duration: 31, getChannelData: () => samples } as unknown as AudioBuffer;
+  const range = rewardMusicRange(audio);
+  assert.ok(range.start >= 9.99 && range.start <= 10);
+  assert.ok(range.end >= 30 && range.end < 30.01);
+  assert.strictEqual(rewardMusicRange(audio), range, "reuse the range for the shared decoded buffer");
+  const f = fixture();
+  const player = createRewardMusic(f.audio, async () => audio, 1, rewardMusicRange);
+  await flush();
+  assert.equal(f.sources[0].offset, range.start);
+  assert.equal(f.sources[0].loopStart, range.start);
+  assert.equal(f.sources[0].loopEnd, range.end);
+  assert.deepEqual(samples, original, "library file and original samples are untouched");
   player.stop();
 });

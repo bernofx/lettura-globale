@@ -1,3 +1,4 @@
+.celebration-start-music { position: absolute; z-index: 5; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .sound-settings > p { margin: 4px 0 18px; color: var(--muted); font-size: 13px; }
 .sound-settings-list { display: grid; gap: 14px; }
 .sound-setting { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 13px 0; border-top: 1px solid var(--line); }

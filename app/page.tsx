@@ -22,7 +22,8 @@ import { NumericField } from "./components/numeric-field";
 import { correctMatchSpeech, createCorrectMatchFeedback } from "./domain/correct-match-feedback";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { RewardSoundtrackLibraryItem } from "./components/reward-soundtrack-library-item";
-import { createRewardMusic, REWARD_SOUNDTRACK } from "./domain/reward-soundtrack";
+import { createRewardMusic, REWARD_SOUNDTRACK, rewardMusicRange } from "./domain/reward-soundtrack";
+import { listenForAudioGestures, unlockAudioContext } from "./domain/audio-activation";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads } from "./domain/library-deduplication";
@@ -586,14 +587,13 @@ function startRewardMusic(volume: number) {
   return createRewardMusic(feedbackContext(), async () => {
     await prepareFeedbackSound(REWARD_SOUNDTRACK.url);
     return preparedFeedbackSounds[REWARD_SOUNDTRACK.url]?.buffer ?? null;
-  }, volume);
+  }, volume, rewardMusicRange);
 }
 
 function primeFeedbackSounds() {
+  unlockAudioContext(feedbackContext());
   try { if ("speechSynthesis" in window) window.speechSynthesis.getVoices(); } catch { /* A cold engine is handled by the player when speech is requested. */ }
   preloadFeedbackSounds();
-  const context = feedbackContext();
-  if (context?.state === "suspended") void context.resume().catch(() => undefined);
 }
 
 function playSynthesizedSound(cue: SoundCue, choice: string, selected: boolean) {
@@ -813,8 +813,7 @@ function HomePageContent() {
     controllerActiveRef.current = Boolean(controllerLaunch);
     preloadFeedbackSounds();
     const prime = () => primeFeedbackSounds();
-    window.addEventListener("pointerdown", prime, { capture: true, once: true });
-    window.addEventListener("keydown", prime, { capture: true, once: true });
+    const removeAudioGestures = listenForAudioGestures(window, prime);
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     }
@@ -845,8 +844,7 @@ function HomePageContent() {
     }, 0);
     return () => {
       window.clearTimeout(authTimer);
-      window.removeEventListener("pointerdown", prime, true);
-      window.removeEventListener("keydown", prime, true);
+      removeAudioGestures();
     };
   }, []);
 

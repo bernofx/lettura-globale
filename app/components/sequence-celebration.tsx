@@ -14,15 +14,33 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
 
 export function SequenceCelebration({ onPop, onClose, continuous = false, startMusic, musicVolume = 0 }: { onPop?: () => void; onClose: () => void; continuous?: boolean; startMusic?: (volume: number) => RewardMusicPlayer; musicVolume?: number }) {
   const music = useRef<RewardMusicPlayer | null>(null);
+  const [musicNeedsStart, setMusicNeedsStart] = useState(false);
   const volume = useRef(musicVolume);
   useEffect(() => { volume.current = musicVolume; music.current?.setVolume(musicVolume); }, [musicVolume]);
   useEffect(() => {
     const player = startMusic?.(volume.current);
     music.current = player ?? null;
     const retry = () => player?.retry();
+    const visible = () => { if (document.visibilityState !== "hidden") retry(); };
     window.addEventListener("pointerdown", retry);
+    window.addEventListener("pointerup", retry);
+    window.addEventListener("click", retry);
     window.addEventListener("keydown", retry);
-    return () => { window.removeEventListener("pointerdown", retry); window.removeEventListener("keydown", retry); player?.stop(); music.current = null; };
+    window.addEventListener("online", retry);
+    window.addEventListener("pageshow", visible);
+    document.addEventListener("visibilitychange", visible);
+    let checkTimer: number | undefined;
+    const grace = window.setTimeout(() => {
+      const check = () => setMusicNeedsStart(Boolean(player && volume.current > 0 && !player.isPlaying()));
+      check();
+      checkTimer = window.setInterval(check, 1000);
+    }, 1500);
+    return () => {
+      window.clearTimeout(grace); window.clearInterval(checkTimer);
+      window.removeEventListener("pointerdown", retry); window.removeEventListener("pointerup", retry); window.removeEventListener("click", retry); window.removeEventListener("keydown", retry);
+      window.removeEventListener("online", retry); window.removeEventListener("pageshow", visible); document.removeEventListener("visibilitychange", visible);
+      player?.stop(); music.current = null;
+    };
   }, [startMusic]);
   const [wave, setWave] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -59,6 +77,7 @@ export function SequenceCelebration({ onPop, onClose, continuous = false, startM
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }}>
     <button ref={closeRef} type="button" className="celebration-close" aria-label="Chiudi il gioco dei palloncini" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onClose(); }}><X aria-hidden="true" /></button>
+    {musicNeedsStart && musicVolume > 0 && <button type="button" className="celebration-start-music" onClick={() => music.current?.retry()}>Avvia musica</button>}
     <div className="celebration-glow" aria-hidden="true" />
     <span className="celebration-instruction">Fai scoppiare i palloncini!</span>
     <span className="celebration-status" role="status" aria-live="polite">{popCount > 0 ? `${popCount} palloncini scoppiati` : "Tocca un palloncino"}</span>

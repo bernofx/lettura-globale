@@ -12,6 +12,8 @@ const errors = [];
 let navigations = 0;
 let stateFixture = null;
 let revision = 1;
+let holdStateRequest = false;
+let heldStateRequest = null;
 const fixture = {
   schemaVersion: 1, kind: "exercise", title: "Demo aggiornamento",
   exercises: [{ id: "quantity-demo", kind: "number-quantity", title: "Numero demo", promptId: "", optionIds: [], rounds: 3, quantityMin: 3, quantityMax: 3, quantityErrorless: true }], library: [],
@@ -35,7 +37,10 @@ socket.addEventListener("message", async (event) => {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/shared-launch/")) await send("Fetch.fulfillRequest", { requestId, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }], body: Buffer.from(JSON.stringify(fixture)).toString("base64") });
     else if (url.pathname === "/api/app-version") await send("Fetch.fulfillRequest", { requestId, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }], body: Buffer.from(JSON.stringify({ version: "r9999999-abcdef0" })).toString("base64") });
-    else if (stateFixture && (url.pathname === "/api/state" || url.pathname === "/api/state/changes")) await send("Fetch.fulfillRequest", { requestId, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }], body: Buffer.from(JSON.stringify({ state: stateFixture, revision: ++revision })).toString("base64") });
+    else if (stateFixture && (url.pathname === "/api/state" || url.pathname === "/api/state/changes")) {
+      if (holdStateRequest && request.method === "GET") { heldStateRequest = requestId; holdStateRequest = false; }
+      else await send("Fetch.fulfillRequest", { requestId, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }], body: Buffer.from(JSON.stringify({ state: stateFixture, revision: ++revision })).toString("base64") });
+    }
     else if (url.origin !== origin) await send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" });
     else await send("Fetch.continueRequest", { requestId });
   }
@@ -116,7 +121,7 @@ try {
     await send("Page.addScriptToEvaluateOnNewDocument", { source: `
       window.__rewardLoops=[];
       const start=AudioBufferSourceNode.prototype.start, stop=AudioBufferSourceNode.prototype.stop;
-      AudioBufferSourceNode.prototype.start=function(...args){if(this.loop)window.__rewardLoops.push({node:this,stopped:false});return start.apply(this,args)};
+      AudioBufferSourceNode.prototype.start=function(...args){if(this.loop)window.__rewardLoops.push({node:this,stopped:false,offset:args[1]??0,loopStart:this.loopStart,loopEnd:this.loopEnd});return start.apply(this,args)};
       AudioBufferSourceNode.prototype.stop=function(...args){for(const entry of window.__rewardLoops)if(entry.node===this)entry.stopped=true;return stop.apply(this,args)};
     ` });
     const values = {
@@ -126,10 +131,22 @@ try {
       "root:sessionStartedAt": new Date().toISOString(), "root:sessionDescriptor": { title: "Demo musica", source: "sequence" }, "root:sessionMode": "teaching",
     };
     await evaluate(`localStorage.setItem('lg-sound-effects','true');localStorage.setItem('lg-sound-volume','100');sessionStorage.setItem('lg-update-checkpoint-v1',JSON.stringify({schema:1,at:Date.now(),identity:localStorage.getItem('lg-therapist-session'),path:'/',values:${JSON.stringify(values)}}))`);
+    holdStateRequest = process.env.TEST_MUSIC_AUTOPLAY === "1";
     await send("Page.navigate", { url: `${origin}/` });
+    if (process.env.TEST_MUSIC_AUTOPLAY === "1") {
+      for (let i = 0; i < 100 && !heldStateRequest; i++) await new Promise(resolve => setTimeout(resolve, 100));
+      assert.ok(heldStateRequest, "hold the synthetic bootstrap until after local touch activation");
+      await send("Emulation.setTouchEmulationEnabled", { enabled: true });
+      await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 100, y: 150 }] });
+      await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await send("Fetch.fulfillRequest", { requestId: heldStateRequest, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }], body: Buffer.from(JSON.stringify({ state: stateFixture, revision: ++revision })).toString("base64") });
+      heldStateRequest = null;
+    }
     await waitFor("document.querySelector('.sequence-celebration')");
-    await send("Runtime.evaluate", { expression: "window.dispatchEvent(new PointerEvent('pointerdown'));true", userGesture: true });
+    if (process.env.TEST_MUSIC_AUTOPLAY !== "1") await send("Runtime.evaluate", { expression: "window.dispatchEvent(new PointerEvent('pointerdown'));true", userGesture: true });
     await waitFor("window.__rewardLoops?.length === 1");
+    assert.ok(await evaluate("window.__rewardLoops[0].offset > 9.8 && window.__rewardLoops[0].offset < 10.3"), "real uploaded track starts at first sound, not its ten-second silence");
+    assert.ok(await evaluate("window.__rewardLoops[0].loopStart > 9.8 && window.__rewardLoops[0].loopEnd < 30.2"), "loops also skip silent intro and tail");
     await evaluate("document.querySelector('.celebration-close').click()");
     await waitFor("!document.querySelector('.sequence-celebration') && window.__rewardLoops[0].stopped");
     await evaluate("document.querySelector('.quantity-field button').click()");
@@ -138,7 +155,7 @@ try {
     await waitFor("document.querySelector('.sequence-celebration') && window.__rewardLoops.length === 2");
     await evaluate("document.querySelector('.celebration-close').click()");
     await waitFor("!document.querySelector('.sequence-celebration') && window.__rewardLoops.every(entry=>entry.stopped)");
-    console.log("PASS browser audio: library player, decoded loop during reward and final celebration, both stop on close");
+    console.log(`PASS browser audio: ${process.env.TEST_MUSIC_AUTOPLAY === "1" ? "automatic start after earlier real touch, no gesture on game, " : ""}library player, decoded loop during reward and final celebration, both stop on close`);
   }
   assert.deepEqual(errors, [], "no uncaught browser errors");
   console.log("PASS browser: mobile update, storage failure, public URL, quantity selections/lock, IL-LA/categories/recognition order, desktop home version and release notes");

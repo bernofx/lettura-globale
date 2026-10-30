@@ -10,3 +10,5 @@
 - Uso nell’app richiesto dall’utente; non è stata dichiarata una licenza per ulteriori riutilizzi. Nessuna attribuzione di pubblico dominio o licenza aperta.
 
 Le preferenze degli effetti esistenti restano invariate. Il brano è un asset dell’app distribuito sul cloud, non un file conservato solo nel browser. La riproduzione del gioco usa il volume globale ed è indipendente dagli scoppi. Il player in libreria è un ascolto manuale di prova.
+
+Il file contiene circa 10,01 secondi iniziali e 1 secondo finale di silenzio. Nel gioco il lettore usa il primo suono udibile come punto iniziale e imposta i limiti del loop per non ripetere tali pause. Il file originale, i campioni decodificati e il player della libreria rimangono intatti.
