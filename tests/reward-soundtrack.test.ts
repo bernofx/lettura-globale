@@ -85,3 +85,19 @@ test("autoplay rejection and failed decode can retry on the next gesture without
   decoded = true; player.retry(); await flush(); assert.equal(f.sources.length, 1);
   player.stop();
 });
+
+test("a gesture can release an indefinitely pending resume without creating duplicate loops", async () => {
+  const f = fixture("suspended");
+  let release!: () => void;
+  const suspended = new Promise<void>((resolve) => { release = resolve; });
+  f.context.resume = async () => {
+    f.context.resumes++;
+    if (f.context.resumes === 2) { f.context.state = "running"; release(); }
+    await suspended;
+  };
+  const player = createRewardMusic(f.audio, async () => buffer, 1);
+  await flush(); assert.equal(f.sources.length, 0);
+  player.retry(); await flush();
+  assert.equal(f.context.resumes, 2); assert.equal(f.sources.length, 1);
+  player.stop();
+});

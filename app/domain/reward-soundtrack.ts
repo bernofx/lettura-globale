@@ -40,7 +40,12 @@ export function createRewardMusic(context: AudioContext | null, load: () => Prom
   };
   void retry();
   return {
-    retry: () => { void retry(); },
+    retry: () => {
+      // Some browsers leave the first resume promise pending until a trusted
+      // gesture calls resume again; do not let the loading lock swallow it.
+      if (context?.state === "suspended" && loading && !disposed && level > 0) void context.resume().catch(() => undefined);
+      void retry();
+    },
     setVolume: (volume) => {
       level = levelFor(volume);
       if (gain) gain.gain.value = level;
