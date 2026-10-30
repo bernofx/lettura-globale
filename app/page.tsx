@@ -11,7 +11,8 @@ import { SessionAdvanceGuard } from "./domain/session-advance";
 import { activityNavigation } from "./domain/session-navigation";
 import { PENDING_CONTROLLER_LAUNCH_KEY, resolveControllerLaunch } from "./domain/controller-launch";
 import { CELEBRATION_DURATION_MS } from "./domain/celebration";
-import { shouldDeferAppUpdate } from "./domain/app-update";
+import { AppUpdateProvider, AppVersionBadge, useAppUpdating, useBeforeAppUpdate, useUpdateState } from "./components/app-update";
+import { WhatsNew } from "./components/whats-new";
 import { articleFor } from "./domain/article-classification";
 import { remapExerciseReferences } from "./domain/exercise-library-references";
 import { validateSharedExercises } from "./domain/shared-preview-validation";
@@ -649,7 +650,12 @@ function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryI
 }
 
 export default function HomePage() {
-  const [view, setView] = useState<View>("home");
+  return <AppUpdateProvider><HomePageContent /></AppUpdateProvider>;
+}
+
+function HomePageContent() {
+  const appUpdating = useAppUpdating();
+  const [view, setView] = useUpdateState<View>("root:view", "home");
   const [menuOpen, setMenuOpen] = useState(false);
   const [therapists, setTherapists, therapistsLoaded] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
     if (localStorage.getItem("lg-profiles-v2-seeded")) return mergeById(saved, [initialAdministrator]);
@@ -711,48 +717,51 @@ export default function HomePage() {
   const [exitPinOpen, setExitPinOpen] = useState(false);
   const [recoveryCandidate, setRecoveryCandidate] = useState<RecoverableSession | null>(null);
   const recoveryCheckedFor = useRef("");
-  const [sessionMode, setSessionMode] = useState<Mode>("test");
+  const [sessionMode, setSessionMode] = useUpdateState<Mode>("root:sessionMode", "test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [soundVolume, setSoundVolume] = useStoredState<number>("lg-sound-volume", 100, (saved) => Math.min(100, Math.max(0, Number(saved) || 0)));
   const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
-  const [rewardActive, setRewardActive] = useState(false);
-  const rewardActiveRef = useRef(false);
+  const [rewardActive, setRewardActive] = useUpdateState("root:rewardActive", false);
+  const rewardActiveRef = useRef(rewardActive);
   const changeReward = useCallback((active: boolean) => {
     rewardActiveRef.current = active;
     setRewardActive(active);
     if (active) cancelSpeech();
-  }, []);
-  const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
-  const [sessionIndex, setSessionIndex] = useState(0);
+  }, [setRewardActive]);
+  const [sessionPresentation, setSessionPresentation] = useUpdateState<Presentation>("root:sessionPresentation", "images");
+  const [sessionIndex, setSessionIndex] = useUpdateState("root:sessionIndex", 0);
   const sessionAdvanceGuard = useRef(new SessionAdvanceGuard());
-  const [sessionFurthestIndex, setSessionFurthestIndex] = useState(0);
-  const [sessionPlan, setSessionPlan] = useState<Exercise[]>([]);
-  const [sessionRunId, setSessionRunId] = useState("");
-  const [sessionChildId, setSessionChildId] = useState("");
-  const [sessionStartedAt, setSessionStartedAt] = useState("");
-  const [sessionDescriptor, setSessionDescriptor] = useState<{ title: string; source: "sequence" | "quick" }>({ title: "Sessione", source: "sequence" });
-  const [sessionActive, setSessionActive] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const sessionReadyRef = useRef(false);
-  const sessionActiveRef = useRef(false);
-  const pendingAppReload = useRef(false);
-  const [sessionWizardKey, setSessionWizardKey] = useState(0);
-  const [sessionComplete, setSessionComplete] = useState(false);
-  const [sessionPaused, setSessionPaused] = useState(false);
-  const sessionPausedRef = useRef(false);
-  const [awaitingNextExercise, setAwaitingNextExercise] = useState(false);
-  const [quickExerciseToSave, setQuickExerciseToSave] = useState<Exercise | null>(null);
-  const [sessionFromSharedLink, setSessionFromSharedLink] = useState(false);
-  const [sessionIsTrial, setSessionIsTrial] = useState(false);
+  const [sessionFurthestIndex, setSessionFurthestIndex] = useUpdateState("root:sessionFurthestIndex", 0);
+  const [sessionPlan, setSessionPlan] = useUpdateState<Exercise[]>("root:sessionPlan", []);
+  const [sessionRunId, setSessionRunId] = useUpdateState("root:sessionRunId", "");
+  const [sessionChildId, setSessionChildId] = useUpdateState("root:sessionChildId", "");
+  const [sessionStartedAt, setSessionStartedAt] = useUpdateState("root:sessionStartedAt", "");
+  const [sessionDescriptor, setSessionDescriptor] = useUpdateState<{ title: string; source: "sequence" | "quick" }>("root:sessionDescriptor", { title: "Sessione", source: "sequence" });
+  const [sessionActive, setSessionActive] = useUpdateState("root:sessionActive", false);
+  const [sessionReady, setSessionReady] = useUpdateState("root:sessionReady", false);
+  const sessionReadyRef = useRef(sessionReady);
+  const [sessionWizardKey, setSessionWizardKey] = useUpdateState("root:sessionWizardKey", 0);
+  const [sessionComplete, setSessionComplete] = useUpdateState("root:sessionComplete", false);
+  const [sessionPaused, setSessionPaused] = useUpdateState("root:sessionPaused", false);
+  const sessionPausedRef = useRef(sessionPaused);
+  const [awaitingNextExercise, setAwaitingNextExercise] = useUpdateState("root:awaitingNextExercise", false);
+  const [quickExerciseToSave, setQuickExerciseToSave] = useUpdateState<Exercise | null>("root:quickExerciseToSave", null);
+  const [sessionFromSharedLink, setSessionFromSharedLink] = useUpdateState("root:sessionFromSharedLink", false);
+  const [sessionIsTrial, setSessionIsTrial] = useUpdateState("root:sessionIsTrial", false);
   const [pendingSharedLaunch, setPendingSharedLaunch] = useState<SharedLaunch | null>(null);
   const [pendingSharedPreviewToken, setPendingSharedPreviewToken] = useState<string | null>(null);
-  const [sharedPreview, setSharedPreview] = useState<SharedPreviewPayload | null>(null);
-  const [sharedPreviewStatus, setSharedPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [answerState, setAnswerState] = useState<"idle" | "wrong" | "correct">("idle");
-  const [wrongAnswerId, setWrongAnswerId] = useState<string | null>(null);
+  const [sharedPreview, setSharedPreview] = useUpdateState<SharedPreviewPayload | null>("root:sharedPreview", null);
+  const [sharedPreviewStatus, setSharedPreviewStatus] = useUpdateState<"idle" | "loading" | "ready" | "error">("root:sharedPreviewStatus", "idle");
+  const [answerState, setAnswerState] = useUpdateState<"idle" | "wrong" | "correct">("root:answerState", "idle");
+  const [wrongAnswerId, setWrongAnswerId] = useUpdateState<string | null>("root:wrongAnswerId", null);
   const wrongFeedbackTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (answerState !== "wrong" || !wrongAnswerId) return;
+    wrongFeedbackTimer.current = window.setTimeout(() => { setWrongAnswerId(null); setAnswerState("idle"); wrongFeedbackTimer.current = null; }, 900);
+    return () => { if (wrongFeedbackTimer.current !== null) window.clearTimeout(wrongFeedbackTimer.current); };
+  }, [answerState, wrongAnswerId, setAnswerState, setWrongAnswerId]);
   const handledSharedLaunch = useRef("");
 
   const effectiveSoundVolume = soundEffects ? soundVolume : 0;
@@ -773,10 +782,6 @@ export default function HomePage() {
     Object.values(feedbackAudioPlayers).forEach((player) => { if (player) player.volume = currentAudioVolume; });
   }, [effectiveSoundVolume]);
 
-  useEffect(() => {
-    sessionActiveRef.current = sessionActive || sessionReady;
-    if (pendingAppReload.current && !shouldDeferAppUpdate(window.location.search, sessionActiveRef.current, controllerActiveRef.current)) window.location.reload();
-  }, [sessionActive, sessionReady, controllerToken]);
   const sessionReturnView = useRef<View>("session");
   const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
@@ -796,16 +801,8 @@ export default function HomePage() {
     controllerActiveRef.current = Boolean(controllerLaunch);
     preloadFeedbackSounds();
     const prime = () => primeFeedbackSounds();
-    const receiveServiceWorkerUpdate = (event: MessageEvent) => {
-      const version = typeof event.data?.version === "string" ? event.data.version : "";
-      if (event.data?.type !== "lettura-globale:update-ready" || !version || sessionStorage.getItem("lg-active-app-version") === version) return;
-      sessionStorage.setItem("lg-active-app-version", version);
-      if (shouldDeferAppUpdate(window.location.search, sessionActiveRef.current, controllerActiveRef.current)) pendingAppReload.current = true;
-      else window.location.reload();
-    };
     window.addEventListener("pointerdown", prime, { capture: true, once: true });
     window.addEventListener("keydown", prime, { capture: true, once: true });
-    navigator.serviceWorker?.addEventListener("message", receiveServiceWorkerUpdate);
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     }
@@ -838,7 +835,6 @@ export default function HomePage() {
       window.clearTimeout(authTimer);
       window.removeEventListener("pointerdown", prime, true);
       window.removeEventListener("keydown", prime, true);
-      navigator.serviceWorker?.removeEventListener("message", receiveServiceWorkerUpdate);
     };
   }, []);
 
@@ -899,6 +895,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!pendingSharedPreviewToken) return;
+    if (sessionFromSharedLink && sharedPreview && sessionActive && sharedPreviewStatus === "ready") return;
     let cancelled = false;
     fetchWithTimeout(`/api/shared-launch/${encodeURIComponent(pendingSharedPreviewToken)}`, { cache: "no-store" }, 8000)
       .then(async (response) => {
@@ -931,7 +928,7 @@ export default function HomePage() {
       })
       .catch(() => { if (!cancelled) setSharedPreviewStatus("error"); });
     return () => { cancelled = true; };
-  }, [pendingSharedPreviewToken]);
+  }, [pendingSharedPreviewToken, sessionFromSharedLink, sharedPreview, sessionActive, sharedPreviewStatus, setAnswerState, setSessionActive, setSessionChildId, setSessionComplete, setSessionFromSharedLink, setSessionFurthestIndex, setSessionIndex, setSessionIsTrial, setSessionMode, setSessionPlan, setSessionPresentation, setSessionRunId, setSharedPreview, setSharedPreviewStatus, setView, setWrongAnswerId]);
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
@@ -970,7 +967,7 @@ export default function HomePage() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [notify, sessionActive]);
+  }, [notify, sessionActive, setSessionReady, setView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1349,6 +1346,23 @@ export default function HomePage() {
   }, [backendInitialized, backendRefreshKey, backendStatus, loggedInTherapistId, logoutState, library, notify, enqueueBackendSave, setLibrary]);
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
+  useBeforeAppUpdate("cloud-save", async () => {
+    cancelSpeech();
+    if (controllerToken) {
+      sessionStorage.setItem(PENDING_CONTROLLER_LAUNCH_KEY, JSON.stringify({ token: controllerToken, realtimeSessionId: realtimeControllerSessionId, createdAt: Date.now() }));
+      return;
+    }
+    if (sessionFromSharedLink || !loggedInTherapistId) return;
+    if (!backendInitialized || !navigator.onLine) throw new Error("cloud_save_unavailable");
+    if (backendSaveTimer.current !== null) { window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await enqueueBackendSave(backendStateForStorage(localBootstrapSnapshot.current));
+      await backendSaveQueue.current;
+      const latest = backendStateForStorage(localBootstrapSnapshot.current);
+      if (lastSyncedBackendState.current && !buildStateChange(lastSyncedBackendState.current, latest, crypto.randomUUID(), backendRevision.current)) return;
+    }
+    throw new Error("cloud_save_pending");
+  });
   const canSeeAllSequences = canViewAllSequences(therapist?.role);
   const associatedChildren = useMemo(() => therapist?.role === "Amministratore" ? children : children.filter((child) => therapist?.childIds.includes(child.id)), [children, therapist]);
   const activeChild = associatedChildren.find((child) => child.id === activeChildId) ?? associatedChildren[0];
@@ -1474,7 +1488,7 @@ export default function HomePage() {
       setView("session");
     }, 0);
     return () => window.clearTimeout(launchTimer);
-  }, [activeChild, backendInitialized, backendStatus, notify, pendingSharedLaunch, setActiveSequenceId, therapist, visibleExercises, visibleLibrary, visibleSequences, categorySymbols]);
+  }, [activeChild, backendInitialized, backendStatus, notify, pendingSharedLaunch, setActiveSequenceId, therapist, visibleExercises, visibleLibrary, visibleSequences, categorySymbols, setAnswerState, setSessionActive, setSessionChildId, setSessionFromSharedLink, setSessionFurthestIndex, setSessionIndex, setSessionIsTrial, setSessionPlan, setSessionRunId, setView, setWrongAnswerId]);
 
   const initialPromptText = currentExercise && (exerciseKind(currentExercise) === "sentence-matching" || (exerciseKind(currentExercise) === "recognition" && (currentExercise.autoPronounce ?? currentPresentation === "words"))) ? promptWord : "";
   const initialPromptId = currentExercise?.id;
@@ -1707,13 +1721,6 @@ export default function HomePage() {
     setAnswerState(correct ? "correct" : "wrong");
     setWrongAnswerId(correct ? null : answerId);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
-    if (!correct) {
-      wrongFeedbackTimer.current = window.setTimeout(() => {
-        setWrongAnswerId((current) => current === answerId ? null : current);
-        setAnswerState((current) => current === "wrong" ? "idle" : current);
-        wrongFeedbackTimer.current = null;
-      }, 900);
-    }
   };
   const addHelp = (label: string, wordId?: string) => {
     if (rewardActiveRef.current) return;
@@ -1939,7 +1946,7 @@ export default function HomePage() {
     remoteWasConnected.current = remoteConnected;
     document.body.classList.toggle("lg-remote-controller-active", remoteConnected);
     return () => document.body.classList.remove("lg-remote-controller-active");
-  }, [remoteConnected]);
+  }, [remoteConnected, setSessionPaused]);
 
   const saveExercise = (exercise: Exercise) => {
     const error = categoryImageError(exercise, visibleLibrary, categorySymbols);
@@ -2026,7 +2033,7 @@ export default function HomePage() {
     setRecoveryCandidate(null);
     setView("home");
     window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
-  }, [controllerToken, changeReward]);
+  }, [controllerToken, changeReward, setAwaitingNextExercise, setSessionActive, setSessionPaused, setSessionReady, setView]);
   const controllerJoined = useCallback(() => {
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
   }, []);
@@ -2097,7 +2104,7 @@ export default function HomePage() {
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
-    <RewardActiveContext.Provider value={rewardActive}>
+    <RewardActiveContext.Provider value={rewardActive || appUpdating}>
     <div className="app-shell">
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content" inert={rewardActive} aria-hidden={rewardActive || undefined}>
@@ -2448,7 +2455,7 @@ function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backend
 
 function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus, onOpenSaveJournal }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus; onOpenSaveJournal: () => void }) {
   const status = backendStatusInfo(backendStatus);
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><button type="button" className={`cloud-indicator cloud-status-${status.tone}`} onClick={onOpenSaveJournal} aria-label={`${status.label}. Apri diagnosi salvataggi`} title={`${status.label} — Apri diagnosi salvataggi`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></button><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><AppVersionBadge /><button type="button" className={`cloud-indicator cloud-status-${status.tone}`} onClick={onOpenSaveJournal} aria-label={`${status.label}. Apri diagnosi salvataggi`} title={`${status.label} — Apri diagnosi salvataggi`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></button><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }
 
 function SaveJournalDialog({ onClose }: { onClose: () => void }) {
@@ -2480,7 +2487,7 @@ function SequenceTransition({ title, onContinue }: { title: string; onContinue: 
 
 function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceCount, accuracy, attemptCount, onStart, onNavigate }: { therapist: Therapist; child: ChildProfile; libraryCount: number; exerciseCount: number; sequenceCount: number; accuracy: number; attemptCount: number; onStart: () => void; onNavigate: (view: View) => void }) {
   const minutes = Math.max(5, Math.round(sequenceCount * 1.5));
-  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">AREA TERAPISTA</span><h1>Buongiorno, {therapist.firstName}</h1><p>Tutto è pronto per la prossima attività con {child.firstName}.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Scegli la prossima attività</h2><p>Apri il pannello Sessione per avviare una singola attività o una sequenza configurata.</p><div className="hero-meta"><span>{sequenceCount} esercizi</span><i /><span>~ {minutes} minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Apri sessione <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
+  return <div className="page dashboard-page"><section className="welcome-row"><div><span className="eyebrow">AREA TERAPISTA</span><h1>Buongiorno, {therapist.firstName}</h1><p>Tutto è pronto per la prossima attività con {child.firstName}.</p></div><button className="primary-button" onClick={onStart}><Play size={19} fill="currentColor" />Avvia sessione</button></section><WhatsNew /><section className="hero-card"><div className="hero-copy"><span className="soft-label">ATTIVITÀ CONSIGLIATA</span><h2>Scegli la prossima attività</h2><p>Apri il pannello Sessione per avviare una singola attività o una sequenza configurata.</p><div className="hero-meta"><span>{sequenceCount} esercizi</span><i /><span>~ {minutes} minuti</span><i /><span>Verifica</span></div><button onClick={onStart}>Apri sessione <ChevronRight size={18} /></button></div><div className="hero-art" aria-hidden="true"><div className="orbit one">A</div><div className="orbit two">🍎</div><div className="orbit three">Aa</div><div className="hero-sun"><Sparkles /></div></div></section><section className="metric-grid"><Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" /><Metric icon={<BarChart3 />} label="Accuratezza" value={`${accuracy}%`} detail="sui primi tentativi" tone="mint" /><Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail="in 1 sequenza" tone="peach" /><Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" /></section><section className="two-columns"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ACCESSO RAPIDO</span><h3>Prepara la prossima attività</h3></div></div><div className="quick-list"><Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} /><Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} /><Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} /></div></div><div className="panel calm-panel"><div className="calm-icon"><CircleHelp /></div><h3>L’adulto resta al comando</h3><p>In Lettura Globale nessun aiuto parte in automatico. Durante ogni prova sei tu a decidere se e come intervenire.</p><button onClick={() => onNavigate("session")}>Scopri la sessione <ChevronRight size={17} /></button></div></section></div>;
 }
 
 function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><span className={`metric-icon ${tone}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>; }
@@ -2585,13 +2592,13 @@ type SessionNavigationProps = { canPrevious: boolean; canForward: boolean; onPre
 type SessionViewProps = { categorySymbols?: CategorySymbols; active: boolean; complete: boolean; fromSharedLink: boolean; isTrial: boolean; remoteConnected?: boolean; mode: Mode; setMode: (mode: Mode) => void; presentation: Presentation; setPresentation: (presentation: Presentation) => void; sequences: Sequence[]; therapists: Therapist[]; showSequenceOwners: boolean; activeChild: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onStartSequence: (id: string, ready?: boolean) => void; onStartQuick: (config: QuickStartConfig, ready?: boolean) => void; onStartPrepared?: () => void; onCancelPrepared?: () => void; quickCanBeSaved: boolean; onSaveQuick: () => void; completionComment: string; onSaveCompletionComment: (comment: string) => void; onCloseComplete: () => void; onExit: () => void; currentIndex: number; total: number; exercise?: Exercise; prompt?: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onClassificationAttempt: (itemId: string, answer: string, correct: boolean) => void; onClassificationComplete: () => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps;
 
 function SessionView({ categorySymbols = {}, active, complete, fromSharedLink, isTrial, remoteConnected = false, mode, setMode, presentation, setPresentation, sequences, therapists, showSequenceOwners, activeChild, childProfiles, onSelectChild, onStartSequence, onStartQuick, onStartPrepared, onCancelPrepared, quickCanBeSaved, onSaveQuick, completionComment, onSaveCompletionComment, onCloseComplete, onExit, currentIndex, total, canPrevious, canForward, onPrevious, onForward, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onClassificationAttempt, onClassificationComplete, onHelp, onNext, soundEffects, onToggleSound }: SessionViewProps) {
-  const [step, setStep] = useState<"choose" | "quick" | "review" | "ready">("choose");
-  const [source, setSource] = useState<"sequence" | "quick">("sequence");
-  const [reviewSequenceId, setReviewSequenceId] = useState(sequences[0]?.id ?? "");
-  const [quick, setQuick] = useState<QuickStartConfig>(() => ({ activity: "recognition", selection: "all", categoryNames: wordCategoryNames(library).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", matchAutoPronounce: false, quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantitySpeakNumbers: false, quantityErrorless: false, quantityIdleSeconds: 5, sentenceOptionCount: 2, sentenceDifficulty: 1 }));
+  const [step, setStep] = useUpdateState<"choose" | "quick" | "review" | "ready">("wizard:step", "choose");
+  const [source, setSource] = useUpdateState<"sequence" | "quick">("wizard:source", "sequence");
+  const [reviewSequenceId, setReviewSequenceId] = useUpdateState("wizard:reviewSequenceId", sequences[0]?.id ?? "");
+  const [quick, setQuick] = useUpdateState<QuickStartConfig>("wizard:quick", () => ({ activity: "recognition", selection: "all", categoryNames: wordCategoryNames(library).slice(0, 2), itemIds: [], rounds: 6, distractorCount: 3, distractorSource: "mixed", presentation, recognitionSyllables: "all", autoPronounce: presentation === "words", matchAutoPronounce: false, quantityMin: 1, quantityMax: 10, quantityObjectSet: "mixed", quantityAutoComplete: true, quantitySpeakNumbers: false, quantityErrorless: false, quantityIdleSeconds: 5, sentenceOptionCount: 2, sentenceDifficulty: 1 }));
   const categoryNames = useMemo(() => quick.activity === "word-categories" ? wordCategoryNames(library) : Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [library, quick.activity]);
   const [quickSearch, setQuickSearch] = useState("");
-  const [completionDraft, setCompletionDraft] = useState(completionComment);
+  const [completionDraft, setCompletionDraft] = useUpdateState("wizard:completionDraft", completionComment);
   const sortedSequences = useMemo(() => [...sequences].sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.title.localeCompare(b.title, "it")), [sequences]);
   const reviewSequence = sequences.find((item) => item.id === reviewSequenceId);
   const therapistName = (therapistId: string) => { const owner = therapists.find((item) => item.id === therapistId); return owner ? `${owner.firstName} ${owner.lastName}` : "Terapista non disponibile"; };
@@ -2675,7 +2682,7 @@ function RecognitionRandomParameterFields({ distractorCount, distractorSource, s
 
 function SessionTools({ onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
   const remoteHost = useContext(RemoteHostContext);
-  return <div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div>;
+  return <div className="session-controls-stack"><div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div><AppVersionBadge /></div>;
 }
 
 function VolumeControl() {
@@ -2717,10 +2724,12 @@ function NamingSession({ previewLabel, exercise, library, mode, manualAdvance = 
     const categories = exercise.namingCategories?.length ? new Set(exercise.namingCategories) : null;
     return library.filter((item) => hasArtwork(item) && (!allowedIds || allowedIds.has(item.id)) && (!categories || categories.has(item.category)));
   }, [exercise.namingCategories, exercise.namingItemIds, library]);
-  const [initialIds] = useState(() => shuffled(candidates.map((item) => item.id)).slice(0, Math.max(1, exercise.rounds ?? 6)));
-  const [remainingIds, setRemainingIds] = useState(initialIds);
-  const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
+  const [initialIds] = useUpdateState(`NamingSession:${exercise.id}:${currentIndex}:initialIds`, () => shuffled(candidates.map((item) => item.id)).slice(0, Math.max(1, exercise.rounds ?? 6)));
+  const [remainingIds, setRemainingIds] = useUpdateState(`NamingSession:${exercise.id}:${currentIndex}:remainingIds`, initialIds);
+  const [judgement, setJudgement] = useUpdateState<"correct" | "wrong" | null>(`NamingSession:${exercise.id}:${currentIndex}:judgement`, null);
   const advanceTimer = useRef<number | null>(null);
+  const appUpdating = useAppUpdating();
+  useEffect(() => { if (appUpdating && advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, [appUpdating]);
   const preloadedImages = useRef(new Map<string, HTMLImageElement>());
   useEffect(() => () => { if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current); }, []);
   useEffect(() => {
@@ -2802,13 +2811,13 @@ function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = f
   const prompt = `Tocca ${target} ${quantityObjectLabel(object, target)}`;
   const errorless = exercise.quantityErrorless === true;
   const teachingFlow = mode === "teaching" || previewLabel === "Anteprima";
-  const [selected, setSelected] = useState<Set<number>>(() => new Set());
-  const selectedRef = useRef<Set<number>>(new Set());
-  const [judgement, setJudgement] = useState<"correct" | "wrong" | null>(null);
+  const [selected, setSelected] = useUpdateState<Set<number>>(`NumberQuantitySession:${exercise.id}:${currentIndex}:selected`, () => new Set());
+  const selectedRef = useRef<Set<number>>(selected);
+  const [judgement, setJudgement] = useUpdateState<"correct" | "wrong" | null>(`NumberQuantitySession:${exercise.id}:${currentIndex}:judgement`, null);
   const idleTimer = useRef<number | null>(null);
   const progressFill = useRef<HTMLSpanElement>(null);
   const progressAnimation = useRef<Animation | null>(null);
-  const resolving = useRef(false);
+  const resolving = useRef(Boolean(judgement));
   const speakPrompt = useCallback(() => speakWord(prompt), [prompt]);
   const completeRound = useCallback((correct: boolean, method: QuantityAnswerMethod, count = selected.size) => {
     if (rewardActive || judgement || resolving.current || (errorless && (!correct || count !== target))) return;
@@ -2818,7 +2827,7 @@ function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = f
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (!errorless && !teachingFlow && !manualAdvance) { onComplete(); return; }
     setJudgement(correct ? "correct" : "wrong");
-  }, [errorless, itemId, judgement, manualAdvance, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow, rewardActive]);
+  }, [errorless, itemId, judgement, manualAdvance, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow, rewardActive, setJudgement]);
   const completeRoundRef = useRef(completeRound);
   useEffect(() => { completeRoundRef.current = completeRound; }, [completeRound]);
   useLocalFallbackAdvance(manualAdvance, Boolean(judgement) && !teachingFlow && !errorless, onComplete, 250);
@@ -2909,7 +2918,7 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
 }
 
 function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
-  const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const [optionIds, setOptionIds] = useUpdateState(`SentenceMatchingSession:${exercise.id}:${currentIndex}:optionIds`, () => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
   const rewardActive = useContext(RewardActiveContext);
   const sentenceDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
@@ -2957,7 +2966,7 @@ function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, cu
 }
 
 function RecognitionSession({ previewLabel, mode, manualAdvance = false, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
-  const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const [optionIds, setOptionIds] = useUpdateState(`RecognitionSession:${exercise.id}:${currentIndex}:optionIds`, () => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
   const rewardActive = useContext(RewardActiveContext);
   const wordDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
@@ -3024,14 +3033,19 @@ function RecognitionSession({ previewLabel, mode, manualAdvance = false, present
 }
 
 function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
-  const [initialIds] = useState(() => shuffled((exercise.articleItemIds ?? []).filter((id) => library.some((item) => item.id === id && articleFor(item)))).slice(0, Math.max(1, exercise.rounds ?? 6)));
-  const [remainingIds, setRemainingIds] = useState(initialIds);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [wrongId, setWrongId] = useState<string | null>(null);
-  const [wrongArticle, setWrongArticle] = useState<Article | null>(null);
-  const [correctId, setCorrectId] = useState<string | null>(null);
-  const [correctArticle, setCorrectArticle] = useState<Article | null>(null);
-  const [feedback, setFeedback] = useState("Tocca IL o LA, oppure trascina l’immagine nel box.");
+  const [initialIds] = useUpdateState(`ArticleSortSession:${exercise.id}:${currentIndex}:initialIds`, () => shuffled((exercise.articleItemIds ?? []).filter((id) => library.some((item) => item.id === id && articleFor(item)))).slice(0, Math.max(1, exercise.rounds ?? 6)));
+  const [remainingIds, setRemainingIds] = useUpdateState(`ArticleSortSession:${exercise.id}:${currentIndex}:remainingIds`, initialIds);
+  const [selectedId, setSelectedId] = useUpdateState<string | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:selectedId`, null);
+  const [wrongId, setWrongId] = useUpdateState<string | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:wrongId`, null);
+  const [wrongArticle, setWrongArticle] = useUpdateState<Article | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:wrongArticle`, null);
+  const [correctId, setCorrectId] = useUpdateState<string | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:correctId`, null);
+  const [correctArticle, setCorrectArticle] = useUpdateState<Article | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:correctArticle`, null);
+  const [feedback, setFeedback] = useUpdateState(`ArticleSortSession:${exercise.id}:${currentIndex}:feedback`, "Tocca IL o LA, oppure trascina l’immagine nel box.");
+  useEffect(() => {
+    if (!wrongId) return;
+    const timer = window.setTimeout(() => { setWrongId(null); setWrongArticle(null); }, 900);
+    return () => window.clearTimeout(timer);
+  }, [wrongId, setWrongId, setWrongArticle]);
   useEffect(() => {
     remainingIds.slice(0, 3).forEach((id) => {
       const source = library.find((item) => item.id === id)?.image;
@@ -3061,7 +3075,6 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
       setWrongArticle(article);
       setSelectedId(null);
       setFeedback("Non è il box giusto: l’immagine torna al suo posto.");
-      window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongArticle((current) => current === article ? null : current); }, 900);
     }
   };
   const completed = remainingIds.length === 0;
@@ -3120,16 +3133,21 @@ function ArticleSortSession({ previewLabel, exercise, library, mode, manualAdvan
 
 function WordCategorySession({ previewLabel, exercise, library, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; library: LibraryItem[]; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const categories = useMemo(() => wordCategoryNames(library, exercise.categoryNames ?? []), [exercise.categoryNames, library]);
-  const [categoryOrder, setCategoryOrder] = useState(() => shuffled(categories));
+  const [categoryOrder, setCategoryOrder] = useUpdateState(`WordCategorySession:${exercise.id}:${currentIndex}:categoryOrder`, () => shuffled(categories));
   const candidates = useMemo(() => availableForWordCategories(library).filter((item) => categories.includes(item.category)), [library, categories]);
-  const [initialIds] = useState(() => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
-  const [remainingIds, setRemainingIds] = useState(initialIds);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [wrongId, setWrongId] = useState<string | null>(null);
-  const [wrongCategory, setWrongCategory] = useState<string | null>(null);
-  const [correctId, setCorrectId] = useState<string | null>(null);
-  const [correctCategory, setCorrectCategory] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState("Tocca la categoria corretta oppure trascina la parola nel box.");
+  const [initialIds] = useUpdateState(`WordCategorySession:${exercise.id}:${currentIndex}:initialIds`, () => pickCategoryRoundIds(candidates, exercise.categoryItemIds, exercise.rounds ?? 6));
+  const [remainingIds, setRemainingIds] = useUpdateState(`WordCategorySession:${exercise.id}:${currentIndex}:remainingIds`, initialIds);
+  const [selectedId, setSelectedId] = useUpdateState<string | null>(`WordCategorySession:${exercise.id}:${currentIndex}:selectedId`, null);
+  const [wrongId, setWrongId] = useUpdateState<string | null>(`WordCategorySession:${exercise.id}:${currentIndex}:wrongId`, null);
+  const [wrongCategory, setWrongCategory] = useUpdateState<string | null>(`WordCategorySession:${exercise.id}:${currentIndex}:wrongCategory`, null);
+  const [correctId, setCorrectId] = useUpdateState<string | null>(`WordCategorySession:${exercise.id}:${currentIndex}:correctId`, null);
+  const [correctCategory, setCorrectCategory] = useUpdateState<string | null>(`WordCategorySession:${exercise.id}:${currentIndex}:correctCategory`, null);
+  const [feedback, setFeedback] = useUpdateState(`WordCategorySession:${exercise.id}:${currentIndex}:feedback`, "Tocca la categoria corretta oppure trascina la parola nel box.");
+  useEffect(() => {
+    if (!wrongId) return;
+    const timer = window.setTimeout(() => { setWrongId(null); setWrongCategory(null); }, 900);
+    return () => window.clearTimeout(timer);
+  }, [wrongId, setWrongId, setWrongCategory]);
   const currentId = remainingIds[0];
   const currentItem = candidates.find((item) => item.id === currentId);
   const completed = remainingIds.length === 0;
@@ -3171,7 +3189,6 @@ function WordCategorySession({ previewLabel, exercise, library, mode, manualAdva
     } else {
       setSelectedId(null); setWrongId(itemId); setWrongCategory(category);
       setFeedback("Questa non è la categoria giusta. Riprova.");
-      window.setTimeout(() => { setWrongId((current) => current === itemId ? null : current); setWrongCategory((current) => current === category ? null : current); }, 900);
     }
   };
   const categoryDrag = usePointerDrop(!currentId || Boolean(correctId), (category) => place(category, currentId), { selector: "[data-category]", dataKey: "category" });

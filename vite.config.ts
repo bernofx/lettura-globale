@@ -4,6 +4,11 @@ import hostingConfig from "./.openai/hosting.json";
 import { readExecutionProfile } from "./scripts/execution-profile.mjs";
 import { sites } from "./build/sites-vite-plugin";
 import { connectorPreview } from "./build/connector-preview-plugin.mjs";
+import { execFileSync } from "node:child_process";
+
+// Same identifier in browser and Worker. Count is monotonic on main; the hash
+// distinguishes branch/rebuilt versions without exposing configuration/secrets.
+const appVersion = `r${execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim()}-${execFileSync("git", ["rev-parse", "--short=7", "HEAD"], { encoding: "utf8" }).trim()}`;
 
 // Resource identifiers are public configuration, not credentials. Vinext copies
 // this value into dist/server/wrangler.json, which Cloudflare Workers Builds
@@ -57,6 +62,7 @@ export default defineConfig(async ({ command }) => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define: { __APP_VERSION__: JSON.stringify(appVersion) },
     server: {
       ...(managedLinux
         ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] }
