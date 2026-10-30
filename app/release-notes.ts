@@ -1,11 +1,9 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Aggiornamenti sotto controllo",
+  title: "Una colonna sonora per i palloncini",
   items: [
-    "Numero di versione visibile in home e durante gli esercizi.",
-    "Avviso quando è disponibile una nuova versione, con pulsante Aggiorna.",
-    "Aggiornamento su richiesta con salvataggio cloud e ripresa del turno: conservati selezioni, risposte e ordine delle immagini.",
-    "Ripresa del collegamento al telefono senza una nuova scansione del QR.",
-    "Novità dell’ultima versione consultabili qui in home.",
+    "Aggiunta in Libreria → Suoni la colonna sonora del gioco, con ascolto di prova.",
+    "La musica accompagna sia il premio durante gli esercizi sia la festa finale.",
+    "Riproduzione continua finché il gioco è aperto, arresto alla chiusura e rispetto di volume e audio disattivato.",
   ],
 };

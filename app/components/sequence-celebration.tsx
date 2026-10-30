@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import { BALLOON_COLORS, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, popCelebrationBalloon } from "../domain/celebration";
+import type { RewardMusicPlayer } from "../domain/reward-soundtrack";
 
 const confettiColors = ["#ee6f8b", "#ffc65f", "#80cbb1", "#9c8de6", "#76b8ed"];
 const burstDirections = Array.from({ length: 8 }, (_, index) => ({
@@ -11,7 +12,18 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
   "--burst-angle": `${index * 45}deg`,
 } as CSSProperties));
 
-export function SequenceCelebration({ onPop, onClose, continuous = false }: { onPop?: () => void; onClose: () => void; continuous?: boolean }) {
+export function SequenceCelebration({ onPop, onClose, continuous = false, startMusic, musicVolume = 0 }: { onPop?: () => void; onClose: () => void; continuous?: boolean; startMusic?: (volume: number) => RewardMusicPlayer; musicVolume?: number }) {
+  const music = useRef<RewardMusicPlayer | null>(null);
+  const volume = useRef(musicVolume);
+  useEffect(() => { volume.current = musicVolume; music.current?.setVolume(musicVolume); }, [musicVolume]);
+  useEffect(() => {
+    const player = startMusic?.(volume.current);
+    music.current = player ?? null;
+    const retry = () => player?.retry();
+    window.addEventListener("pointerdown", retry);
+    window.addEventListener("keydown", retry);
+    return () => { window.removeEventListener("pointerdown", retry); window.removeEventListener("keydown", retry); player?.stop(); music.current = null; };
+  }, [startMusic]);
   const [wave, setWave] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {

@@ -21,6 +21,8 @@ import { playBalloonPop } from "./domain/balloon-audio";
 import { NumericField } from "./components/numeric-field";
 import { correctMatchSpeech, createCorrectMatchFeedback } from "./domain/correct-match-feedback";
 import { SequenceCelebration } from "./components/sequence-celebration";
+import { RewardSoundtrackLibraryItem } from "./components/reward-soundtrack-library-item";
+import { createRewardMusic, REWARD_SOUNDTRACK } from "./domain/reward-soundtrack";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
 import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads } from "./domain/library-deduplication";
@@ -555,10 +557,12 @@ function preloadFeedbackSounds() {
     const url = soundAsset(cue, currentSoundPreferences[cue]);
     if (url) { feedbackAudioFor(url); prepareFeedbackSound(url); }
   }
+  void prepareFeedbackSound(REWARD_SOUNDTRACK.url);
 }
 
 function prepareFeedbackSound(url: string) {
-  if (preparedFeedbackSounds[url] || feedbackSoundPreparation[url]) return;
+  if (preparedFeedbackSounds[url]) return Promise.resolve();
+  if (feedbackSoundPreparation[url]) return feedbackSoundPreparation[url];
   const context = feedbackContext();
   if (!context) return;
   feedbackSoundPreparation[url] = fetch(url, { cache: "force-cache" })
@@ -575,6 +579,14 @@ function prepareFeedbackSound(url: string) {
     })
     .catch(() => undefined)
     .finally(() => { delete feedbackSoundPreparation[url]; });
+  return feedbackSoundPreparation[url];
+}
+
+function startRewardMusic(volume: number) {
+  return createRewardMusic(feedbackContext(), async () => {
+    await prepareFeedbackSound(REWARD_SOUNDTRACK.url);
+    return preparedFeedbackSounds[REWARD_SOUNDTRACK.url]?.buffer ?? null;
+  }, volume);
 }
 
 function primeFeedbackSounds() {
@@ -2099,7 +2111,7 @@ function HomePageContent() {
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
-  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin defaultEmail={therapists[0]?.email ?? ""} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}</>;
+  if (!therapist) return <>{showTherapistLogin ? <TherapistLogin defaultEmail={therapists[0]?.email ?? ""} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}</>;
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
@@ -2139,8 +2151,8 @@ function HomePageContent() {
       {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
       {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
-      {rewardActive && sessionActive && <SequenceCelebration key="remote-reward" continuous onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
-      {celebratingSequence && <SequenceCelebration key="completion-reward" onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
+      {rewardActive && sessionActive && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="remote-reward" continuous onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
+      {celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="completion-reward" onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
     </div>
     </RewardActiveContext.Provider>
   );
@@ -2478,7 +2490,7 @@ function SoundSettingsPanel({ sounds, onChange }: { sounds: SoundPreferences; on
     { id: "finish", label: "Fine esercizio nella sequenza", detail: "Alla fine dell’ultimo turno di ciascun esercizio" },
     { id: "select", label: "Selezione in Numero quantità", detail: "Quando un oggetto viene selezionato o deselezionato" },
   ];
-  return <section className="panel sound-settings"><div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h2>Suoni degli esercizi</h2></div></div><p>Scegli un suono per ogni momento. Le scelte vengono salvate nel cloud e restano disponibili sugli altri dispositivi.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}</div></section>;
+  return <section className="panel sound-settings"><div className="panel-heading"><div><span className="eyebrow">AUDIO</span><h2>Suoni degli esercizi</h2></div></div><p>Scegli un suono per ogni momento. Le scelte vengono salvate nel cloud e restano disponibili sugli altri dispositivi.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}<RewardSoundtrackLibraryItem /></div></section>;
 }
 
 function SequenceTransition({ title, onContinue }: { title: string; onContinue: () => void }) {

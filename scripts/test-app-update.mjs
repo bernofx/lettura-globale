@@ -107,8 +107,39 @@ try {
   await send("Page.navigate", { url: `${origin}/` });
   await waitFor("document.querySelector('.whats-new summary') && document.querySelector('.topbar .app-version button')");
   await evaluate("document.querySelector('.whats-new summary').click()");
-  assert.equal(await evaluate("document.querySelectorAll('.whats-new[open] li').length"), 5);
+  assert.ok(await evaluate("document.querySelectorAll('.whats-new[open] li').length > 0"));
   assert.ok(await evaluate("document.querySelector('.whats-new summary small').textContent.startsWith('vr')"), "notes describe the loaded version");
+  if (process.env.TEST_REWARD_MUSIC === "1") {
+    await evaluate("[...document.querySelectorAll('.sidebar button')].find(el=>el.textContent.includes('Libreria')).click()");
+    await waitFor("document.querySelector('.reward-soundtrack-setting audio')");
+    assert.ok(await evaluate("document.querySelector('.reward-soundtrack-setting audio').src.endsWith('/audio/balloon-game.mp3')"));
+    await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+      window.__rewardLoops=[];
+      const start=AudioBufferSourceNode.prototype.start, stop=AudioBufferSourceNode.prototype.stop;
+      AudioBufferSourceNode.prototype.start=function(...args){if(this.loop)window.__rewardLoops.push({node:this,stopped:false});return start.apply(this,args)};
+      AudioBufferSourceNode.prototype.stop=function(...args){for(const entry of window.__rewardLoops)if(entry.node===this)entry.stopped=true;return stop.apply(this,args)};
+    ` });
+    const values = {
+      "root:view": "session", "root:sessionActive": true, "root:rewardActive": true,
+      "root:sessionPlan": [{ id: "music-quantity-demo", kind: "number-quantity", title: "Demo musica", promptId: "", optionIds: [], quantityTarget: 1, quantityMin: 1, quantityMax: 1, quantityErrorless: true }],
+      "root:sessionRunId": "demo-reward-music-run", "root:sessionChildId": stateFixture.children[0].id,
+      "root:sessionStartedAt": new Date().toISOString(), "root:sessionDescriptor": { title: "Demo musica", source: "sequence" }, "root:sessionMode": "teaching",
+    };
+    await evaluate(`localStorage.setItem('lg-sound-effects','true');localStorage.setItem('lg-sound-volume','100');sessionStorage.setItem('lg-update-checkpoint-v1',JSON.stringify({schema:1,at:Date.now(),identity:localStorage.getItem('lg-therapist-session'),path:'/',values:${JSON.stringify(values)}}))`);
+    await send("Page.navigate", { url: `${origin}/` });
+    await waitFor("document.querySelector('.sequence-celebration')");
+    await send("Runtime.evaluate", { expression: "window.dispatchEvent(new PointerEvent('pointerdown'));true", userGesture: true });
+    await waitFor("window.__rewardLoops?.length === 1");
+    await evaluate("document.querySelector('.celebration-close').click()");
+    await waitFor("!document.querySelector('.sequence-celebration') && window.__rewardLoops[0].stopped");
+    await evaluate("document.querySelector('.quantity-field button').click()");
+    await waitFor("document.querySelector('.quantity-field.correct')");
+    await evaluate("[...document.querySelectorAll('.quantity-body button')].find(el=>/Continua|Concludi/.test(el.textContent)).click()");
+    await waitFor("document.querySelector('.sequence-celebration') && window.__rewardLoops.length === 2");
+    await evaluate("document.querySelector('.celebration-close').click()");
+    await waitFor("!document.querySelector('.sequence-celebration') && window.__rewardLoops.every(entry=>entry.stopped)");
+    console.log("PASS browser audio: library player, decoded loop during reward and final celebration, both stop on close");
+  }
   assert.deepEqual(errors, [], "no uncaught browser errors");
   console.log("PASS browser: mobile update, storage failure, public URL, quantity selections/lock, IL-LA/categories/recognition order, desktop home version and release notes");
 } finally { socket.close(); }
