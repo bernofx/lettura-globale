@@ -72,12 +72,31 @@ try {
   const host = await open("host");
   const phone = await open("controller", key);
   await phone.wait((message) => message.type === "state" && message.connected);
+  await database.prepare(`CREATE TRIGGER test_delayed_snapshot BEFORE UPDATE OF snapshot_json ON remote_controller_sessions
+    WHEN json_extract(NEW.snapshot_json, '$.prompt') = 'Pera'
+    BEGIN SELECT RAISE(ABORT, 'synthetic_snapshot_mirror_unavailable'); END`).run();
   host.send({ type: "sync", snapshot: { ...snapshot, prompt: "Pera", currentIndex: 1, awaitingNextExercise: true } });
   await phone.wait((message) => message.type === "state" && message.snapshot?.prompt === "Pera" && message.snapshot.awaitingNextExercise);
   phone.send({ type: "command", command: { clientEventId: "event-demo-1", command: "next" } });
   const ack = await phone.wait((message) => message.type === "ack" && message.clientEventId === "event-demo-1");
   assert.equal(ack.serverSequence, 1);
   await host.wait((message) => message.type === "events" && message.events.some((event) => event.serverSequence === 1));
+  const staleMirror = await database.prepare("SELECT snapshot_json FROM remote_controller_sessions WHERE session_id = ?").bind(sessionId).first();
+  assert.equal(JSON.parse(staleMirror.snapshot_json).prompt, "Mela", "un mirror D1 guasto non blocca snapshot realtime, audit o comandi");
+  await database.prepare("DROP TRIGGER test_delayed_snapshot").run();
+  host.send({ type: "sync", snapshot: { ...snapshot, prompt: "Pera", currentIndex: 1, awaitingNextExercise: true, updatedAt: 2 } });
+  await phone.wait((message) => message.type === "state" && message.snapshot?.updatedAt === 2);
+  let mirrorRecovered = false;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const row = await database.prepare("SELECT snapshot_json FROM remote_controller_sessions WHERE session_id = ?").bind(sessionId).first();
+    if (JSON.parse(row.snapshot_json).prompt === "Pera") { mirrorRecovered = true; break; }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(mirrorRecovered, true, "il mirror converge dopo il ripristino D1");
+  host.send({ type: "applied", clientEventId: "event-demo-1", serverSequence: 1, hostMs: 7 });
+  await phone.wait((message) => message.type === "applied" && message.clientEventId === "event-demo-1" && message.hostMs === 7);
+  phone.send({ type: "applied", clientEventId: "forged-applied", serverSequence: 1, hostMs: 0 });
+  await phone.wait((message) => message.type === "error" && message.error === "invalid_command");
   phone.send({ type: "command", command: { clientEventId: "event-demo-1", command: "next" } });
   phone.send({ type: "command", command: { clientEventId: "event-pause", command: "pause" } });
   await phone.wait((message) => message.type === "ack" && message.clientEventId === "event-pause");
@@ -150,7 +169,7 @@ try {
   assert.equal((await call({ action: "close", role: "host" })).ok, true);
   await returningPhone.wait((message) => message.type === "state" && message.status === "closed" && message.snapshot === null);
   assert.equal((await call({ action: "ticket", role: "controller", identity: controller, controllerKey: secondKey })).status, 410);
-  console.log("PASS: DO/WebSocket reale, accesso, ticket monouso, comandi, idempotenza, pausa, replay, sostituzione e chiusura.");
+  console.log("PASS: DO/WebSocket reale, accesso, ticket monouso, audit atomico, conferma PC protetta, idempotenza, pausa, premio, replay, sostituzione e chiusura.");
 } finally {
   for (const socket of sockets) try { socket.close(); } catch { /* Already closed. */ }
   await mf.dispose();

@@ -12,6 +12,38 @@ Snapshot precedenti senza fase restano `active`. Le nuove console espongono i co
 
 ## Comportamento
 
+### Ottimizzazione approvata — 30 ottobre 2026
+
+La registrazione di ciascun comando usa un solo batch D1 atomico per inserimento
+idempotente, assegnazione della sequenza e rilettura dell’evento. L’audit rimane
+confermato prima dell’invio al PC e dell’ack al telefono; ordine, replay e revoca
+del controller non vengono sacrificati alla latenza.
+
+Lo snapshot corrente viene prima salvato nel DO e pubblicato sul WebSocket. Il
+mirror D1 viene aggiornato fuori dalla coda critica, con un solo writer e
+accorpamento degli aggiornamenti intermedi. Un marcatore durevole di mirror
+pendente consente retry su nuovo sync, alarm e riattivazione; token e stato chiuso
+impediscono a una vecchia scrittura di sostituire una sessione rigenerata/chiusa.
+I risultati clinici non passano da questo mirror e seguono la coda cloud dell’app.
+Heartbeat e broadcast evitano scritture/notifiche ripetitive a stato invariato.
+
+Il client Realtime invia frame ordinati senza attendere l’ack del comando
+precedente. Il DO continua a serializzarli. Al ritorno nell’app verifica subito
+la connessione: un probe di 800 ms evita di riaprire inutilmente un socket sano;
+ticket/socket obsoleti vengono ritirati senza aspettare la chiusura TCP. I comandi
+scaduti non vengono reinviati dopo sospensioni e quelli pendenti riusano lo stesso
+ID. Messaggi e callback di connessioni precedenti non modificano la nuova.
+
+Una ricevuta `applied`, ammessa solo dal ruolo host, segnala l’elaborazione nel
+PC dopo il commit React, distinta dall’ack del server. La console mostra le
+durate in un pannello richiudibile; nessun nome/risultato o log remoto aggiuntivo.
+La diagnostica è effimera e limitata agli ultimi 32 comandi. Non misura il tempo
+di caricamento delle immagini o di avvio dell’audio, né garantisce una soglia di
+latenza su reti mobili. Autenticazione, lease e formato dei dati storici invariati;
+nessuna migrazione o nuova APK.
+
+### Cronologia della prima sperimentazione
+
 Ogni nuova sessione parte in modalità `Classico`, mantenendo le API, il QR e il polling esistenti. Nel pannello QR l'adulto può scegliere `Realtime DO · prova`. Questo genera un QR distinto con trasporto e identificativo della sessione espliciti; il telefono non interpreta mai un QR classico come DO.
 
 Il cambio di modalità è esplicito: il server chiude il collegamento corrente prima di crearne un altro, invalida il vecchio controller e conserva sessione, turno, tentativi e registro dei comandi. Se un telefono è collegato o risulta perso, il cambio richiede conferma e nuova scansione. Non esiste un passaggio automatico tra polling e WebSocket durante una connessione.

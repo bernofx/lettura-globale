@@ -29,12 +29,14 @@ export type RealtimeMessage =
   | { type: "state"; status: string; connected: boolean; snapshot: RemoteSessionSnapshot | null }
   | { type: "events"; events: RemoteControllerEvent[] }
   | { type: "ack"; clientEventId: string; serverSequence: number }
+  | { type: "applied"; clientEventId: string; serverSequence: number; hostMs: number }
   | { type: "error"; error: string; clientEventId?: string }
   | { type: "replaced" }
   | { type: "pong" };
 export type RealtimeClientMessage =
   | { type: "ping" }
   | { type: "sync"; snapshot: RemoteSessionSnapshot }
+  | { type: "applied"; clientEventId: string; serverSequence: number; hostMs: number }
   | { type: "command"; command: RemoteCommand };
 
 export function realtimeControllerUrl(origin: string, token: string, sessionId: string) {

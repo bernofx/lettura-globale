@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { CONTROLLER_LEASE_MS, PAIRING_DURATION_MS, parseRemoteCommand, remoteCommandDisposition, sanitizeRemoteSnapshot, type RemoteControllerEvent, type RemoteSessionSnapshot } from "../app/domain/remote-controller";
 import type { RealtimeAction, RealtimeMessage, RealtimeResult } from "../app/domain/realtime-protocol";
 import { requestRealtime, upgradeRealtime } from "./gateway";
+import { storeRealtimeCommand } from "./command-store";
 
 type Env = { SESSIONS: DurableObjectNamespace; DB: D1Database; ALLOWED_ORIGIN: string };
 type Session = {
@@ -9,6 +10,7 @@ type Session = {
   tokenHash: string; expiresAt: number; controllerId: string | null; keyHash: string | null;
   status: "waiting" | "connected" | "closed"; snapshot: RemoteSessionSnapshot;
   hostSeen: number; controllerSeen: number;
+  mirrorDirty?: boolean;
 };
 type SocketIdentity = { role: "host" | "controller"; adultId: string; keyHash?: string; since: number; expiresAt?: number };
 type Ticket = SocketIdentity & { expiresAt: number };
@@ -34,11 +36,38 @@ export default class RealtimeGateway extends WorkerEntrypoint<Env> {
 // Internal actions travel through a private namespace fetch; public HTTP exposes only ticketed upgrades.
 export class RealtimeSession {
   private session: Session | null = null;
+  private lastPresenceSave = 0;
+  private lastConnectionState: boolean | null = null;
+  private mirrorPending: { accountId: string; sessionId: string; tokenHash: string; snapshot: string; at: number } | null = null;
+  private mirrorFlight: Promise<void> | null = null;
   constructor(private ctx: DurableObjectState, private env: Env) {
-    ctx.blockConcurrencyWhile(async () => { this.session = await ctx.storage.get<Session>("session") ?? null; });
+    ctx.blockConcurrencyWhile(async () => {
+      this.session = await ctx.storage.get<Session>("session") ?? null;
+      if (this.session?.mirrorDirty) this.mirrorSnapshot();
+    });
   }
 
   private save() { return this.ctx.storage.put("session", this.session); }
+  /** Latest-state D1 mirror is not the realtime authority. Serialize/coalesce
+   * mirror writes without holding the command input gate across D1 latency. */
+  private mirrorSnapshot() {
+    const s = this.session!;
+    this.mirrorPending = { accountId: s.accountId, sessionId: s.sessionId, tokenHash: s.tokenHash, snapshot: JSON.stringify(s.snapshot), at: Date.now() };
+    if (this.mirrorFlight) return;
+    this.mirrorFlight = (async () => {
+      while (this.mirrorPending) {
+        const next = this.mirrorPending;
+        this.mirrorPending = null;
+        await this.env.DB.prepare("UPDATE remote_controller_sessions SET snapshot_json = ?, updated_at = MAX(updated_at, ?) WHERE account_id = ? AND session_id = ? AND pairing_token_hash = ? AND status != 'closed'")
+          .bind(next.snapshot, next.at, next.accountId, next.sessionId, next.tokenHash).run();
+        if (!this.mirrorPending && this.session?.tokenHash === next.tokenHash && JSON.stringify(this.session.snapshot) === next.snapshot) {
+          this.session.mirrorDirty = false;
+          await this.save();
+        }
+      }
+    })().catch(() => { /* Durable dirty marker retries on alarm, wake or next sync. */ }).finally(() => { this.mirrorFlight = null; });
+    this.ctx.waitUntil(this.mirrorFlight);
+  }
   private send(socket: WebSocket, message: RealtimeMessage) {
     try { socket.send(JSON.stringify(message)); } catch { /* Closed sockets are removed by the runtime. */ }
   }
@@ -55,6 +84,7 @@ export class RealtimeSession {
     const s = this.session;
     if (!s) return;
     const connected = this.connected();
+    this.lastConnectionState = connected;
     for (const socket of this.ctx.getWebSockets()) if (this.valid(this.identity(socket))) {
       this.send(socket, { type: "state", status: s.status, connected, snapshot: s.status === "closed" ? null : s.snapshot });
     }
@@ -194,48 +224,44 @@ export class RealtimeSession {
       if (identity.role === "host") s.hostSeen = Date.now(); else s.controllerSeen = Date.now();
       if (input.type === "ping") {
         this.send(socket, { type: "pong" });
-        await this.save();
-        await this.ctx.storage.setAlarm(Date.now() + CONTROLLER_LEASE_MS);
-        this.broadcast();
+        if (Date.now() - this.lastPresenceSave >= 5_000) {
+          await this.save();
+          this.lastPresenceSave = Date.now();
+        }
+        if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(Date.now() + CONTROLLER_LEASE_MS);
+        if (this.connected() !== this.lastConnectionState) this.broadcast();
+        return;
+      }
+      if (input.type === "applied" && identity.role === "host") {
+        if (typeof input.clientEventId !== "string" || input.clientEventId.length < 8 || input.clientEventId.length > 100 || !Number.isSafeInteger(input.serverSequence) || Number(input.serverSequence) < 1 || typeof input.hostMs !== "number" || !Number.isFinite(input.hostMs) || input.hostMs < 0 || input.hostMs > 60_000) return;
+        for (const target of this.ctx.getWebSockets()) if (this.identity(target).role === "controller" && this.valid(this.identity(target))) {
+          this.send(target, { type: "applied", clientEventId: input.clientEventId, serverSequence: Number(input.serverSequence), hostMs: input.hostMs });
+        }
         return;
       }
       if (input.type === "sync" && identity.role === "host") {
         const snapshot = sanitizeRemoteSnapshot(input.snapshot);
         if (!snapshot || snapshot.sessionId !== s.sessionId) { this.send(socket, { type: "error", error: "invalid_snapshot" }); return; }
         s.snapshot = snapshot;
-        await this.env.DB.prepare("UPDATE remote_controller_sessions SET snapshot_json = ?, updated_at = ? WHERE account_id = ? AND session_id = ?")
-          .bind(JSON.stringify(snapshot), Date.now(), s.accountId, s.sessionId).run();
+        s.mirrorDirty = true;
         await this.save();
         this.broadcast();
+        this.mirrorSnapshot();
         return;
       }
       const command = input.type === "command" && identity.role === "controller" ? parseRemoteCommand(input.command) : null;
       if (!command) { this.send(socket, { type: "error", error: "invalid_command" }); return; }
-      const duplicate = await this.env.DB.prepare("SELECT server_sequence FROM remote_controller_events WHERE account_id = ? AND session_id = ? AND client_event_id = ?")
-        .bind(s.accountId, s.sessionId, command.clientEventId).first<{ server_sequence: number }>();
-      if (!duplicate && (!this.connected() || remoteCommandDisposition(command.command, s.snapshot.paused, s.snapshot.awaitingNextExercise, s.snapshot.phase, s.snapshot.rewardActive) === "ignore")) {
-        this.send(socket, { type: "error", error: "session_not_ready", clientEventId: command.clientEventId }); return;
-      }
+      const allowed = this.connected() && remoteCommandDisposition(command.command, s.snapshot.paused, s.snapshot.awaitingNextExercise, s.snapshot.phase, s.snapshot.rewardActive) !== "ignore";
       const now = Date.now();
-      await this.env.DB.batch([
-        this.env.DB.prepare(`INSERT INTO remote_controller_events (account_id, session_id, server_sequence, client_event_id, adult_id, origin, command, payload_json, created_at)
-          SELECT account_id, session_id, latest_sequence + 1, ?, ?, 'mobile', ?, ?, ? FROM remote_controller_sessions
-          WHERE account_id = ? AND session_id = ? AND controller_key_hash = ? AND status = 'connected'
-          ON CONFLICT(account_id, session_id, client_event_id) DO NOTHING`)
-          .bind(command.clientEventId, identity.adultId, command.command, JSON.stringify(command.payload ?? {}), now, s.accountId, s.sessionId, s.keyHash),
-        this.env.DB.prepare(`UPDATE remote_controller_sessions SET latest_sequence = COALESCE((SELECT MAX(server_sequence) FROM remote_controller_events WHERE account_id = ? AND session_id = ?), latest_sequence), updated_at = ? WHERE account_id = ? AND session_id = ?`)
-          .bind(s.accountId, s.sessionId, now, s.accountId, s.sessionId),
-      ]);
-      const saved = await this.env.DB.prepare("SELECT server_sequence, created_at, adult_id, command, payload_json FROM remote_controller_events WHERE account_id = ? AND session_id = ? AND client_event_id = ?")
-        .bind(s.accountId, s.sessionId, command.clientEventId).first<{ server_sequence: number; created_at: number; adult_id: string; command: RemoteControllerEvent["command"]; payload_json: string }>();
-      if (!saved) { this.send(socket, { type: "error", error: "controller_replaced", clientEventId: command.clientEventId }); return; }
-      if (!duplicate && saved.command === "pause") s.snapshot = { ...s.snapshot, paused: true };
-      if (!duplicate && saved.command === "resume") s.snapshot = { ...s.snapshot, paused: false };
-      if (!duplicate && saved.command === "toggle_reward") s.snapshot = { ...s.snapshot, rewardActive: !s.snapshot.rewardActive };
+      const stored = await storeRealtimeCommand(this.env.DB, s, identity.adultId, command, allowed, now);
+      if (!stored) { this.send(socket, { type: "error", error: allowed ? "controller_replaced" : "session_not_ready", clientEventId: command.clientEventId }); return; }
+      const event = stored.event;
+      if (stored.inserted && event.command === "pause") s.snapshot = { ...s.snapshot, paused: true };
+      if (stored.inserted && event.command === "resume") s.snapshot = { ...s.snapshot, paused: false };
+      if (stored.inserted && event.command === "toggle_reward") s.snapshot = { ...s.snapshot, rewardActive: !s.snapshot.rewardActive };
       await this.save();
-      const event: RemoteControllerEvent = { clientEventId: command.clientEventId, command: saved.command, payload: JSON.parse(saved.payload_json), serverSequence: saved.server_sequence, adultId: saved.adult_id, createdAt: saved.created_at };
       for (const host of this.ctx.getWebSockets()) if (this.identity(host).role === "host" && this.valid(this.identity(host))) this.send(host, { type: "events", events: [event] });
-      this.send(socket, { type: "ack", clientEventId: command.clientEventId, serverSequence: saved.server_sequence });
+      this.send(socket, { type: "ack", clientEventId: command.clientEventId, serverSequence: event.serverSequence });
       this.broadcast();
     }).catch(() => this.send(socket, { type: "error", error: "storage_unavailable" }));
   }
@@ -248,5 +274,9 @@ export class RealtimeSession {
     this.broadcast();
   }
   async webSocketError(socket: WebSocket) { await this.webSocketClose(socket); }
-  async alarm() { this.broadcast(); }
+  async alarm() {
+    this.broadcast();
+    if (this.session?.mirrorDirty) this.mirrorSnapshot();
+    if (this.session?.mirrorDirty || (this.session?.status === "connected" && this.ctx.getWebSockets().length)) await this.ctx.storage.setAlarm(Date.now() + CONTROLLER_LEASE_MS);
+  }
 }

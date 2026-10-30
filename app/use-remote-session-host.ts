@@ -67,8 +67,11 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
           if (attempt !== generation.current) return;
           if (message.type === "events") for (const event of message.events) {
             if (event.serverSequence <= latestSequence.current) continue;
+            const connection = socket.current;
+            const started = performance.now();
             flushSync(() => current.current.onCommand(event));
             latestSequence.current = event.serverSequence;
+            connection?.send({ type: "applied", clientEventId: event.clientEventId, serverSequence: event.serverSequence, hostMs: Math.round(performance.now() - started) });
           }
           if (message.type === "state") setState((old) => {
             const status = message.connected ? "connected" : message.status === "connected" ? "lost" : "waiting";

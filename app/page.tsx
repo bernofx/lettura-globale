@@ -45,7 +45,7 @@ import { buildExcelProgressCsv } from "./domain/progress-csv";
 import { createBrowserSpeechPlayer } from "./domain/browser-speech";
 import { controllerSessionView, remoteExerciseControls, REMOTE_CONTROLLER_POLL_MS, remoteCommandDisposition, remoteCommandFeedback, type RemoteControllerEvent, type RemoteCommandName, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost, type RemoteHostState } from "./use-remote-session-host";
-import { RealtimeSocket } from "./realtime-socket";
+import { RealtimeSocket, type CommandTiming } from "./realtime-socket";
 import { usePointerDrop } from "./use-pointer-drop";
 import { actionSceneCatalog } from "./domain/action-scene-catalog";
 import { isSimpleSentenceScene, sentenceMatchingAvailability, type PhraseStructure, type SentenceDifficulty, type SentenceOptionCount } from "./domain/sentence-matching";
@@ -2214,6 +2214,7 @@ function browserRandomHex(bytes = 32) {
 function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout, onExit, onJoined }: { token: string; realtimeSessionId: string | null; therapist: Therapist; onLogout: () => void; onExit: () => void; onJoined: () => void }) {
   const [state, setState] = useState<ControllerConsoleState>({ status: "joining", sessionId: "", controllerKey: "", snapshot: null, error: "" });
   const [commandFeedback, setCommandFeedback] = useState<ControllerCommandFeedback | null>(null);
+  const [commandTiming, setCommandTiming] = useState<CommandTiming | null>(null);
   const sendQueue = useRef<Promise<void>>(Promise.resolve());
   const feedbackTimer = useRef<number | null>(null);
   const [connectAttempt, setConnectAttempt] = useState(0);
@@ -2260,6 +2261,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
     if (!state.sessionId || !state.controllerKey) return;
     if (realtimeSessionId) {
       const socket = new RealtimeSocket({ sessionId: state.sessionId, role: "controller", controllerKey: state.controllerKey,
+        onTiming: (timing) => { if (!leaving.current) setCommandTiming((old) => old && old.startedAt > timing.startedAt ? old : timing); },
         onConnection: (connected, reason) => {
           if (leaving.current || connected) return;
           if (reason === "session_closed") { leaving.current = true; onExit(); return; }
@@ -2330,14 +2332,15 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
     const id = crypto.randomUUID();
     const key = `${command}:${payload?.label ?? ""}`;
     const label = remoteCommandFeedback(command, payload);
+    const tappedAt = performance.now();
     if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current);
     setCommandFeedback({ id, key, phase: "sending", label });
     if ("vibrate" in navigator) navigator.vibrate(12);
-    sendQueue.current = sendQueue.current.catch(() => undefined).then(async () => {
+    const dispatch = async () => {
       if (leaving.current) return;
       if (realtimeSessionId) {
         if (!realtimeSocket.current) throw new Error("not_connected");
-        await realtimeSocket.current.command({ clientEventId: id, command, payload });
+        await realtimeSocket.current.command({ clientEventId: id, command, payload }, tappedAt);
       } else {
         const response = await fetchWithTimeout(`/api/controller/session/${encodeURIComponent(state.sessionId)}`, { method: "POST", headers: { "content-type": "application/json", "x-controller-key": state.controllerKey }, body: JSON.stringify({ action: "command", command: { clientEventId: id, command, payload } }) }, 6_500);
         if (!response.ok) throw new Error("command_failed");
@@ -2346,12 +2349,15 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
       setCommandFeedback((current) => current?.id === id ? { ...current, phase: "sent" } : current);
       if ("vibrate" in navigator) navigator.vibrate([10, 30, 10]);
       feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 1_100);
-    }).catch(() => {
+    };
+    const pending = realtimeSessionId ? dispatch() : sendQueue.current.catch(() => undefined).then(dispatch);
+    if (!realtimeSessionId) sendQueue.current = pending;
+    void pending.catch((error) => {
       if (leaving.current) return;
       setCommandFeedback((current) => current?.id === id ? { ...current, phase: "error" } : current);
       feedbackTimer.current = window.setTimeout(() => setCommandFeedback((current) => current?.id === id ? null : current), 2_500);
       if ("vibrate" in navigator) navigator.vibrate([35, 30, 35]);
-      setState((current) => ({ ...current, status: "lost", snapshot: null, error: "Comando non inviato. Il PC userà i controlli locali." }));
+      if (error instanceof Error && ["not_connected", "disconnected"].includes(error.message)) setState((current) => ({ ...current, status: "lost", snapshot: null, error: "Connessione interrotta. Riconnessione in corso…" }));
     });
   };
   const feedbackFor = (command: RemoteCommandName, payload?: { label?: string }) => commandFeedback?.key === `${command}:${payload?.label ?? ""}` ? commandFeedback.phase : undefined;
@@ -2368,8 +2374,9 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
     </section>
     {commandFeedback && <div className={`remote-command-feedback ${commandFeedback.phase}`} role="status" aria-live="polite">
       {commandFeedback.phase === "sending" ? <RefreshCw /> : commandFeedback.phase === "sent" ? <Check /> : <X />}
-      <span><strong>{commandFeedback.label}</strong><small>{commandFeedback.phase === "sending" ? "Invio al PC…" : commandFeedback.phase === "sent" ? "Comando inviato" : "Invio non riuscito"}</small></span>
+      <span><strong>{commandFeedback.label}</strong><small>{commandFeedback.phase === "sending" ? "Invio al PC…" : commandFeedback.phase === "sent" ? commandTiming?.clientEventId === commandFeedback.id && commandTiming.appliedMs !== undefined ? `Elaborato sul PC · ${commandTiming.appliedMs} ms` : "Ricevuto dal server" : "Conferma non ricevuta: controlla il PC prima di riprovare"}</small></span>
     </div>}
+    {realtimeSessionId && <details className="remote-latency"><summary>Tempi del collegamento</summary>{commandTiming ? <small>Ultimo comando: conferma server {commandTiming.ackMs === undefined ? "in attesa" : `${commandTiming.ackMs} ms`} · elaborazione sul PC {commandTiming.appliedMs === undefined ? "non ancora confermata" : `${commandTiming.appliedMs} ms complessivi (${commandTiming.hostMs ?? 0} ms sul PC)`}. Misure locali, senza nomi o risultati.</small> : <small>I tempi compariranno dopo il primo comando. Il pannello resta chiuso finché non lo apri.</small>}</details>}
     {snapshot?.phase === "ready" ? <section className="remote-now-card remote-ready-card"><span>{snapshot.childName}</span><h1>PRONTI?</h1><p>{snapshot.sessionTitle}</p><button className="primary-button large" type="button" data-feedback={feedbackFor("start")} disabled={!connected || commandFeedback?.phase === "sending"} onClick={() => send("start")}><Play fill="currentColor" />Inizia</button><small>Gli altri controlli saranno disponibili dopo l’avvio.</small></section> : snapshot ? <>
       <section className="remote-now-card"><span>{snapshot.childName} · {snapshot.currentIndex + 1} di {snapshot.total}</span><h1>{snapshot.exerciseTitle}</h1><p>{snapshot.prompt || snapshot.sessionTitle}</p><div><small>{snapshot.answerState === "correct" ? "Risposta corretta" : snapshot.answerState === "wrong" ? "Risposta errata" : "In attesa della risposta"}</small>{snapshot.paused && <strong>IN PAUSA</strong>}</div></section>
       <section className="remote-command-grid">
