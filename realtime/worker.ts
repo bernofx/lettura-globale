@@ -213,7 +213,7 @@ export class RealtimeSession {
       if (!command) { this.send(socket, { type: "error", error: "invalid_command" }); return; }
       const duplicate = await this.env.DB.prepare("SELECT server_sequence FROM remote_controller_events WHERE account_id = ? AND session_id = ? AND client_event_id = ?")
         .bind(s.accountId, s.sessionId, command.clientEventId).first<{ server_sequence: number }>();
-      if (!duplicate && (!this.connected() || remoteCommandDisposition(command.command, s.snapshot.paused, s.snapshot.awaitingNextExercise, s.snapshot.phase) === "ignore")) {
+      if (!duplicate && (!this.connected() || remoteCommandDisposition(command.command, s.snapshot.paused, s.snapshot.awaitingNextExercise, s.snapshot.phase, s.snapshot.rewardActive) === "ignore")) {
         this.send(socket, { type: "error", error: "session_not_ready", clientEventId: command.clientEventId }); return;
       }
       const now = Date.now();
@@ -231,6 +231,7 @@ export class RealtimeSession {
       if (!saved) { this.send(socket, { type: "error", error: "controller_replaced", clientEventId: command.clientEventId }); return; }
       if (!duplicate && saved.command === "pause") s.snapshot = { ...s.snapshot, paused: true };
       if (!duplicate && saved.command === "resume") s.snapshot = { ...s.snapshot, paused: false };
+      if (!duplicate && saved.command === "toggle_reward") s.snapshot = { ...s.snapshot, rewardActive: !s.snapshot.rewardActive };
       await this.save();
       const event: RemoteControllerEvent = { clientEventId: command.clientEventId, command: saved.command, payload: JSON.parse(saved.payload_json), serverSequence: saved.server_sequence, adultId: saved.adult_id, createdAt: saved.created_at };
       for (const host of this.ctx.getWebSockets()) if (this.identity(host).role === "host" && this.valid(this.identity(host))) this.send(host, { type: "events", events: [event] });

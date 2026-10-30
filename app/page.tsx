@@ -76,6 +76,7 @@ const REMOTE_COMPONENT_EVENT = "lg:remote-controller-command";
 
 type AudioVolumeControl = { volume: number; setVolume: (volume: number) => void };
 const AudioVolumeContext = createContext<AudioVolumeControl>({ volume: 100, setVolume: () => undefined });
+const RewardActiveContext = createContext(false);
 const RemoteHostContext = createContext<RemoteHostState | null>(null);
 
 function emitRemoteComponentCommand(event: RemoteControllerEvent) {
@@ -93,16 +94,18 @@ function useRemoteComponentCommand(handler: (event: RemoteControllerEvent) => vo
 }
 
 function useLocalFallbackAdvance(manualAdvance: boolean, pending: boolean, advance: () => void, delayMs: number) {
-  const wasManual = useRef(manualAdvance);
+  const rewardActive = useContext(RewardActiveContext);
+  const effectiveManual = manualAdvance || rewardActive;
+  const wasManual = useRef(effectiveManual);
   const advanceRef = useRef(advance);
   useEffect(() => { advanceRef.current = advance; }, [advance]);
   useEffect(() => {
-    const controllerDisconnected = wasManual.current && !manualAdvance;
-    wasManual.current = manualAdvance;
+    const controllerDisconnected = wasManual.current && !effectiveManual;
+    wasManual.current = effectiveManual;
     if (!controllerDisconnected || !pending) return;
     const timer = window.setTimeout(() => advanceRef.current(), delayMs);
     return () => window.clearTimeout(timer);
-  }, [delayMs, manualAdvance, pending]);
+  }, [delayMs, effectiveManual, pending]);
 }
 
 function useToastMessage() {
@@ -714,6 +717,13 @@ export default function HomePage() {
   const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
+  const [rewardActive, setRewardActive] = useState(false);
+  const rewardActiveRef = useRef(false);
+  const changeReward = useCallback((active: boolean) => {
+    rewardActiveRef.current = active;
+    setRewardActive(active);
+    if (active) cancelSpeech();
+  }, []);
   const [sessionPresentation, setSessionPresentation] = useState<Presentation>("images");
   const [sessionIndex, setSessionIndex] = useState(0);
   const sessionAdvanceGuard = useRef(new SessionAdvanceGuard());
@@ -1642,6 +1652,7 @@ export default function HomePage() {
     setSessionDescriptor({ title: options?.title ?? quickExercise?.title ?? "Sessione", source: options?.source ?? (quickExercise ? "quick" : "sequence") });
     setSessionIndex(0); setSessionFurthestIndex(0); setAnswerState("idle"); setWrongAnswerId(null);
     setSessionFromSharedLink(false); setSessionIsTrial(Boolean(options?.trial)); setSessionComplete(false);
+    changeReward(false);
     sessionPausedRef.current = false; setSessionPaused(false); setAwaitingNextExercise(false);
     setQuickExerciseToSave(quickExercise ?? null);
     sessionReadyRef.current = ready;
@@ -1684,6 +1695,7 @@ export default function HomePage() {
   };
   const tryExercise = (exerciseId: string) => { const exercise = visibleExercises.find((item) => item.id === exerciseId); if (exercise) beginSession([exercise], undefined, { trial: true, returnView: "exercises" }); };
   const chooseAnswer = (answerId: string) => {
+    if (rewardActiveRef.current) return;
     if (!currentExercise || answerState === "correct") return;
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
@@ -1704,6 +1716,7 @@ export default function HomePage() {
     }
   };
   const addHelp = (label: string, wordId?: string) => {
+    if (rewardActiveRef.current) return;
     if (!shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
     const exerciseId = currentExercise?.sourceExerciseId ?? currentExercise?.id;
     if (!exerciseId) return;
@@ -1712,6 +1725,7 @@ export default function HomePage() {
     notify(`Aiuto registrato: ${label}`);
   };
   const closeActiveSession = () => {
+    changeReward(false);
     cancelPreparedSession();
     const exitModalMarker = modalHistoryMarker.current;
     if (exitModalMarker) modalHistoryMarker.current = null;
@@ -1752,6 +1766,7 @@ export default function HomePage() {
     setView("session");
   };
   const completeActiveSession = () => {
+    changeReward(false);
     cancelSpeech();
     if (wrongFeedbackTimer.current !== null) {
       window.clearTimeout(wrongFeedbackTimer.current);
@@ -1769,7 +1784,7 @@ export default function HomePage() {
     notify("Sessione completata e salvata");
   };
   const nextExercise = (options?: { skipTransition?: boolean }) => {
-    if (sessionPausedRef.current) return;
+    if (sessionPausedRef.current || rewardActiveRef.current) return;
     if (!sessionAdvanceGuard.current.claim(sessionRunId, sessionIndex)) return;
     cancelSpeech();
     if (wrongFeedbackTimer.current !== null) {
@@ -1789,7 +1804,7 @@ export default function HomePage() {
     setAwaitingNextExercise(sessionDescriptor.source === "sequence" && completesExercise && options?.skipTransition !== true);
   };
   const navigateReachedExercise = (direction: -1 | 1) => {
-    if (sessionPausedRef.current) return;
+    if (sessionPausedRef.current || rewardActiveRef.current) return;
     const nextIndex = sessionIndex + direction;
     if (nextIndex < 0 || nextIndex > sessionFurthestIndex) return;
     sessionAdvanceGuard.current.navigated();
@@ -1804,6 +1819,7 @@ export default function HomePage() {
     setAwaitingNextExercise(false);
   };
   const recordClassificationAttempt = (itemId: string, answer: string, correct: boolean) => {
+    if (rewardActiveRef.current) return;
     if (!currentExercise || !shouldRecordSessionEvents(sessionFromSharedLink || sessionIsTrial)) return;
     const exerciseId = currentExercise.sourceExerciseId ?? currentExercise.id;
     const sessionItemId = `${sessionRunId}:${exerciseId}:${itemId}`;
@@ -1811,7 +1827,7 @@ export default function HomePage() {
   };
 
   const jumpToSessionIndex = (nextIndex: number) => {
-    if (sessionPausedRef.current) return;
+    if (sessionPausedRef.current || rewardActiveRef.current) return;
     if (nextIndex < 0 || nextIndex >= sessionExercises.length) return;
     if (nextIndex !== sessionIndex) sessionAdvanceGuard.current.navigated();
     cancelSpeech();
@@ -1833,8 +1849,9 @@ export default function HomePage() {
       return;
     }
     if (!sessionActive || command === "start") return;
-    const disposition = remoteCommandDisposition(command, sessionPausedRef.current, awaitingNextExercise);
+    const disposition = remoteCommandDisposition(command, sessionPausedRef.current, awaitingNextExercise, "active", rewardActiveRef.current);
     if (disposition === "ignore") return;
+    if (command === "toggle_reward") { changeReward(!rewardActiveRef.current); return; }
     // Check actual PC bounds too: a stale/forged phone snapshot cannot skip past the plan.
     if (command === "next_activity" && activityBounds.next === null) return;
     if (command === "previous_activity" && activityBounds.previous === null) return;
@@ -1901,6 +1918,7 @@ export default function HomePage() {
     answerState,
     soundEffects,
     paused: sessionPaused,
+    rewardActive,
     awaitingNextExercise,
     canPreviousActivity: activityBounds.previous !== null,
     canNextActivity: activityBounds.next !== null,
@@ -1994,6 +2012,7 @@ export default function HomePage() {
   };
 
   const exitController = useCallback(() => {
+    changeReward(false);
     if (controllerToken) sessionStorage.removeItem(`lg-controller:${controllerToken}`);
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
     controllerActiveRef.current = false;
@@ -2007,7 +2026,7 @@ export default function HomePage() {
     setRecoveryCandidate(null);
     setView("home");
     window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
-  }, [controllerToken]);
+  }, [controllerToken, changeReward]);
   const controllerJoined = useCallback(() => {
     sessionStorage.removeItem(PENDING_CONTROLLER_LAUNCH_KEY);
   }, []);
@@ -2078,9 +2097,10 @@ export default function HomePage() {
   if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} />;
 
   return (
+    <RewardActiveContext.Provider value={rewardActive}>
     <div className="app-shell">
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
-      <main className="main-content">
+      <main className="main-content" inert={rewardActive} aria-hidden={rewardActive || undefined}>
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive || sessionReady ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView categorySymbols={categorySymbols} onCategorySymbol={(category, id) => setCategorySymbols((current) => { const next = { ...current }; if (id) next[category] = id; else delete next[category]; return next; })} onCategoryUpload={async (category, image) => {
@@ -2112,8 +2132,10 @@ export default function HomePage() {
       {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
       {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
       {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
-      {celebratingSequence && <SequenceCelebration onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
+      {rewardActive && sessionActive && <SequenceCelebration key="remote-reward" continuous onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
+      {celebratingSequence && <SequenceCelebration key="completion-reward" onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
     </div>
+    </RewardActiveContext.Provider>
   );
 }
 
@@ -2301,7 +2323,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
   };
 
   const send = (command: RemoteCommandName, payload?: { label?: string }) => {
-    if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false, state.snapshot?.awaitingNextExercise, state.snapshot?.phase) === "ignore") return;
+    if (state.status !== "connected" || remoteCommandDisposition(command, state.snapshot?.paused ?? false, state.snapshot?.awaitingNextExercise, state.snapshot?.phase, state.snapshot?.rewardActive) === "ignore") return;
     if (command === "previous_activity" && state.snapshot?.canPreviousActivity !== true) return;
     if (command === "next_activity" && state.snapshot?.canNextActivity !== true) return;
     if (command === "finish" && state.snapshot?.canNextActivity !== false) return;
@@ -2335,7 +2357,7 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
   const feedbackFor = (command: RemoteCommandName, payload?: { label?: string }) => commandFeedback?.key === `${command}:${payload?.label ?? ""}` ? commandFeedback.phase : undefined;
   const snapshot = state.snapshot;
   const connected = state.status === "connected";
-  const exerciseControlsEnabled = connected && !snapshot?.paused;
+  const exerciseControlsEnabled = connected && !snapshot?.paused && !snapshot?.rewardActive;
   const controls = remoteExerciseControls(snapshot?.exerciseKind);
 
   return <main className="remote-controller-page">
@@ -2358,10 +2380,11 @@ function RemoteControllerConsole({ token, realtimeSessionId, therapist, onLogout
       </section>
       {snapshot.canNextActivity === false && <section className="remote-command-row"><button type="button" data-feedback={feedbackFor("finish")} disabled={!exerciseControlsEnabled} onClick={() => { if (window.confirm("Concludere la sessione e mostrare la festa finale? Le prove non svolte non saranno segnate come corrette.")) send("finish"); }}><Check />Concludi sessione</button></section>}
       <section className="remote-command-row">
+        <button type="button" aria-pressed={Boolean(snapshot.rewardActive)} data-feedback={feedbackFor("toggle_reward")} disabled={!connected || commandFeedback?.phase === "sending"} onClick={() => send("toggle_reward")}><Candy />{snapshot.rewardActive ? "Chiudi premio" : "Premio"}</button>
         {controls.speak && <button type="button" data-feedback={feedbackFor("speak")} disabled={!exerciseControlsEnabled} onClick={() => send("speak")}><Volume2 />Riascolta</button>}
         <button type="button" data-feedback={feedbackFor("toggle_audio")} disabled={!connected} onClick={() => send("toggle_audio")}>{snapshot.soundEffects ? <VolumeX /> : <Volume2 />}{snapshot.soundEffects ? "Togli audio" : "Attiva audio"}</button>
         {controls.shuffle && <button type="button" data-feedback={feedbackFor("shuffle")} disabled={!exerciseControlsEnabled} onClick={() => send("shuffle")}><Shuffle />Mischia</button>}
-        <button type="button" data-feedback={feedbackFor(snapshot.paused ? "resume" : "pause")} disabled={!connected} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
+        <button type="button" data-feedback={feedbackFor(snapshot.paused ? "resume" : "pause")} disabled={!connected || snapshot.rewardActive} onClick={() => send(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? <Play /> : <Pause />}{snapshot.paused ? "Riprendi" : "Pausa"}</button>
       </section>
       {controls.judgement && <section className="remote-judgement"><button data-feedback={feedbackFor("mark_wrong")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_wrong")}><X />Errata</button>{controls.helped && <button data-feedback={feedbackFor("mark_helped")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_helped")}><CircleHelp />Corretta con aiuto</button>}<button data-feedback={feedbackFor("mark_correct")} disabled={!exerciseControlsEnabled} onClick={() => send("mark_correct")}><Check />Corretta</button>{controls.retry && <button data-feedback={feedbackFor("retry")} disabled={!exerciseControlsEnabled} onClick={() => send("retry")}><RefreshCw />Riprova</button>}</section>}
       <section className="remote-help-panel"><span>Aiuti forniti</span><div>{helpTypes.map((label) => <button type="button" data-feedback={feedbackFor("help", { label })} disabled={!exerciseControlsEnabled} key={label} onClick={() => send("help", { label })}>{label}</button>)}</div></section>
@@ -2610,6 +2633,8 @@ function CorrectMatchPronunciation({ kind, checked, onChange }: { kind: "article
 }
 
 function useCorrectMatchFeedback(matchId: string | null, text: string | null, manualAdvance: boolean, soundEffects: boolean, advance: () => void) {
+  const rewardActive = useContext(RewardActiveContext);
+  const effectiveManual = manualAdvance || rewardActive;
   const advanceRef = useRef(advance);
   const manualRef = useRef(manualAdvance);
   const soundEffectsRef = useRef(soundEffects);
@@ -2617,9 +2642,9 @@ function useCorrectMatchFeedback(matchId: string | null, text: string | null, ma
   useEffect(() => { advanceRef.current = advance; }, [advance]);
   useEffect(() => { soundEffectsRef.current = soundEffects; }, [soundEffects]);
   useEffect(() => {
-    manualRef.current = manualAdvance;
-    controller.current?.setManual(manualAdvance);
-  }, [manualAdvance]);
+    manualRef.current = effectiveManual;
+    controller.current?.setManual(effectiveManual);
+  }, [effectiveManual]);
   useEffect(() => {
     if (!matchId) return;
     const feedback = createCorrectMatchFeedback({
@@ -2763,6 +2788,7 @@ function QuantityObjectIcon({ object }: { object: QuantityObject }) {
 }
 
 function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
+  const rewardActive = useContext(RewardActiveContext);
   const target = exercise.quantityTarget ?? exercise.quantityMin ?? 1;
   const object = exercise.quantityObject ?? (exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "candy" : exercise.quantityObjectSet);
   const itemId = `quantity:${exercise.id}:${target}`;
@@ -2778,19 +2804,20 @@ function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = f
   const resolving = useRef(false);
   const speakPrompt = useCallback(() => speakWord(prompt), [prompt]);
   const completeRound = useCallback((correct: boolean, method: QuantityAnswerMethod, count = selected.size) => {
-    if (judgement || resolving.current || (errorless && (!correct || count !== target))) return;
+    if (rewardActive || judgement || resolving.current || (errorless && (!correct || count !== target))) return;
     resolving.current = true;
     if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
     onAttempt(itemId, quantityAnswerId(target, count, method, crypto.randomUUID()), correct);
     playFeedbackTone(correct ? "correct" : "wrong", soundEffects);
     if (!errorless && !teachingFlow && !manualAdvance) { onComplete(); return; }
     setJudgement(correct ? "correct" : "wrong");
-  }, [errorless, itemId, judgement, manualAdvance, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow]);
+  }, [errorless, itemId, judgement, manualAdvance, onAttempt, onComplete, selected.size, soundEffects, target, teachingFlow, rewardActive]);
   const completeRoundRef = useRef(completeRound);
   useEffect(() => { completeRoundRef.current = completeRound; }, [completeRound]);
   useLocalFallbackAdvance(manualAdvance, Boolean(judgement) && !teachingFlow && !errorless, onComplete, 250);
-  useEffect(() => speakPrompt(), [speakPrompt]);
+  useEffect(() => { if (!rewardActive) return speakPrompt(); }, [speakPrompt, rewardActive]);
   useEffect(() => {
+    if (rewardActive) return;
     const decision = judgement ? null : quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3, errorless);
     if (!decision) return;
     const restartTimer = () => {
@@ -2813,7 +2840,7 @@ function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = f
       progressAnimation.current?.cancel();
       progressAnimation.current = null;
     };
-  }, [errorless, exercise.quantityAutoComplete, exercise.quantityIdleSeconds, judgement, mode, previewLabel, selected.size, target]);
+  }, [errorless, exercise.quantityAutoComplete, exercise.quantityIdleSeconds, judgement, mode, previewLabel, selected.size, target, rewardActive]);
   useEffect(() => () => {
     if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
     progressAnimation.current?.cancel();
@@ -2876,15 +2903,16 @@ function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {
 
 function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const rewardActive = useContext(RewardActiveContext);
   const sentenceDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useRemoteComponentCommand((event) => { if (event.command === "shuffle") setOptionIds((current) => shuffled(current)); });
   useEffect(() => {
-    if (answerState !== "correct" || manualAdvance) return;
+    if (answerState !== "correct" || manualAdvance || rewardActive) return;
     const timer = window.setTimeout(() => onNextRef.current(), 750);
     return () => window.clearTimeout(timer);
-  }, [answerState, manualAdvance]);
+  }, [answerState, manualAdvance, rewardActive]);
   return <div className="session-screen sentence-matching-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Frase → immagine</span><strong>{exercise.title}</strong></div>
@@ -2923,6 +2951,7 @@ function SentenceMatchingSession({ previewLabel, mode, manualAdvance = false, cu
 
 function RecognitionSession({ previewLabel, mode, manualAdvance = false, presentation, currentIndex, total, exercise, prompt, library, answerState, wrongAnswerId, onChoose, onHelp, onNext, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; mode: Mode; manualAdvance?: boolean; presentation: Presentation; currentIndex: number; total: number; exercise: Exercise; prompt: LibraryItem; library: LibraryItem[]; answerState: "idle" | "wrong" | "correct"; wrongAnswerId: string | null; onChoose: (id: string) => void; onHelp: (label: string, wordId?: string) => void; onNext: () => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const [optionIds, setOptionIds] = useState(() => exercise.sourceExerciseId ? exercise.optionIds : shuffled(exercise.optionIds));
+  const rewardActive = useContext(RewardActiveContext);
   const wordDrag = usePointerDrop(answerState === "correct", onChoose);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
@@ -2931,7 +2960,7 @@ function RecognitionSession({ previewLabel, mode, manualAdvance = false, present
   });
   useEffect(() => {
     if (answerState !== "correct") return;
-    if (manualAdvance) return;
+    if (manualAdvance || rewardActive) return;
     let cancelled = false;
     let completionTimer: number | null = null;
     const timer = window.setTimeout(() => {
@@ -2949,7 +2978,7 @@ function RecognitionSession({ previewLabel, mode, manualAdvance = false, present
       window.clearTimeout(timer);
       if (completionTimer) window.clearTimeout(completionTimer);
     };
-  }, [answerState, manualAdvance, presentation, prompt.word, soundEffects]);
+  }, [answerState, manualAdvance, presentation, prompt.word, soundEffects, rewardActive]);
   return <div className="session-screen recognition-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div>

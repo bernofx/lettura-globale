@@ -33,3 +33,16 @@ test("nuove ondate fino agli ultimi secondi con ID unici e al massimo 32 element
   assert.deepEqual(celebrationBalloons(1000), celebrationBalloons(BALLOON_WAVE_COUNT - 1));
   assert.deepEqual(celebrationBalloons(-1), celebrationBalloons(0));
 });
+
+test("premio continuo: altre ondate oltre venti secondi, senza accumulare palloncini montati", () => {
+  for (const wave of [10, 30, 300, 3000]) {
+    const balloons = celebrationBalloons(wave, true);
+    assert.equal(balloons.length, 32);
+    const last = balloons.at(-1)!;
+    assert.equal(last.wave, wave);
+    const popped = popCelebrationBalloon(new Set(), last.id, true);
+    assert.ok(popped.has(last.id));
+    assert.equal(popCelebrationBalloon(popped, last.id, true), popped);
+    assert.equal(popCelebrationBalloon(new Set(), last.id).size, 0, "il gioco finale mantiene il limite di 20 secondi");
+  }
+});

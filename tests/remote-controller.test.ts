@@ -24,7 +24,7 @@ test("i comandi si adattano alle sei tipologie senza pulsanti senza effetto", ()
 });
 
 test("la pausa impedisce di modificare il turno anche con comandi già in coda", () => {
-  const allowedDuringPause = new Set(["pause", "resume", "end", "toggle_audio"]);
+  const allowedDuringPause = new Set(["pause", "resume", "end", "toggle_audio", "toggle_reward"]);
   for (const command of remoteCommandNames) {
     assert.equal(remoteCommandDisposition(command, true), allowedDuringPause.has(command) ? "execute" : "ignore", command);
     assert.equal(remoteCommandDisposition(command, false), command === "start" ? "ignore" : "execute", command);
@@ -88,12 +88,33 @@ test("la conclusione esplicita è compatibile con lo schema D1 storico", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(readFileSync(new URL("../drizzle/0011_remote_session_controller.sql", import.meta.url), "utf8"));
-    for (const [index, command] of ["finish", "start"].entries()) {
+    for (const [index, command] of ["finish", "start", "toggle_reward"].entries()) {
       db.prepare("INSERT INTO remote_controller_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .run("demo", "session", index + 1, `${command}-demo-123`, "adult", "mobile", command, "{}", 1);
       assert.equal(db.prepare("SELECT command FROM remote_controller_events WHERE server_sequence = ?").get(index + 1)?.command, command);
     }
   } finally { db.close(); }
+});
+
+test("premio disponibile anche in pausa, mai prima di Inizia, blocca le altre azioni", () => {
+  assert.equal(parseRemoteCommand({ clientEventId: "reward-demo-123", command: "toggle_reward" })?.command, "toggle_reward");
+  assert.equal(remoteCommandFeedback("toggle_reward"), "Premio");
+  assert.equal(remoteCommandDisposition("toggle_reward", true), "execute");
+  assert.equal(remoteCommandDisposition("toggle_reward", false, false, "ready"), "ignore");
+  for (const command of remoteCommandNames) {
+    const allowed = ["toggle_reward", "toggle_audio", "end"].includes(command);
+    assert.equal(remoteCommandDisposition(command, false, true, "active", true), allowed ? "execute" : "ignore", command);
+  }
+  assert.equal(remoteCommandDisposition("next", false, false, "active", false), "execute");
+  assert.equal(remoteCommandDisposition("next", true, false, "active", false), "ignore", "chiudere il premio non rimuove una pausa precedente");
+});
+
+test("stato del premio sincronizzato dal PC, compatibile con snapshot precedenti", () => {
+  const base = { sessionId: "demo", childName: "Demo", sessionTitle: "Demo", exerciseTitle: "Trova", exerciseKind: "recognition", prompt: "Mela", currentIndex: 0, total: 4, answerState: "idle", soundEffects: true, paused: false, updatedAt: 1 };
+  assert.equal(sanitizeRemoteSnapshot(base)?.rewardActive, false);
+  assert.equal(sanitizeRemoteSnapshot({ ...base, rewardActive: true })?.rewardActive, true);
+  assert.equal(sanitizeRemoteSnapshot({ ...base, rewardActive: false })?.rewardActive, false);
+  assert.equal(sanitizeRemoteSnapshot({ ...base, rewardActive: "true" }), null);
 });
 
 test("prima di Inizia tutti gli altri comandi sono bloccati, senza fallback impliciti", () => {

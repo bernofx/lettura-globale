@@ -157,6 +157,27 @@ Il pannello adulto sul PC deve inviare gli stessi comandi della console mobile, 
 
 ## Criteri di completamento
 
+### Premio intermedio — 30 ottobre 2026
+
+La console offre `Premio` durante la sessione attiva, anche se già in pausa.
+Il comando `toggle_reward` apre/chiude il gioco dei palloncini senza limite di
+durata; la X del bambino chiude lo stesso stato e lo snapshot aggiorna il telefono.
+Le ondate continuano senza accumulare elementi o stati di scoppio illimitati.
+La festa di fine sessione conserva invece la propria durata di 20 secondi.
+
+Finché il premio è visibile restano consentiti soltanto chiusura del premio,
+audio e interruzione della sessione. Navigazione, valutazione, aiuti e timer di
+inattività non producono turni o risposte dietro il gioco. L’esercizio resta
+montato, con selezioni conservate; il timer quantità riparte alla chiusura.
+La pausa esplicita preesistente rimane distinta dal premio. Una perdita del
+telefono non chiude il gioco: resta la X locale per tornare all’attività.
+
+Il nuovo comando viene registrato nel journal remoto D1 già esistente, senza
+nuovi enum clinici o migrazioni: `remote_controller_events.command` è testo
+senza CHECK. I singoli scoppi non alimentano le statistiche.
+
+### Criteri generali
+
 - il bambino non vede comandi o aiuti dell'adulto durante l'esercizio;
 - con telefono collegato nessun turno o esercizio avanza senza conferma dell'adulto;
 - senza telefono collegato l'app mantiene integralmente il comportamento attuale;

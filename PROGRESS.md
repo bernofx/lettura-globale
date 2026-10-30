@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 29 ottobre 2026
+**Aggiornato:** 30 ottobre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -145,6 +145,8 @@
 
 ## Verifiche della versione corrente
 
+- Premio da console smartphone: `Premio` apre il gioco dei palloncini durante una sessione attiva, `Chiudi premio` o la X sul PC lo chiudono. Durata libera con ondate continue, al massimo 32 palloncini e relativo stato di scoppio conservati insieme. Stato premio sincronizzato via snapshot; comandi di esercizio bloccati durante il gioco anche nel DO. La pausa preesistente resta distinta, la disconnessione non chiude il premio e non fa avanzare l’esercizio. Timer quantità sospeso, selezioni conservate e timer riavviato alla chiusura. Comando remoto nel journal D1 storico (`command` è testo senza CHECK); nessun esito clinico o migrazione aggiuntiva. Festa finale invariata a 20 secondi, cache PWA v45.
+- Verifiche premio: 230 test superati, typecheck e build verdi; lint con i tre avvisi img preesistenti. Test runtime DO/WebSocket e Worker completo su dati sintetici: apertura e chiusura, retry idempotente, blocco dei comandi durante il premio, chiusura via snapshot del PC e rifiuto prima di Inizia. Resa/tocchi sui dispositivi da confermare; nessuna nuova APK.
 - Dodici immagini generiche dedicate per categorie standard, con associazioni iniziali fisse e modificabili. Le associazioni già scelte restano intatte; rimozioni o archiviazioni successive non vengono annullate a ogni accesso. Simboli esclusi dai bersagli e persistiti nel cloud con il catalogo tramite la coda ordinaria. Nessun fallback per categorie personalizzate, modifica ai link storici, migrazione o nuova APK. ADR 0018 aggiornato, cache PWA v44.
 - Verifiche simboli: 227 test superati; controllo dei dodici WebP, inizializzazione idempotente, conservazione delle scelte, rimozioni e archiviazioni, esclusione dai pool e patch cloud con asset e mappa insieme. Worker/D1 sintetico verifica persistenza relazionale e snapshot pubblici limitati agli asset richiesti. Immagini ispezionate; resa sui dispositivi da confermare.
 - Catalogo frasi esteso a 40 scene: aggiunti coniglio bianco, cavallo marrone, panda e scimmia, ciascuno con mangia/dorme/corre/salta/gioca. Venti nuovi WebP da generazione OpenAI, sfondo neutro e metadati coerenti; inserimento cloud tramite idratazione e autosalvataggio ordinari, senza sovrascrivere elementi modificati o archiviati. Nessuna nuova migrazione o APK.

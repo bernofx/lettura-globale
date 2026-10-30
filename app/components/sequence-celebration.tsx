@@ -11,28 +11,32 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
   "--burst-angle": `${index * 45}deg`,
 } as CSSProperties));
 
-export function SequenceCelebration({ onPop, onClose }: { onPop?: () => void; onClose: () => void }) {
+export function SequenceCelebration({ onPop, onClose, continuous = false }: { onPop?: () => void; onClose: () => void; continuous?: boolean }) {
   const [wave, setWave] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const previousFocus = document.activeElement;
     closeRef.current?.focus({ preventScroll: true });
-    const timer = window.setInterval(() => setWave((current) => Math.min(current + 1, BALLOON_WAVE_COUNT - 1)), BALLOON_WAVE_INTERVAL_MS);
+    const timer = window.setInterval(() => setWave((current) => continuous ? current + 1 : Math.min(current + 1, BALLOON_WAVE_COUNT - 1)), BALLOON_WAVE_INTERVAL_MS);
     return () => {
       window.clearInterval(timer);
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
-  }, []);
+  }, [continuous]);
   const [popped, setPopped] = useState<ReadonlySet<number>>(() => new Set());
+  const [popCount, setPopCount] = useState(0);
   const poppedRef = useRef(popped);
   const pop = (index: number) => {
-    const next = popCelebrationBalloon(poppedRef.current, index);
+    const next = popCelebrationBalloon(poppedRef.current, index, continuous);
     if (next === poppedRef.current) return;
-    poppedRef.current = next;
-    setPopped(next);
+    const visibleIds = new Set(celebrationBalloons(wave, continuous).map((item) => item.id));
+    const retained = new Set([...next].filter((id) => visibleIds.has(id)));
+    poppedRef.current = retained;
+    setPopped(retained);
+    setPopCount((count) => count + 1);
     onPop?.();
   };
-  return <div className="sequence-celebration" role="dialog" aria-modal="true" aria-label="Festa di fine sequenza: tocca i palloncini per farli scoppiare" style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
+  return <div className="sequence-celebration" role="dialog" aria-modal="true" aria-label={`${continuous ? "Premio" : "Festa di fine sequenza"}: tocca i palloncini per farli scoppiare`} style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
     onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
       if (event.key !== "Tab") return;
@@ -45,8 +49,8 @@ export function SequenceCelebration({ onPop, onClose }: { onPop?: () => void; on
     <button ref={closeRef} type="button" className="celebration-close" aria-label="Chiudi il gioco dei palloncini" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onClose(); }}><X aria-hidden="true" /></button>
     <div className="celebration-glow" aria-hidden="true" />
     <span className="celebration-instruction">Fai scoppiare i palloncini!</span>
-    <span className="celebration-status" role="status" aria-live="polite">{popped.size > 0 ? `${popped.size} palloncini scoppiati` : "Tocca un palloncino"}</span>
-    {celebrationBalloons(wave).map(({ id: index, slot, color, wave: flight }) => <span key={index} className="celebration-balloon-flight" data-current-wave={flight === wave} style={{ left: `calc(${((slot + flight * 3) % BALLOON_COLORS.length + 0.5) * 100 / BALLOON_COLORS.length}% - clamp(22px, 3.5vw, 38px))`, animationDelay: `${slot * 0.24}s`, "--balloon-color": color, "--rest-y": `${15 + (slot % 3) * 17}%` } as CSSProperties}>
+    <span className="celebration-status" role="status" aria-live="polite">{popCount > 0 ? `${popCount} palloncini scoppiati` : "Tocca un palloncino"}</span>
+    {celebrationBalloons(wave, continuous).map(({ id: index, slot, color, wave: flight }) => <span key={index} className="celebration-balloon-flight" data-current-wave={flight === wave} style={{ left: `calc(${((slot + flight * 3) % BALLOON_COLORS.length + 0.5) * 100 / BALLOON_COLORS.length}% - clamp(22px, 3.5vw, 38px))`, animationDelay: `${slot * 0.24}s`, "--balloon-color": color, "--rest-y": `${15 + (slot % 3) * 17}%` } as CSSProperties}>
       <button type="button" className={`celebration-balloon ${popped.has(index) ? "popped" : ""}`} disabled={popped.has(index)} tabIndex={flight === wave ? 0 : -1} aria-label={`Scoppia il palloncino ${index + 1}`}
         onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); pop(index); }}
         onClick={(event) => { event.stopPropagation(); pop(index); }}>

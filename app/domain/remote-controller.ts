@@ -13,6 +13,7 @@ export const remoteCommandNames = [
   "shuffle",
   "speak",
   "toggle_audio",
+  "toggle_reward",
   "pause",
   "resume",
   "end",
@@ -36,10 +37,11 @@ export function remoteExerciseControls(kind: string | undefined) {
   };
 }
 
-export function remoteCommandDisposition(command: RemoteCommandName, paused: boolean, awaitingNextExercise = false, phase: "ready" | "active" = "active") {
+export function remoteCommandDisposition(command: RemoteCommandName, paused: boolean, awaitingNextExercise = false, phase: "ready" | "active" = "active", rewardActive = false) {
   if (phase === "ready") return command === "start" ? "execute" : "ignore";
   if (command === "start") return "ignore";
-  if (paused && command !== "resume" && command !== "pause" && command !== "end" && command !== "toggle_audio") return "ignore";
+  if (rewardActive && command !== "toggle_reward" && command !== "end" && command !== "toggle_audio") return "ignore";
+  if (paused && command !== "resume" && command !== "pause" && command !== "end" && command !== "toggle_audio" && command !== "toggle_reward") return "ignore";
   if (awaitingNextExercise && (command === "next" || command === "next_activity")) return "continue";
   return "execute";
 }
@@ -65,6 +67,7 @@ const remoteCommandLabels: Record<RemoteCommandName, string> = {
   shuffle: "Mischia",
   speak: "Riascolta",
   toggle_audio: "Audio",
+  toggle_reward: "Premio",
   pause: "Pausa",
   resume: "Riprendi",
   end: "Interrompi sessione",
@@ -92,6 +95,7 @@ export type RemoteSessionSnapshot = {
   answerState: "idle" | "wrong" | "correct";
   soundEffects: boolean;
   paused: boolean;
+  rewardActive?: boolean;
   awaitingNextExercise?: boolean;
   phase?: "ready" | "active";
   canPreviousActivity?: boolean;
@@ -132,6 +136,7 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
   if (!Number.isInteger(input.currentIndex) || !Number.isInteger(input.total) || (input.currentIndex as number) < 0 || (input.total as number) < 1) return null;
   if (!(["idle", "wrong", "correct"] as unknown[]).includes(input.answerState)) return null;
   if (typeof input.soundEffects !== "boolean" || typeof input.paused !== "boolean") return null;
+  if (input.rewardActive !== undefined && typeof input.rewardActive !== "boolean") return null;
   if (input.phase !== undefined && input.phase !== "ready" && input.phase !== "active") return null;
   for (const key of ["canPreviousActivity", "canNextActivity"]) {
     if (input[key] !== undefined && typeof input[key] !== "boolean") return null;
@@ -148,6 +153,7 @@ export function sanitizeRemoteSnapshot(value: unknown): RemoteSessionSnapshot | 
     answerState: input.answerState as RemoteSessionSnapshot["answerState"],
     soundEffects: input.soundEffects,
     paused: input.paused,
+    rewardActive: input.rewardActive === true,
     awaitingNextExercise: input.awaitingNextExercise === true,
     phase: input.phase === "ready" ? "ready" : "active",
     ...(typeof input.canPreviousActivity === "boolean" ? { canPreviousActivity: input.canPreviousActivity } : {}),

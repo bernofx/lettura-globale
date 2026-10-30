@@ -113,7 +113,7 @@ try {
   const returningPhone = await open("controller", secondKey);
   reconnectedHost.send({ type: "sync", snapshot: { ...snapshot, phase: "ready" } });
   await returningPhone.wait((message) => message.type === "state" && message.snapshot?.phase === "ready");
-  for (const command of ["next", "shuffle", "help", "pause", "finish"]) {
+  for (const command of ["next", "shuffle", "help", "pause", "finish", "toggle_reward"]) {
     returningPhone.send({ type: "command", command: { clientEventId: `not-ready-${command}`, command } });
     await returningPhone.wait((message) => message.type === "error" && message.clientEventId === `not-ready-${command}`);
   }
@@ -127,6 +127,23 @@ try {
   await returningPhone.wait((message) => message.type === "error" && message.clientEventId === "already-started-demo");
   assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events WHERE command = 'start'").first()).count, 1, "Inizia è idempotente e usa la stessa connessione");
   assert.equal(started.serverSequence, 4);
+  returningPhone.messages.length = 0;
+  returningPhone.send({ type: "command", command: { clientEventId: "reward-open-demo", command: "toggle_reward" } });
+  await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === "reward-open-demo");
+  await returningPhone.wait((message) => message.type === "state" && message.snapshot?.rewardActive === true);
+  returningPhone.send({ type: "command", command: { clientEventId: "reward-open-demo", command: "toggle_reward" } });
+  returningPhone.send({ type: "command", command: { clientEventId: "reward-blocked-next", command: "next" } });
+  await returningPhone.wait((message) => message.type === "error" && message.clientEventId === "reward-blocked-next");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM remote_controller_events WHERE command = 'toggle_reward'").first()).count, 1, "un retry non chiude il premio né duplica l'audit");
+  returningPhone.messages.length = 0;
+  reconnectedHost.send({ type: "sync", snapshot: { ...snapshot, rewardActive: false, canNextActivity: false } });
+  await returningPhone.wait((message) => message.type === "state" && message.snapshot?.rewardActive === false);
+  for (const [id, active] of [["reward-reopen-demo", true], ["reward-close-demo", false]]) {
+    returningPhone.messages.length = 0;
+    returningPhone.send({ type: "command", command: { clientEventId: id, command: "toggle_reward" } });
+    await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === id);
+    await returningPhone.wait((message) => message.type === "state" && message.snapshot?.rewardActive === active);
+  }
   returningPhone.send({ type: "command", command: { clientEventId: "event-finish-demo", command: "finish" } });
   await returningPhone.wait((message) => message.type === "ack" && message.clientEventId === "event-finish-demo");
   await reconnectedHost.wait((message) => message.type === "events" && message.events.some((event) => event.command === "finish"));
