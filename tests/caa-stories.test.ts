@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { arasaacResults,CAA_PAPERS,CAA_BOOK_PAPERS,caaCutSheets,caaDisplayText,caaId,caaLibrarySymbol,caaPages,caaPageSize,caaPrintSheetSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
 import { canReadShare,liveShare,shareToken,type CaaShare } from "../app/api/caa-shares/storage.ts";
+import { caaSearchAllowed,caaSearchTerm } from "../app/domain/caa-stories.ts";
+
+test("one-letter CAA searches allow A/E/È/I/O, keep È distinct, and exclude consonants and U",() => {
+  for (const term of ["A","a","E","e","È","è","I","i","O","o"," I ","e\u0300"]) assert.equal(caaSearchAllowed(term),true,term);
+  for (const term of ["B","b","C","H","Z","U","u","Ù","ù",""," ","1","?"]) assert.equal(caaSearchAllowed(term),false,term);
+  for (const term of ["gatto","UVA","un","il","la"]) assert.equal(caaSearchAllowed(term),true,term);
+  assert.equal(caaSearchAllowed("x".repeat(61)),false);
+  assert.equal(caaSearchTerm("È."),"è"); assert.equal(caaSearchTerm("E"),"e");
+});
 
 test("historical short library IDs such as LETTO stay selectable through the full CAA round-trip",() => {
   const item = {id:"letto",word:"LETTO",image:"/api/media/letto",remoteImageId:"letto",source:"Catalogo demo",author:"Autore demo",license:"CC0 demo"};

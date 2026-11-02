@@ -47,7 +47,14 @@ export function caaLibrarySymbol(item: CaaLibraryItem): CaaSymbol | null {
   if (item.image && /^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(item.image)) return { kind: "bundled",path: item.image,...rights };
   return null;
 }
-export const normalizeCaaTerm = (value: string) => value.toLocaleLowerCase("it-IT").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
+export const caaSearchTerm = (value: string) => value.toLocaleLowerCase("it-IT").normalize("NFC").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
+export const normalizeCaaTerm = (value: string) => caaSearchTerm(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export function caaSearchAllowed(value: string) {
+  const term = value.trim().normalize("NFC").toLocaleLowerCase("it-IT");
+  if (!term || value.length > 60) return false;
+  // One-letter Italian function words; consonants and U are not useful here.
+  return term.length > 1 || ["a","e","è","i","o"].includes(term);
+}
 export const sentenceText = (sentence: CaaSentence) => sentence.text ?? sentence.tokens.map(token => token.text).join(" ");
 export function splitCaaText(text: string) {
   return text.trim().split(/\n+|(?<=[.!?])\s+(?=[\p{Lu}\d])/u).map(line => line.trim()).filter(Boolean);

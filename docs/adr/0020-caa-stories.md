@@ -12,6 +12,8 @@ La libreria esistente può fornire immagini con metadati validi e riferimenti cl
 
 ## Persistenza e isolamento
 
+Correzione della ricerca: il filtro iniziale di due caratteri ammette ora anche A, E, È, I e O isolate, in entrambi i casi, escludendo consonanti e U isolate; termini più lunghi invariati. Il validatore è condiviso da pulsante e invio. La ricerca conserva gli accenti per distinguere E da È; il confronto locale dei termini del catalogo resta senza accenti. Nessuna ricerca automatica aggiunta, nessuna garanzia implicita sulla presenza del simbolo nel catalogo e nessun cambiamento a provider, consenso o licenza.
+
 Documenti JSON schema 1 nel bucket R2 privato già approvato, sotto prefisso distinto derivato dall’hash della coppia account/profilo adulto. Le route dedicate richiedono una sessione adulta valida e ricavano il prefisso solo dall’identità server; non accettano proprietari dal client. Storie visibili soltanto al proprietario in questa prima versione; niente condivisione fra profili, bambini o supervisori e nessun ampliamento dei permessi sulle sessioni esistenti. Titoli e testo non vengono aggiunti a log o statistiche.
 
 R2 ETag e scritture condizionali evitano sovrascritture concorrenti; ID operazione e hash del payload rendono sicuro il retry dopo risposta persa. Un conflitto conserva la bozza e richiede di salvarne una copia, non forza il last-writer-wins. Archivio logico, massimo 100 documenti per profilo nel prototipo, limiti su dimensione/testo/frasi/token. Nessun nuovo enum D1, binding, migrazione o cambiamento allo snapshot degli esercizi.

@@ -37,7 +37,7 @@ socket.addEventListener("message",async event=>{
    const body=JSON.parse(request.postData);if(previous?.operationId===body.operationId&&JSON.stringify(previous.story)===JSON.stringify(body.story))return fulfill(requestId,{etag:previous.etag});if((previous?.etag??null)!==body.baseEtag)return fulfill(requestId,{error:"story_conflict"},409);
    const value={story:body.story,operationId:body.operationId,etag:(++revision).toString(16).padStart(32,"0")};documents.set(id,value);return fulfill(requestId,{etag:value.etag});
  }
- if(url.origin==="https://api.arasaac.org"){arasaacCalls++;assert.ok(url.pathname.endsWith("/gatto"));return fulfill(requestId,[{_id:7114,keywords:[{keyword:"gatto"}]}]);}
+ if(url.origin==="https://api.arasaac.org"){arasaacCalls++;const term=decodeURIComponent(url.pathname.split('/').at(-1));assert.ok(["gatto","e","è","i"].includes(term));return fulfill(requestId,[{_id:term==="gatto"?7114:1234,keywords:[{keyword:term}]}]);}
  if(url.origin==="https://static.arasaac.org")return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
  if(url.pathname==="/api/media"&&request.method==="POST"){mediaUploads++;return fulfill(requestId,{id:request.headers["x-media-id"]});}
  if(url.pathname.startsWith("/api/media/"))return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
@@ -71,7 +71,11 @@ try{
  await evaluate("[...document.querySelectorAll('.caa-sentence-editor:first-of-type .caa-token-button')].find(button=>button.textContent.includes('gatto'))?.click()");
  if(!await evaluate("Boolean(document.querySelector('.caa-modal'))"))await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('gatto')).click()");
  await wait("document.querySelector('.caa-modal')");assert.equal(arasaacCalls,0,"no external search before consent and explicit request");
- await evaluate("document.querySelector('.caa-modal input[type=checkbox]').click()");await clickText("Cerca in ARASAAC");await wait("document.querySelector('.caa-modal [data-source=arasaac] button')");await evaluate("document.querySelector('.caa-modal [data-source=arasaac] button').click()");await wait("!document.querySelector('.caa-modal')");assert.equal(arasaacCalls,1);
+ await evaluate("document.querySelector('.caa-modal input[type=checkbox]').click()");
+ for(const term of ["a","e","è","i","o"]){await fill(".caa-modal input",term);assert.equal(await evaluate("[...document.querySelectorAll('.caa-modal button')].find(b=>b.textContent==='Cerca in ARASAAC').disabled"),false,term);}
+ for(const term of ["b","u",""]){await fill(".caa-modal input",term);assert.equal(await evaluate("[...document.querySelectorAll('.caa-modal button')].find(b=>b.textContent==='Cerca in ARASAAC').disabled"),true,term);}
+ for(const term of ["e","è","i"]){await fill(".caa-modal input",term);await clickText("Cerca in ARASAAC");await wait(`document.querySelector('.caa-modal [data-source=arasaac] button span')?.textContent===${JSON.stringify(term)}`);}
+ await fill(".caa-modal input","gatto");await clickText("Cerca in ARASAAC");await wait("document.querySelector('.caa-modal [data-source=arasaac] button span')?.textContent==='gatto'");await evaluate("document.querySelector('.caa-modal [data-source=arasaac] button').click()");await wait("!document.querySelector('.caa-modal')");assert.equal(arasaacCalls,4);
  await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('presto')).click()");await wait("document.querySelector('.caa-modal input[type=file]')");
  await evaluate("document.querySelectorAll('.caa-modal input[type=checkbox]')[1].click()");
@@ -80,7 +84,7 @@ try{
  await wait("!document.querySelector('.caa-modal') && document.querySelector('.caa-token-button img[src^=blob]')");assert.equal(mediaUploads,0,"offline photo stays queued locally");
  await send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
  await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal(mediaUploads,1,"photo uploads before the document is marked saved");
- await clickText("Riusa simboli e immagini note");await wait("document.querySelectorAll('.caa-token-button img[src*=\"static.arasaac.org\"]').length===3");assert.equal(arasaacCalls,1,"repeat words reuse the chosen symbol without more external queries");
+ await clickText("Riusa simboli e immagini note");await wait("document.querySelectorAll('.caa-token-button img[src*=\"static.arasaac.org\"]').length===3");assert.equal(arasaacCalls,4,"repeat words reuse the chosen symbol without more external queries");
  await evaluate("document.querySelectorAll('.caa-sentence-editor')[0].querySelectorAll('.caa-token-editor>div')[2].querySelector('.caa-token-operation').click()");await wait("[...document.querySelectorAll('.caa-token-button strong')].some(node=>node.textContent==='si sveglia')");
  await clickText("Apri anteprima");await wait("document.querySelector('.caa-preview-pages .caa-word-label')");
  assert.ok(await evaluate("[...document.querySelectorAll('.caa-preview-pages .caa-word-label')].every(node=>node.textContent===node.textContent.toLocaleUpperCase('it-IT'))"),"new stories print in uppercase by default");
