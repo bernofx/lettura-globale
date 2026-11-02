@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Archive, BookOpen, Check, ChevronDown, ChevronRight, Cloud, CloudUpload, Copy, FileText, Inbox, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { Archive, BookOpen, Check, ChevronDown, ChevronRight, Cloud, CloudUpload, Copy, FileText, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import type { CaaStore } from "../use-caa-stories";
 import { CAA_MAX_SENTENCES, CAA_MAX_TEXT, caaPages, editCaaSentence, newCaaStory, normalizeCaaTerm, parseCaaStory, sentenceText, splitCaaText, type CaaSentence, type CaaStory, type CaaSymbol } from "../domain/caa-stories";
 import { useUpdateState } from "./app-update";
@@ -67,7 +67,6 @@ export function CaaStoriesView({ owner,store,library,prepareImage }: { owner: st
   const copy = () => { if (!story) return; const next = { ...story,id: newCaaStory().id,title: `${story.title.slice(0,120)} (copia)`,archived: false }; store.save(next); setSelected(next.id); setStep(2); };
   return <div className="page caa-stories-page">
     <div className="page-title-row"><div><span className="eyebrow">CONTENUTI E COMUNICAZIONE</span><h1>Storie in CAA</h1><p>Prepara storie con parole e simboli, da leggere insieme o stampare.</p></div><div className="caa-page-actions">
-      <a className="ghost-button" href="#caa-received"><Inbox size={17} aria-hidden="true" />Ricevute</a>
       <button className="primary-button" type="button" disabled={!store.ready} onClick={create}><Plus size={18} aria-hidden="true" />Nuova storia</button>
     </div></div>
     <details className="caa-guidance"><summary><ShieldCheck size={18} aria-hidden="true" /><span>Usa dati dimostrativi, non dati reali di minori</span><span className="caa-disclosure-label">Indicazioni d’uso</span></summary><p>Le storie restano private finché non ne condividi esplicitamente una copia. Non sono esercizi e non producono statistiche. Le associazioni dei simboli richiedono sempre la revisione dell’adulto. La revisione AI del testo arriverà in una fase successiva.</p></details>

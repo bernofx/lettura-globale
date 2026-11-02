@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Rimossa la scorciatoia ridondante “Ricevute” nell’intestazione CAA: resta solo “Nuova storia”, mentre la sezione delle storie ricevute rimane in fondo con le sue azioni. Eliminato il collegamento hash che l’utente segnalava come ritorno alla home; nessuna modifica al routing globale o ai dati. Regressione browser sull’assenza del link nell’intestazione e sulla presenza delle ricevute in fondo; cache PWA v57.
+
 - [x] CAA uniformata al design dell’app: palette e forme ereditate dalle preferenze, pulsanti e campi coerenti, icone Lucide, gerarchia testo/simboli/anteprima e stato cloud riconoscibili; ricerca archivio, elenco collassabile su telefono, istruzioni e guida stampa apribili a richiesta. Editor frasi estratto senza modificare dati o associazioni. Nessuna skill UX/UI dedicata disponibile: applicati i token e i componenti esistenti, focus visibile, etichette accessibili e controlli touch.
 - [x] Verifica browser con soli dati sintetici: desktop/mobile 390 px senza overflow, temi/forme e dimensioni dei controlli, ricerca senza perdita bozza, offline/cloud, simboli, archiviazione e condivisioni, PDF fisici/maiuscolo/scala e routing stampa Android simulato. Regole CSS di stampa fisica invariate; nessuna nuova APK, migrazione o modifica di accesso. Il fixture HTTP disabilita il service worker per evitare richieste di background non simulate; non è una prova del flusso di autenticazione reale né di hardware Android.
 - [x] Restyling CAA: typecheck, build e 269 test superati; lint senza errori (cinque avvisi preesistenti sulle immagini dinamiche). Cache PWA v56 e novità in home aggiornate.
