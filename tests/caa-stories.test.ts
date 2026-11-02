@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { arasaacResults,caaCutSheets,caaId,caaLibrarySymbol,caaPages,caaPageSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
+import { arasaacResults,CAA_PAPERS,CAA_BOOK_PAPERS,caaCutSheets,caaDisplayText,caaId,caaLibrarySymbol,caaPages,caaPageSize,caaPrintSheetSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
 import { canReadShare,liveShare,shareToken,type CaaShare } from "../app/api/caa-shares/storage.ts";
 
 test("historical short library IDs such as LETTO stay selectable through the full CAA round-trip",() => {
@@ -27,6 +27,35 @@ test("CAA text splits sentences/newlines without requiring page-by-page entry",(
   assert.deepEqual(splitCaaText("Il gatto mangia. Poi dorme!\nIl cane corre? Sì."),["Il gatto mangia.","Poi dorme!","Il cane corre?","Sì."]);
   const sentences = sentencesFromText("Il gatto mangia. Poi dorme.");
   assert.equal(sentences.length,2); assert.equal(sentenceText(sentences[0]),"Il gatto mangia.");
+});
+test("uppercase is the new default, reversible without editing text/symbols, with old snapshots unchanged",() => {
+  const story = {...newCaaStory(),draftText:"Il gatto è qui.",sentences:sentencesFromText("Il gatto è qui.")};
+  assert.equal(story.letterCase,"uppercase"); assert.equal(caaDisplayText(story,"È qui, l’albero."),"È QUI, L’ALBERO.");
+  const original = parseCaaStory({...story,letterCase:"original"});
+  assert.equal(caaDisplayText(original,story.draftText),story.draftText); assert.deepEqual(original.sentences,story.sentences);
+  assert.equal(parseCaaStory(story).letterCase,"uppercase");
+  const {letterCase: ignored,...legacy} = story; void ignored;
+  assert.deepEqual(parseCaaStory(legacy),legacy,"do not add fields to immutable old shares or change their idempotency hash");
+  assert.equal(caaDisplayText(legacy,legacy.draftText),legacy.draftText);
+  assert.throws(() => parseCaaStory({...story,letterCase:"invalid"}));
+});
+test("PDF sheet dimensions, custom bounds, and booklet halves follow the persisted selection",() => {
+  const story = newCaaStory(); assert.deepEqual(caaPrintSheetSize(story),{width:210,height:297});
+  for (const [paper,size] of Object.entries(CAA_PAPERS)) {
+    const parsed = parseCaaStory({...story,paper});
+    assert.deepEqual(caaPageSize(parsed),{width:size.width,height:size.height});
+    assert.equal(parsed.paper,paper);
+  }
+  const custom = parseCaaStory({...story,paper:"custom",customPaper:{width:180,height:240}});
+  assert.deepEqual(caaPrintSheetSize(custom),{width:180,height:240});
+  for (const dimensions of [undefined,{width:NaN,height:297},{width:79,height:297},{width:210,height:601},{width:210.5,height:297},{width:"210",height:297}]) assert.throws(() => parseCaaStory({...story,paper:"custom",customPaper:dimensions}));
+  assert.throws(() => parseCaaStory({...story,paper:"__proto__"}));
+  assert.throws(() => parseCaaStory({...story,bookPaper:"unknown"}));
+  for (const [bookPaper,size] of Object.entries(CAA_BOOK_PAPERS)) {
+    const book = parseCaaStory({...story,format:"book",bookPaper});
+    assert.deepEqual(caaPrintSheetSize(book),{width:size.width,height:size.height});
+    assert.deepEqual(caaPageSize(book),{width:size.width/2,height:size.height});
+  }
 });
 test("editing keeps trailing spaces, stable symbol associations and grouped expressions",() => {
   let sentence = { id: "sentence-demo",text: "Il gatto si sveglia",pageBreak: false,tokens: [{id:"token-gatto",text:"gatto",symbol:{kind:"arasaac" as const,id:7114}},{id:"token-si-sveglia",text:"si sveglia",symbol:{kind:"arasaac" as const,id:1234}}] };

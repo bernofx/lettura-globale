@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, type CSSPropert
 import { createPortal } from "react-dom";
 import { caaCachedMedia } from "../caa-cache";
 import { androidBridge } from "../domain/android-bridge";
-import { ARASAAC_CREDIT, caaCutSheets, caaPageSize, caaPages, caaSymbolUrl, type CaaPage, type CaaStory, type CaaSymbol } from "../domain/caa-stories";
+import { ARASAAC_CREDIT, caaCutSheets, caaDisplayText, caaPageSize, caaPrintSheetSize, caaPages, caaSymbolUrl, type CaaPage, type CaaStory, type CaaSymbol } from "../domain/caa-stories";
 
 export const CaaSharedImages = createContext<string | null>(null);
 export function CaaArtwork({ symbol,owner,alt }: { symbol: CaaSymbol; owner: string; alt: string }) {
@@ -30,8 +30,8 @@ function credits(story: CaaStory) {
 export function CaaPrintedPage({ story,page,owner }: { story: CaaStory; page: CaaPage | null; owner: string }) {
   if (!page) return <div className="caa-paper caa-blank" />;
   return <article className={`caa-paper ${page.cover ? "caa-cover" : ""}`} style={{ "--caa-symbol-size": `${story.symbolSize}mm` } as CSSProperties}>
-    <header>{story.title}</header><div className="caa-page-body">
-      {page.cover ? <h1>{story.title}</h1> : page.sentences.map(sentence => <div key={sentence.id} className="caa-print-sentence">{sentence.tokens.map(token => <span className={token.symbol ? "caa-word" : "caa-word caa-text-word"} key={token.id}>{token.symbol && <span className="caa-word-image"><CaaArtwork symbol={token.symbol} owner={owner} alt={token.text} /></span>}<span>{token.text}</span></span>)}</div>)}
+    <header>{caaDisplayText(story,story.title)}</header><div className="caa-page-body">
+      {page.cover ? <h1>{caaDisplayText(story,story.title)}</h1> : page.sentences.map(sentence => <div key={sentence.id} className="caa-print-sentence">{sentence.tokens.map(token => <span className={token.symbol ? "caa-word" : "caa-word caa-text-word"} key={token.id}>{token.symbol && <span className="caa-word-image"><CaaArtwork symbol={token.symbol} owner={owner} alt={token.text} /></span>}<span className="caa-word-label">{caaDisplayText(story,token.text)}</span></span>)}</div>)}
     </div><footer><span>{credits(story)}</span><b>{page.number}</b></footer>
   </article>;
 }
@@ -51,7 +51,8 @@ export function CaaPreview({ story,owner,beforePrint }: { story: CaaStory; owner
   const [error,setError] = useState("");
   const [printing,setPrinting] = useState(false);
   const preview = useRef<HTMLDivElement>(null);
-  const pages = caaPages(story); const sheets = caaCutSheets(pages); const size = caaPageSize(story);
+  const pages = caaPages(story); const sheets = caaCutSheets(pages); const size = caaPageSize(story); const sheetSize = caaPrintSheetSize(story);
+  const sheetStyle = { width: `${sheetSize.width}mm`,height: `${sheetSize.height}mm` };
   const makePrint = async () => {
     setError(""); setPrinting(true);
     try {
@@ -64,7 +65,7 @@ export function CaaPreview({ story,owner,beforePrint }: { story: CaaStory; owner
         await Promise.race([image.decode(),new Promise((_,reject) => setTimeout(() => reject(new Error("image_timeout")),8000))]);
         if (!image.naturalWidth) throw new Error("missing_image");
       }
-      const overflow = [...element.querySelectorAll<HTMLElement>(".caa-page-body,.caa-paper footer")].some(body => body.scrollHeight > body.clientHeight + 2 || body.scrollWidth > body.clientWidth + 2);
+      const overflow = [...element.querySelectorAll<HTMLElement>(".caa-page-body,.caa-paper footer,.caa-paper header,.caa-word,.caa-cover h1")].some(body => body.scrollHeight > body.clientHeight + 2 || body.scrollWidth > body.clientWidth + 2);
       if (overflow) { setError("Una pagina contiene troppo testo, simboli o crediti. Riduci i simboli, dividi la frase o usa un formato più grande prima di stampare."); return; }
       window.print();
     } catch { setError("Alcune immagini non sono ancora disponibili. Controlla la rete, attendi il caricamento o sostituiscile prima di stampare."); }
@@ -74,7 +75,7 @@ export function CaaPreview({ story,owner,beforePrint }: { story: CaaStory; owner
   return <section className="caa-preview"><div className="caa-preview-actions"><div><button type="button" className={mode === "read" ? "selected" : ""} onClick={() => setMode("read")}>Lettura</button><button type="button" className={mode === "print" ? "selected" : ""} onClick={() => setMode("print")}>Fogli di stampa</button></div><button type="button" className="primary-button" disabled={printing || !story.title.trim() || !story.sentences.some(s => s.tokens.length)} onClick={() => void makePrint()}>{printing ? "Controllo pagine…" : "Stampa / Salva PDF"}</button></div>
     {error && <p className="caa-error" role="alert">{error}</p>}
     <p className="caa-hint">Stampa al 100%, senza margini e senza intestazioni del browser. {story.format === "book" ? "Solo fronte: impila i fogli nell’ordine, taglia sulla linea centrale e metti la pila sinistra prima della destra. Poi rilega." : "Il foglio deve contenere tutta la storia: la stampa viene bloccata se il contenuto non entra."} Nel dialogo di stampa del browser puoi scegliere Salva come PDF. Nell’APK usa il browser per questa funzione.</p>
-    <div ref={preview} className="caa-preview-pages">{story.format === "book" && mode === "print" ? sheets.map((sheet,index) => <div key={index}><h3>Foglio {index + 1} · pagine {sheet.left.number} e {sheet.right?.number ?? "vuota"}</h3><ScalePaper width={297} height={210}><div className="caa-cut-sheet">{page(sheet.left)}{page(sheet.right)}</div></ScalePaper></div>) : pages.map(p => <div key={p.number}><h3>Pagina {p.number}</h3><ScalePaper width={size.width} height={size.height}>{page(p)}</ScalePaper></div>)}</div>
-    {typeof document !== "undefined" && createPortal(<div id="caa-print-root"><style>{`@media print { @page { size: ${story.format === "book" ? "297mm 210mm" : `${size.width}mm ${size.height}mm`}; margin: 0; } }`}</style>{story.format === "book" ? sheets.map((sheet,index) => <div className="caa-print-sheet caa-cut-sheet" key={index}>{page(sheet.left)}{page(sheet.right)}</div>) : <div className="caa-print-sheet" style={{ width: `${size.width}mm`,height: `${size.height}mm` }}>{page(pages[0])}</div>}</div>,document.body)}
+    <div ref={preview} className="caa-preview-pages">{story.format === "book" && mode === "print" ? sheets.map((sheet,index) => <div key={index}><h3>Foglio {index + 1} · pagine {sheet.left.number} e {sheet.right?.number ?? "vuota"}</h3><ScalePaper width={sheetSize.width} height={sheetSize.height}><div className="caa-cut-sheet" style={sheetStyle}>{page(sheet.left)}{page(sheet.right)}</div></ScalePaper></div>) : pages.map(p => <div key={p.number}><h3>Pagina {p.number}</h3><ScalePaper width={size.width} height={size.height}>{page(p)}</ScalePaper></div>)}</div>
+    {typeof document !== "undefined" && createPortal(<div id="caa-print-root"><style>{`@media print { @page { size: ${sheetSize.width}mm ${sheetSize.height}mm; margin: 0; } }`}</style>{story.format === "book" ? sheets.map((sheet,index) => <div className="caa-print-sheet caa-cut-sheet" style={sheetStyle} key={index}>{page(sheet.left)}{page(sheet.right)}</div>) : <div className="caa-print-sheet" style={{ width: `${size.width}mm`,height: `${size.height}mm` }}>{page(pages[0])}</div>}</div>,document.body)}
   </section>;
 }

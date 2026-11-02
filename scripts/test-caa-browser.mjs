@@ -2,6 +2,7 @@
 // this does not claim a live ARASAAC availability check.
 import assert from "node:assert/strict";
 import { readFileSync,writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 const runSeed=String(Date.now());
 const origin="http://127.0.0.1:5180",scope=Number(runSeed).toString(16).padStart(32,"0"),adult="adult-caa-demo";
 const tabs=await(await fetch("http://127.0.0.1:9222/json/list")).json();
@@ -47,6 +48,13 @@ const evaluate=async expression=>{const result=await send("Runtime.evaluate",{ex
 const wait=async expression=>{for(let i=0;i<180;i++){if(await evaluate(`Boolean(${expression})`))return;await new Promise(resolve=>setTimeout(resolve,100));}throw new Error(`Timed out: ${expression}; ${await evaluate("document.body.innerText.slice(0,2200)")}`);};
 const clickText=async text=>evaluate(`[...document.querySelectorAll('button')].find(button=>button.textContent.includes(${JSON.stringify(text)}))?.click()`);
 const fill=async(selector,text)=>{await evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.focus();input.select();})()`);await send("Input.insertText",{text});};
+const select=async(selector,value)=>evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+const checkPdf=async(name,width,height)=>{
+ const pdf=await send("Page.printToPDF",{preferCSSPageSize:true,printBackground:true}),file=`/tmp/lg-caa-${name}.pdf`;writeFileSync(file,Buffer.from(pdf.data,"base64"));
+ const info=execFileSync("pdfinfo",[file],{encoding:"utf8"}),size=info.match(/Page size:\s+([\d.]+) x ([\d.]+) pts/);assert.ok(size,info);
+ assert.ok(Math.abs(Number(size[1])-width*72/25.4)<1,`PDF width: ${info}`);assert.ok(Math.abs(Number(size[2])-height*72/25.4)<1,`PDF height: ${info}`);
+ return execFileSync("pdftotext",[file,"-"],{encoding:"utf8"});
+};
 try{
  await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Fetch.enable",{patterns:[{urlPattern:"*"}]});
  await send("Emulation.setDeviceMetricsOverride",{width:1280,height:1000,deviceScaleFactor:1,mobile:false});
@@ -58,6 +66,7 @@ try{
  await wait("document.querySelector('.caa-modal [data-source=library] button:not(:disabled)')");await evaluate("document.querySelector('.caa-modal [data-source=library] button').click()");
  await wait("!document.querySelector('.caa-modal') && [...document.querySelectorAll('.caa-token-button')].some(button=>button.textContent.includes('letto.')&&button.querySelector('img[src*=\"/api/media/letto\"]'))");
  await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.ok([...documents.values()][0].story.sentences.flatMap(s=>s.tokens).some(t=>t.symbol?.id==='letto'),"short legacy catalog ID stays assigned and saved");
+ await fill(".caa-sentence-editor:last-of-type textarea","Il gatto dorme nell'appartamento.");await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.querySelector('strong')?.textContent===\"nell'appartamento.\").click()");await wait("document.querySelector('.caa-modal input')");await fill(".caa-modal input","letto");await wait("document.querySelector('.caa-modal [data-source=library] button:not(:disabled)')");await evaluate("document.querySelector('.caa-modal [data-source=library] button').click()");await wait("!document.querySelector('.caa-modal')");
  await fill(".caa-sentence-editor textarea","Il gatto si sveglia presto ");assert.ok(await evaluate("document.querySelector('.caa-sentence-editor textarea').value.endsWith(' ')") );
  await evaluate("[...document.querySelectorAll('.caa-sentence-editor:first-of-type .caa-token-button')].find(button=>button.textContent.includes('gatto'))?.click()");
  if(!await evaluate("Boolean(document.querySelector('.caa-modal'))"))await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('gatto')).click()");
@@ -73,6 +82,20 @@ try{
  await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal(mediaUploads,1,"photo uploads before the document is marked saved");
  await clickText("Riusa simboli e immagini note");await wait("document.querySelectorAll('.caa-token-button img[src*=\"static.arasaac.org\"]').length===3");assert.equal(arasaacCalls,1,"repeat words reuse the chosen symbol without more external queries");
  await evaluate("document.querySelectorAll('.caa-sentence-editor')[0].querySelectorAll('.caa-token-editor>div')[2].querySelector('.caa-token-operation').click()");await wait("[...document.querySelectorAll('.caa-token-button strong')].some(node=>node.textContent==='si sveglia')");
+ await clickText("Apri anteprima");await wait("document.querySelector('.caa-preview-pages .caa-word-label')");
+ assert.ok(await evaluate("[...document.querySelectorAll('.caa-preview-pages .caa-word-label')].every(node=>node.textContent===node.textContent.toLocaleUpperCase('it-IT'))"),"new stories print in uppercase by default");
+ assert.ok(await evaluate("[...document.querySelectorAll('.caa-preview-pages .caa-word-label')].filter(node=>node.textContent.includes('APPARTAMENTO')).every(node=>getComputedStyle(node).whiteSpace==='nowrap'&&node.getBoundingClientRect().height<=parseFloat(getComputedStyle(node).lineHeight)+1&&node.scrollWidth<=node.parentElement.clientWidth+2)"),"long picture labels expand the card, never split or overlap");
+ const a4Text=await checkPdf("a4-uppercase",210,297);assert.ok(a4Text.includes("NELL'APPARTAMENTO."),"actual PDF text contains the entire uppercase word on one line");
+ await evaluate("(()=>{const label=document.querySelector('.caa-preview-pages .caa-word-label');window.__caaLabel={node:label,text:label.textContent};label.textContent='W'.repeat(200);window.__overflowPrinted=false;window.print=()=>{window.__overflowPrinted=true};})()");
+ await clickText("Stampa / Salva PDF");await wait("document.querySelector('.caa-preview .caa-error')?.textContent.includes('troppo testo')");assert.equal(await evaluate("window.__overflowPrinted"),false,"oversized unbroken word blocks printing rather than clipping");await evaluate("window.__caaLabel.node.textContent=window.__caaLabel.text");
+ await clickText("1. Testo");await wait("document.querySelector('.caa-case-select')");await select(".caa-case-select","original");await clickText("3. Anteprima");await wait("[...document.querySelectorAll('.caa-preview-pages .caa-word-label')].some(node=>node.textContent===\"nell'appartamento.\")");
+ const originalText=await checkPdf("original",210,297);assert.ok(originalText.includes("nell'appartamento."));
+ await clickText("1. Testo");await select(".caa-case-select","uppercase");await clickText("2. Frasi e formato");await wait("document.querySelector('.caa-paper-select')");
+ for(const [paper,w,h] of [["a5-portrait",148,210],["a3-landscape",420,297],["custom",180,240]]){
+   await select(".caa-paper-select",paper);
+   if(paper==="custom"){await wait("document.querySelectorAll('.caa-format input[inputmode=numeric]').length===2");await fill(".caa-format input[inputmode=numeric]","180");await evaluate("document.querySelector('.caa-format input[inputmode=numeric]').blur()");await fill(".caa-format label:nth-last-child(2) input","240");await evaluate("document.activeElement.blur()");}
+   await clickText("3. Anteprima");await wait("document.querySelector('.caa-preview')");await checkPdf(paper,w,h);await clickText("2. Frasi e formato");await wait("document.querySelector('.caa-paper-select')");
+ }
  await evaluate("(()=>{const input=document.querySelector('.caa-format select');input.value='book';input.dispatchEvent(new Event('change',{bubbles:true}));})()");await wait("document.querySelector('.caa-format input[type=checkbox]')");await evaluate("document.querySelector('.caa-format input[type=checkbox]').click()");await clickText("Apri anteprima");await wait("document.querySelectorAll('.caa-preview-pages .caa-paper').length===4");
  await wait("[...document.querySelectorAll('.caa-preview-pages img')].every(image=>image.complete&&image.naturalWidth>0)");
  assert.deepEqual(await evaluate("[...document.querySelectorAll('#caa-print-root footer b')].map(node=>Number(node.textContent))"),[1,3,2,4]);
@@ -80,6 +103,7 @@ try{
  await clickText("Fogli di stampa");await wait("document.querySelectorAll('.caa-preview-pages .caa-cut-sheet').length===2");
  await evaluate("window.print=()=>{window.__caaPrinted=true}");await clickText("Stampa / Salva PDF");await wait("window.__caaPrinted");
  const pdf=await send("Page.printToPDF",{preferCSSPageSize:true,printBackground:true});const bytes=Buffer.from(pdf.data,"base64");assert.equal(bytes.subarray(0,5).toString(),"%PDF-");writeFileSync("/tmp/lg-caa-book.pdf",bytes);
+ await clickText("2. Frasi e formato");await wait("document.querySelector('.caa-book-paper-select')");await select(".caa-book-paper-select","a3");await clickText("3. Anteprima");await wait("document.querySelector('.caa-preview')");await checkPdf("book-a3",420,297);await clickText("2. Frasi e formato");await select(".caa-book-paper-select","a4");await clickText("3. Anteprima");await wait("document.querySelector('.caa-preview')");
  await evaluate("document.querySelector('.caa-editor-heading .text-button').click()");await wait("!document.querySelector('.caa-editor-heading')");await clickText("Archiviate (");await wait("document.querySelector('.caa-story-list strong')");await evaluate("document.querySelector('.caa-story-list strong').closest('button').click()");await wait("document.querySelector('.caa-editor-heading .text-button')?.textContent==='Ripristina'");await clickText("Ripristina");await wait("document.querySelector('.caa-editor-heading .text-button')?.textContent==='Archivia'");await clickText("3. Anteprima");
  await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate("window.scrollTo(0,0)");await new Promise(resolve=>setTimeout(resolve,300));const screenshot=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});writeFileSync("/tmp/lg-caa-mobile.png",Buffer.from(screenshot.data,"base64"));
  await clickText("1. Testo");await wait("document.querySelector('.caa-text-form input')");await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await fill(".caa-text-form input","Bozza offline dimostrativa");await wait("document.querySelector('.caa-save-state').textContent.includes('Bozza sul dispositivo')");
@@ -101,5 +125,5 @@ try{
  await send("Page.navigate",{url:`${origin}/`});await wait("document.querySelector('.sidebar')");
  state.therapists[0].role="Terapista";state.therapists[0].childIds=[];state.children=[];
  await send("Page.reload");await wait("document.querySelector('.child-choice-page')");await clickText("Apri Storie in CAA senza scegliere un bambino");await wait("document.querySelector('.caa-stories-page .caa-story-list strong')");
- assert.deepEqual(errors,[]);console.log("PASS CAA browser: LETTO catalog selection/cloud save, raw text, grouping, offline photos, credits, printable booklet PDF, mobile, cloud restore, consent, sharing form, received list, public no-login page and revoked-link error.");
+ assert.deepEqual(errors,[]);console.log("PASS CAA browser: uppercase/original PDF text, whole long picture labels, overflow guard, actual A4/A5/A3/custom/book PDF dimensions, LETTO, offline photos/cloud restore, credits, mobile and sharing/revocation.");
 }finally{socket.close();}

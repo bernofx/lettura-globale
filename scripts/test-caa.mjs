@@ -56,7 +56,7 @@ try {
   const privateKey = `${await ownerStoragePrefix(people[0].account)}/letto`;
   const image = readFileSync("public/lettura-globale-icon-v2.png");
   await bucket.put(privateKey,image,{httpMetadata:{contentType:"image/png"}});
-  const pictured = structuredClone(changed); pictured.sentences[0].tokens[1].symbol={kind:"media",id:"letto",source:"Demo",author:"Synthetic",license:"CC0"};
+  const pictured = {...structuredClone(changed),letterCase:"uppercase",paper:"custom",customPaper:{width:180,height:240},bookPaper:"a3"}; pictured.sentences[0].tokens[1].symbol={kind:"media",id:"letto",source:"Demo",author:"Synthetic",license:"CC0"};
   const last = await (await call(url,{headers:headers[0]})).json();
   const savedPicture = await put(pictured,last.etag,"operation-picture-01"); assert.equal(savedPicture.status,200); const pictureEtag=(await savedPicture.json()).etag;
   const shareUrl=`${url}/shares`;
@@ -69,6 +69,7 @@ try {
   assert.equal((await publish(publicToken,true)).status,201,"retry is idempotent");
   const publicRead=await call(`/api/caa-shares/${publicToken}`); assert.equal(publicRead.status,200); assert.equal(publicRead.headers.get("cache-control"),"private, no-store");
   const publicBody=await publicRead.json(); assert.equal(publicBody.story.title,pictured.title); assert.equal(publicBody.ownerScope,undefined);
+  assert.equal(publicBody.story.letterCase,"uppercase"); assert.deepEqual(publicBody.story.customPaper,{width:180,height:240}); assert.equal(publicBody.story.bookPaper,"a3");
   const sharedMedia=publicBody.story.sentences[0].tokens[1].symbol.id; assert.notEqual(sharedMedia,"letto");
   const mediaUrl=`/api/caa-shares/${publicToken}/media/${sharedMedia}`;
   assert.equal((await call(mediaUrl)).status,200); assert.equal((await call(`/api/caa-shares/${publicToken}/media/letto`)).status,404);

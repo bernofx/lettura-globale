@@ -26,6 +26,14 @@ Foglio A4/A5 verticale/orizzontale oppure libretto A5 su A4 orizzontale, solo fr
 
 Anteprima con misure fisiche; stampa del browser/Salva PDF, controllo immagini e overflow prima di procedere. I PDF da browser sono la prima uscita: non è un exporter PDF nativo nell’APK, dove si invita ad aprire il browser. Nessuna nuova dipendenza o APK. La resa della stampante reale e il montaggio fisico restano verifiche utente necessarie.
 
+## Estensione leggibilità e formati — 2 novembre 2026
+
+Richiesta dell’utente: stampatello maiuscolo predefinito nelle nuove storie, opzione iniziale per mantenere il testo originale, parole mai spezzate e formato PDF selezionabile con A4 predefinito. `letterCase` è una preferenza editoriale reversibile: non riscrive i testi/token e non perde i simboli, si applica a titoli e parole di lettura/stampa, non ai crediti legali. I documenti e snapshot storici senza campo conservano il testo originale, senza cambiare il payload canonico o l’idempotenza delle scritture.
+
+Le etichette hanno larghezza naturale e non sono sillabate né spezzate: la griglia può andare a capo solo fra token/espressioni. Resta la verifica degli ingombri prima di stampare, anche per parole o titoli troppo larghi: non si riduce il carattere o ritaglia silenziosamente il testo per farlo entrare.
+
+Foglio singolo A3/A4/A5/A6, Letter/Legal nelle due orientazioni o dimensioni personalizzate intere di 80–600 mm per lato. Libretto su A4/A3/Letter orizzontali, con pagina finita larga metà del foglio; stessa imposizione da taglio/impilamento. Le dimensioni fisiche alimentano sia anteprima sia CSS `@page` e PDF, non soltanto lo zoom. Campi opzionali nello schema JSON/R2 1, validati server-side e conservati nelle nuove condivisioni. Nessun enum D1, migrazione, nuovo provider, permesso, binding o APK. L’impostazione stampante deve comunque rispettare il foglio e la scala 100%.
+
 ## Futuro
 
 La bacchetta AI richiesta dall’utente è registrata nel MASTER_PLAN: proposta CAA con confronto e conferma adulta, preferenza per soluzioni gratuite/locali, eventuali API autorizzate (non password ChatGPT), con ADR privacy/provider/costi prima di attivarla. Il formato delle storie rimane indipendente dal catalogo di simboli.

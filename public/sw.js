@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v51";
+const CACHE_NAME = "lettura-globale-v52";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png"];
 
 async function fetchWithTimeout(request, timeoutMs = 5000) {
