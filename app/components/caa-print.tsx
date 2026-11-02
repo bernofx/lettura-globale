@@ -1,20 +1,22 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { caaCachedMedia } from "../caa-cache";
 import { androidBridge } from "../domain/android-bridge";
 import { ARASAAC_CREDIT, caaCutSheets, caaPageSize, caaPages, caaSymbolUrl, type CaaPage, type CaaStory, type CaaSymbol } from "../domain/caa-stories";
 
+export const CaaSharedImages = createContext<string | null>(null);
 export function CaaArtwork({ symbol,owner,alt }: { symbol: CaaSymbol; owner: string; alt: string }) {
+  const sharedToken = useContext(CaaSharedImages);
   const [local,setLocal] = useState<{ id: string; url: string } | null>(null);
   const mediaId = symbol.kind === "media" ? symbol.id : "";
   useEffect(() => {
-    if (!mediaId) return;
+    if (!mediaId || sharedToken) return;
     let disposed = false; let url = "";
     void caaCachedMedia(owner,mediaId).then(media => { if (!disposed && media) { url = URL.createObjectURL(media.blob); setLocal({ id: mediaId,url }); } }).catch(() => undefined);
     return () => { disposed = true; if (url) URL.revokeObjectURL(url); };
-  },[owner,mediaId]);
-  const src = symbol.kind === "media" && local?.id === symbol.id ? local.url : caaSymbolUrl(symbol);
+  },[owner,mediaId,sharedToken]);
+  const src = sharedToken && symbol.kind === "media" ? `/api/caa-shares/${sharedToken}/media/${symbol.id}` : symbol.kind === "media" && local?.id === symbol.id ? local.url : caaSymbolUrl(symbol);
   return <img src={src} alt={alt} referrerPolicy="no-referrer" draggable={false} />;
 }
 function credits(story: CaaStory) {
@@ -43,7 +45,7 @@ function ScalePaper({ width,height,children }: { width: number; height: number; 
   },[width]);
   return <div ref={parent} className="caa-scale-parent" style={{ height: height * 96 / 25.4 * scale }}><div className="caa-scale-paper" style={{ width: `${width}mm`,height: `${height}mm`,transform: `scale(${scale})` }}>{children}</div></div>;
 }
-export function CaaPreview({ story,owner }: { story: CaaStory; owner: string }) {
+export function CaaPreview({ story,owner,beforePrint }: { story: CaaStory; owner: string; beforePrint?: () => Promise<void> }) {
   useEffect(() => { document.body.classList.add("caa-print-active"); return () => document.body.classList.remove("caa-print-active"); },[]);
   const [mode,setMode] = useState<"read" | "print">("read");
   const [error,setError] = useState("");
@@ -54,6 +56,7 @@ export function CaaPreview({ story,owner }: { story: CaaStory; owner: string }) 
     setError(""); setPrinting(true);
     try {
       if (androidBridge()) { setError("In questa prima versione stampa e PDF richiedono il browser: apri il sito in Chrome o su PC."); return; }
+      await beforePrint?.();
       const element = preview.current; if (!element) return;
       const images = [...element.querySelectorAll("img"),...document.querySelectorAll<HTMLImageElement>("#caa-print-root img")];
       for (const image of images) {

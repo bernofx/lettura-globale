@@ -17,6 +17,16 @@ export type CaaStory = {
 export type CaaSummary = Pick<CaaStory, "id" | "title" | "updatedAt" | "archived"> & { etag: string };
 export type CaaStored = { owner: string; story: CaaStory; etag: string | null; pending: boolean; operationId: string; conflict?: boolean };
 export const caaId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(value);
+// Library/media IDs predate story UUIDs: IDs such as "letto" are valid media keys.
+export const caaMediaId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value);
+export type CaaLibraryItem = { id: string; word: string; image?: string; remoteImageId?: string; source: string; author: string; license: string };
+export function caaLibrarySymbol(item: CaaLibraryItem): CaaSymbol | null {
+  if ([item.source,item.author,item.license].some(text => typeof text !== "string" || !text.trim() || text.length > 300)) return null;
+  const rights = { source: item.source,author: item.author,license: item.license };
+  if (caaMediaId(item.remoteImageId)) return { kind: "media",id: item.remoteImageId,...rights };
+  if (item.image && /^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(item.image)) return { kind: "bundled",path: item.image,...rights };
+  return null;
+}
 export const normalizeCaaTerm = (value: string) => value.toLocaleLowerCase("it-IT").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
 export const sentenceText = (sentence: CaaSentence) => sentence.text ?? sentence.tokens.map(token => token.text).join(" ");
 export function splitCaaText(text: string) {
@@ -58,7 +68,7 @@ export function parseCaaStory(value: unknown): CaaStory {
       if (!s) continue;
       if (s.kind === "arasaac") { if (!v.nonCommercial || !Number.isSafeInteger(s.id) || s.id < 1 || s.id > 1_000_000) throw new Error("invalid_arasaac_symbol"); }
       else {
-        if (s.kind === "media" ? typeof s.id !== "string" || !caaId(s.id) : s.kind !== "bundled" || typeof s.path !== "string" || !/^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(s.path)) throw new Error("invalid_image");
+        if (s.kind === "media" ? !caaMediaId(s.id) : s.kind !== "bundled" || typeof s.path !== "string" || !/^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(s.path)) throw new Error("invalid_image");
         if ([s.source,s.author,s.license].some(text => typeof text !== "string" || !text.trim() || text.length > 300)) throw new Error("missing_image_rights");
       }
     }

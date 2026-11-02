@@ -1,10 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Prime storie in CAA",
+  title: "Storie CAA condivisibili",
   items: [
-    "Nuova sezione Storie in CAA: testo libero, frasi modificabili e simboli per parole o espressioni.",
-    "Ricerca ARASAAC per uso non commerciale con crediti, immagini della libreria e caricamenti propri.",
-    "Foglio A4/A5 oppure libretto da impilare, tagliare e rilegare: anteprima di lettura e di stampa, Salva PDF dal browser.",
-    "Storie private del profilo adulto nel cloud, con coda offline, duplicazione e archiviazione recuperabile.",
+    "Corrette le immagini storiche della libreria, come LETTO: ora restano associate e salvate nella storia.",
+    "Invio di una copia della storia all’email di un terapista già registrato: appare in Storie in CAA → Ricevute.",
+    "Link pubblico senza login, con immagini incluse, scadenza a 30 giorni e revoca dall’autore.",
+    "Condivisioni in sola lettura e stampabili, con consenso esplicito e crediti delle immagini conservati.",
   ],
 };

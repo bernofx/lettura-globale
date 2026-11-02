@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v50";
+const CACHE_NAME = "lettura-globale-v51";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png"];
 
 async function fetchWithTimeout(request, timeoutMs = 5000) {
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/") || url.pathname === "/signin-with-chatgpt") return;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, "/"));
+    event.respondWith(networkFirst(request, url.pathname === "/caa" ? "/caa" : "/"));
     return;
   }
 

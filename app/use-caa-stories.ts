@@ -38,7 +38,7 @@ export function useCaaStories(profileId: string | null) {
   },[profileId]);
   const owner = identity?.profileId === profileId ? identity.scope : null;
   const scoped = useScopedCaaStories(owner,profileId);
-  return { ...scoped,owner: owner ?? "",ready: Boolean(owner && scoped.ready),error: identityError || scoped.error };
+  return { ...scoped,owner: owner ?? "",profileId: profileId ?? "",ready: Boolean(owner && scoped.ready),error: identityError || scoped.error };
 }
 
 function useScopedCaaStories(owner: string | null,profileId: string | null) {
@@ -174,6 +174,12 @@ function useScopedCaaStories(owner: string | null,profileId: string | null) {
   const local = snapshots.filter(record => record.owner === owner);
   const byId = new Map<string,CaaSummary>(summaries.filter(item => item.owner === owner).map(item => [item.id,item]));
   for (const record of local) if (record.pending || !byId.has(record.story.id)) byId.set(record.story.id,{ id: record.story.id,title: record.story.title,updatedAt: record.story.updatedAt,archived: record.story.archived,etag: record.etag ?? "" });
-  return { items: [...byId.values()].filter(item => !item.archived).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)), archivedItems: [...byId.values()].filter(item => item.archived), records: local,ready,error,busy,save,open,upload,flush,create: () => { const story = newCaaStory(); save(story); return story; } };
+  const shareBase = async (id: string,operationId: string) => {
+    await flush(true);
+    const record = records.current.get(`${owner}:${id}`);
+    if (currentOwner.current !== owner || !record || record.pending || record.conflict || !record.etag || record.operationId !== operationId) throw new Error("La storia è cambiata o non è ancora salvata. Riprova dopo la conferma cloud.");
+    return record.etag;
+  };
+  return { items: [...byId.values()].filter(item => !item.archived).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)), archivedItems: [...byId.values()].filter(item => item.archived), records: local,ready,error,busy,save,open,upload,flush,shareBase,create: () => { const story = newCaaStory(); save(story); return story; } };
 }
 export type CaaStore = ReturnType<typeof useCaaStories>;

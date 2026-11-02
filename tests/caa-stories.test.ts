@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { arasaacResults,caaCutSheets,caaId,caaPages,caaPageSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
+import { arasaacResults,caaCutSheets,caaId,caaLibrarySymbol,caaPages,caaPageSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
+import { canReadShare,liveShare,shareToken,type CaaShare } from "../app/api/caa-shares/storage.ts";
+
+test("historical short library IDs such as LETTO stay selectable through the full CAA round-trip",() => {
+  const item = {id:"letto",word:"LETTO",image:"/api/media/letto",remoteImageId:"letto",source:"Catalogo demo",author:"Autore demo",license:"CC0 demo"};
+  const symbol = caaLibrarySymbol(item); assert.equal(symbol?.kind,"media");
+  const story = {...newCaaStory(),sentences:sentencesFromText("Il letto.")};
+  story.sentences[0].tokens[1].symbol = symbol!;
+  assert.deepEqual(parseCaaStory(JSON.parse(JSON.stringify(story))).sentences[0].tokens[1].symbol,symbol);
+  assert.equal(caaId("letto"),false,"story IDs remain strict; only media IDs accept legacy short keys");
+  for (const bad of ["../escape","bad/id","", "x".repeat(81)]) assert.equal(caaLibrarySymbol({...item,remoteImageId:bad,image:""}),null);
+  assert.equal(caaLibrarySymbol({...item,license:"x".repeat(301)}),null);
+});
+test("share ACLs enforce recipients, expiry and revocation equally for story and media",() => {
+  const share: CaaShare = {token:"a".repeat(64),ownerScope:"owner",storyId:"story-demo",baseEtag:"0".repeat(32),recipientScope:"recipient",recipientEmail:"demo@example.test",createdAt:1000,expiresAt:3000,story:newCaaStory()};
+  assert.equal(shareToken(share.token),true); assert.equal(shareToken("../escape"),false);
+  assert.equal(canReadShare(share,null,2000),false); assert.equal(canReadShare(share,"other",2000),false);
+  assert.equal(canReadShare(share,"recipient",2000),true); assert.equal(canReadShare(share,"owner",2000),true);
+  assert.equal(canReadShare({...share,recipientScope:null},null,2000),true);
+  assert.equal(canReadShare({...share,revokedAt:1500},"recipient",2000),false);
+  assert.equal(liveShare(share,3000),false); assert.equal(canReadShare(share,"recipient",4000),false);
+});
 
 test("CAA text splits sentences/newlines without requiring page-by-page entry",() => {
   assert.deepEqual(splitCaaText("Il gatto mangia. Poi dorme!\nIl cane corre? Sì."),["Il gatto mangia.","Poi dorme!","Il cane corre?","Sì."]);

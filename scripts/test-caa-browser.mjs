@@ -7,8 +7,8 @@ const origin="http://127.0.0.1:5180",scope=Number(runSeed).toString(16).padStart
 const tabs=await(await fetch("http://127.0.0.1:9222/json/list")).json();
 const socket=new WebSocket(tabs.find(tab=>tab.type==="page").webSocketDebuggerUrl);
 await new Promise(resolve=>socket.addEventListener("open",resolve,{once:true}));
-const pending=new Map(),documents=new Map(),errors=[]; let sequence=0,revision=1,arasaacCalls=0,mediaUploads=0;
-const state={schemaVersion:1,therapists:[{id:adult,firstName:"Demo",lastName:"CAA",email:"caa@example.test",role:"Amministratore",childIds:["child-caa-demo"]}],children:[{id:"child-caa-demo",firstName:"Demo",lastName:"",birthYear:"",notes:"",avatarColor:"#7568d9"}],activeChildId:"child-caa-demo",library:[],exercises:[],sequences:[],attempts:[],helps:[],sessionHistory:[]};
+const pending=new Map(),documents=new Map(),shares=new Map(),errors=[]; let sequence=0,revision=1,arasaacCalls=0,mediaUploads=0,stateCalls=0;
+const state={schemaVersion:1,therapists:[{id:adult,firstName:"Demo",lastName:"CAA",email:"caa@example.test",role:"Amministratore",childIds:["child-caa-demo"]}],children:[{id:"child-caa-demo",firstName:"Demo",lastName:"",birthYear:"",notes:"",avatarColor:"#7568d9"}],activeChildId:"child-caa-demo",library:[{id:"letto",word:"LETTO",category:"Casa",image:"/api/media/letto",remoteImageId:"letto",source:"Demo",author:"Synthetic",license:"CC0",article:"IL"}],exercises:[],sequences:[],attempts:[],helps:[],sessionHistory:[]};
 const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
 const fulfill=(requestId,body,status=200,type="application/json")=>send("Fetch.fulfillRequest",{requestId,responseCode:status,responseHeaders:[{name:"Content-Type",value:type},{name:"Access-Control-Allow-Origin",value:"*"}],body:Buffer.from(typeof body==="string"||Buffer.isBuffer(body)?body:JSON.stringify(body)).toString("base64")});
 socket.addEventListener("message",async event=>{
@@ -17,7 +17,18 @@ socket.addEventListener("message",async event=>{
  if(data.method==="Page.javascriptDialogOpening")await send("Page.handleJavaScriptDialog",{accept:true});
  if(data.method!=="Fetch.requestPaused")return;
  const{requestId,request}=data.params,url=new URL(request.url);
- if(url.pathname==="/api/state"||url.pathname==="/api/state/changes")return fulfill(requestId,{state,revision:++revision});
+ if(url.pathname==="/api/state"||url.pathname==="/api/state/changes"){stateCalls++;return fulfill(requestId,{state,revision:++revision});}
+ if(url.pathname==="/api/caa-shares")return fulfill(requestId,{items:[{token:"e".repeat(64),title:"Ricevuta demo"}]});
+ if(url.pathname.startsWith("/api/caa-shares/")){
+   if(url.pathname.includes("/media/"))return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
+   const share=shares.get(url.pathname.split("/").at(-1));return share&&!share.revoked?fulfill(requestId,{story:share.story,expiresAt:share.expiresAt}):fulfill(requestId,{error:"not_found"},404);
+ }
+ if(url.pathname.endsWith("/shares")&&url.pathname.startsWith("/api/caa-stories/")){
+   if(request.method==="GET")return fulfill(requestId,{items:[...shares.values()]});
+   if(request.method==="DELETE"){shares.get(url.searchParams.get("token")).revoked=true;return fulfill(requestId,{revoked:true});}
+   const body=JSON.parse(request.postData),id=url.pathname.split("/").at(-2),doc=documents.get(id);assert.equal(body.consent,true);assert.equal(body.baseEtag,doc.etag);
+   const share={token:body.token,recipientEmail:body.public?null:body.recipientEmail,expiresAt:Date.now()+86400000,revoked:false,story:structuredClone(doc.story)};shares.set(body.token,share);return fulfill(requestId,share,201);
+ }
  if(url.pathname==="/api/caa-stories")return fulfill(requestId,{scope,items:[...documents.values()].map(value=>({id:value.story.id,title:value.story.title,updatedAt:value.story.updatedAt,archived:value.story.archived,etag:value.etag}))});
  if(url.pathname.startsWith("/api/caa-stories/")){
    const id=url.pathname.split("/").at(-1),previous=documents.get(id);
@@ -28,6 +39,7 @@ socket.addEventListener("message",async event=>{
  if(url.origin==="https://api.arasaac.org"){arasaacCalls++;assert.ok(url.pathname.endsWith("/gatto"));return fulfill(requestId,[{_id:7114,keywords:[{keyword:"gatto"}]}]);}
  if(url.origin==="https://static.arasaac.org")return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
  if(url.pathname==="/api/media"&&request.method==="POST"){mediaUploads++;return fulfill(requestId,{id:request.headers["x-media-id"]});}
+ if(url.pathname.startsWith("/api/media/"))return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
  if(url.origin!==origin)return send("Fetch.failRequest",{requestId,errorReason:"BlockedByClient"});
  return send("Fetch.continueRequest",{requestId});
 });
@@ -41,6 +53,11 @@ try{
  await send("Page.addScriptToEvaluateOnNewDocument",{source:`if(sessionStorage.getItem('caa-test-seeded')!=='${runSeed}'){const state=${JSON.stringify(state)};for(const [name,value]of Object.entries(state)){const keys={therapists:'lg-therapists',children:'lg-children',library:'lg-library',exercises:'lg-exercises',sequences:'lg-sequences',attempts:'lg-attempts',helps:'lg-helps',sessionHistory:'lg-session-history',activeChildId:'lg-active-child'};if(keys[name])localStorage.setItem(keys[name],JSON.stringify(value));}localStorage.setItem('lg-therapist-session',JSON.stringify({therapistId:'${adult}',expiresAt:Date.now()+86400000}));sessionStorage.setItem('caa-test-seeded','${runSeed}');}`});
  await send("Page.navigate",{url:`${origin}/`});await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-stories-page .page-title-row button:not(:disabled)')");
  await clickText("Nuova storia");await wait("document.querySelector('.caa-text-form textarea')");await clickText("Inserisci un esempio");await clickText("Dividi in frasi");await wait("document.querySelectorAll('.caa-sentence-editor').length===3");
+ await fill(".caa-sentence-editor:last-of-type textarea","Il gatto dorme nel letto.");
+ await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.querySelector('strong')?.textContent==='letto.').click()");
+ await wait("document.querySelector('.caa-modal [data-source=library] button:not(:disabled)')");await evaluate("document.querySelector('.caa-modal [data-source=library] button').click()");
+ await wait("!document.querySelector('.caa-modal') && [...document.querySelectorAll('.caa-token-button')].some(button=>button.textContent.includes('letto.')&&button.querySelector('img[src*=\"/api/media/letto\"]'))");
+ await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.ok([...documents.values()][0].story.sentences.flatMap(s=>s.tokens).some(t=>t.symbol?.id==='letto'),"short legacy catalog ID stays assigned and saved");
  await fill(".caa-sentence-editor textarea","Il gatto si sveglia presto ");assert.ok(await evaluate("document.querySelector('.caa-sentence-editor textarea').value.endsWith(' ')") );
  await evaluate("[...document.querySelectorAll('.caa-sentence-editor:first-of-type .caa-token-button')].find(button=>button.textContent.includes('gatto'))?.click()");
  if(!await evaluate("Boolean(document.querySelector('.caa-modal'))"))await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('gatto')).click()");
@@ -69,7 +86,20 @@ try{
  await send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal([...documents.values()][0].story.title,"Bozza offline dimostrativa");
  await fill(".caa-text-form textarea","Il gatto dorme.\nIl cane corre.");assert.ok(await evaluate("[...document.querySelectorAll('.caa-steps button')].filter(button=>button.disabled).length===2"),"edited raw text cannot silently print stale sentences");await clickText("Dividi in frasi");await wait("document.querySelectorAll('.caa-sentence-editor').length===2");await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");
  await send("Page.reload");await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-story-list strong')");assert.equal(await evaluate("document.querySelector('.caa-story-list strong').textContent"),"Bozza offline dimostrativa");
+ await evaluate("document.querySelector('.caa-story-list strong').closest('button').click()");await wait("document.querySelector('.caa-sharing')");await clickText("Condividi questa storia");await wait("document.querySelector('.caa-sharing input[type=checkbox]')");
+ assert.equal(await evaluate("[...document.querySelectorAll('.caa-sharing button')].find(b=>b.textContent==='Crea link pubblico').disabled"),true);
+ await evaluate("document.querySelector('.caa-sharing input[type=checkbox]').click()");await clickText("Crea link pubblico");await wait("document.querySelector('.caa-sharing input[readonly]')");
+ const publicUrl=await evaluate("document.querySelector('.caa-sharing input[readonly]').value");assert.ok(publicUrl.includes('/caa?share='));
+ await fill(".caa-sharing input[type=email]","recipient@example.test");await clickText("Invia al terapista");await wait("document.querySelector('.caa-sharing').textContent.includes('Storia inviata')");assert.equal(shares.size,2);
+ assert.ok(await evaluate("document.querySelector('.caa-received').textContent.includes('Ricevuta demo')"),"received stories are visible in the adult area");
+ const callsBeforePublic=stateCalls;await send("Page.navigate",{url:publicUrl});await wait("document.querySelector('.caa-shared-view .caa-preview')");assert.equal(stateCalls,callsBeforePublic,"public story opens without bootstrapping login or private state");
+ assert.equal(await evaluate("Boolean(document.querySelector('.sidebar'))"),false);
+ await wait("[...document.querySelectorAll('.caa-preview-pages img')].every(image=>image.complete&&image.naturalWidth>0)");
+ assert.ok(await evaluate("document.documentElement.scrollWidth<=window.innerWidth"),"public preview fits mobile width");
+ const publicScreenshot=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});writeFileSync("/tmp/lg-caa-shared-mobile.png",Buffer.from(publicScreenshot.data,"base64"));
+ const publicToken=new URL(publicUrl).searchParams.get('share');shares.get(publicToken).revoked=true;await send("Page.reload");await wait("document.querySelector('.caa-shared-view [role=alert]')");assert.equal(await evaluate("Boolean(document.querySelector('.caa-preview'))"),false,"revoked story fails visibly instead of showing login or old content");
+ await send("Page.navigate",{url:`${origin}/`});await wait("document.querySelector('.sidebar')");
  state.therapists[0].role="Terapista";state.therapists[0].childIds=[];state.children=[];
  await send("Page.reload");await wait("document.querySelector('.child-choice-page')");await clickText("Apri Storie in CAA senza scegliere un bambino");await wait("document.querySelector('.caa-stories-page .caa-story-list strong')");
- assert.deepEqual(errors,[]);console.log("PASS CAA browser: raw text, spaces, grouping, explicit symbol consent/search, offline photo upload, credits, cut-and-stack pages, printable PDF, mobile preview, offline queue and cloud restore.");
+ assert.deepEqual(errors,[]);console.log("PASS CAA browser: LETTO catalog selection/cloud save, raw text, grouping, offline photos, credits, printable booklet PDF, mobile, cloud restore, consent, sharing form, received list, public no-login page and revoked-link error.");
 }finally{socket.close();}
