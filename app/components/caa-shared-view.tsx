@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import Link from "next/link";
 import { parseCaaStory, type CaaStory } from "../domain/caa-stories";
 import { CaaPreview, CaaSharedImages } from "./caa-print";
 const subscribeLocation = (changed: () => void) => { window.addEventListener("popstate",changed); return () => window.removeEventListener("popstate",changed); };
@@ -28,7 +27,8 @@ export function CaaSharedView({ token,onClose }: { token: string; onClose?: () =
   };
   // Recheck access on return and before printing; a downloaded/printed copy cannot be recalled.
   useEffect(() => { const check = () => { if (document.visibilityState === "visible") setRetry(n => n + 1); }; document.addEventListener("visibilitychange",check); const timer = setInterval(check,60_000); return () => { document.removeEventListener("visibilitychange",check); clearInterval(timer); }; },[]);
-  return <main className="page caa-shared-view"><div className="page-title-row"><div><span className="eyebrow">STORIA CAA CONDIVISA · SOLA LETTURA</span><h1>{data?.story.title ?? "Storia condivisa"}</h1></div>{onClose ? <button type="button" className="ghost-button" onClick={onClose}>← Torna alle storie</button> : <Link href="/" className="ghost-button">Home / Accedi</Link>}</div>
+  // eslint-disable-next-line @next/next/no-html-link-for-pages -- Full document navigation intentionally remounts the private app shell.
+  return <main className="page caa-shared-view"><div className="page-title-row"><div><span className="eyebrow">STORIA CAA CONDIVISA · SOLA LETTURA</span><h1>{data?.story.title ?? "Storia condivisa"}</h1></div>{onClose ? <button type="button" className="ghost-button" onClick={onClose}>← Torna alle storie</button> : <a href="/" className="ghost-button">Home / Accedi</a>}</div>
     {error ? <p className="caa-error" role="alert">{error} <button type="button" onClick={() => setRetry(n => n + 1)}>Riprova</button></p> : !data ? <p role="status">Caricamento storia…</p> : <><p className="caa-hint">Copia condivisa il cui accesso scade il {new Date(data.expiresAt).toLocaleDateString("it-IT")}. Puoi leggerla e stamparla; l’originale non viene modificato. I crediti delle immagini restano obbligatori.</p><CaaSharedImages.Provider value={token}><CaaPreview story={data.story} owner={`shared:${token}`} beforePrint={verifyPrint} /></CaaSharedImages.Provider></>}
   </main>;
 }

@@ -22,6 +22,7 @@ socket.addEventListener("message",async event=>{
  if(url.pathname==="/api/caa-shares")return fulfill(requestId,{items:[{token:"e".repeat(64),title:"Ricevuta demo"}]});
  if(url.pathname.startsWith("/api/caa-shares/")){
    if(url.pathname.includes("/media/"))return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
+   if(url.pathname.split("/").at(-1)==="e".repeat(64))return fulfill(requestId,{story:structuredClone([...documents.values()][0].story),expiresAt:Date.now()+86400000});
    const share=shares.get(url.pathname.split("/").at(-1));return share&&!share.revoked?fulfill(requestId,{story:share.story,expiresAt:share.expiresAt}):fulfill(requestId,{error:"not_found"},404);
  }
  if(url.pathname.endsWith("/shares")&&url.pathname.startsWith("/api/caa-stories/")){
@@ -137,6 +138,12 @@ try{
  const publicUrl=await evaluate("document.querySelector('.caa-sharing input[readonly]').value");assert.ok(publicUrl.includes('/caa?share='));
  await fill(".caa-sharing input[type=email]","recipient@example.test");await clickText("Invia al terapista");await wait("document.querySelector('.caa-sharing').textContent.includes('Storia inviata')");assert.equal(shares.size,2);
  assert.ok(await evaluate("document.querySelector('.caa-received').textContent.includes('Ricevuta demo')"),"received stories are visible in the adult area");
+ const receivedUrl=await evaluate("document.querySelector('.caa-received a').href");
+ await evaluate("document.querySelector('.caa-received a').click()");await wait("document.querySelector('.caa-shared-view .caa-preview')");
+ assert.equal(await evaluate("window.location.href"),receivedUrl,"received story opens through its actual title link");
+ assert.equal(await evaluate("Boolean(document.querySelector('.caa-sentence-editor,.caa-sharing'))"),false,"received copy remains read-only");
+ await evaluate("document.querySelector('.caa-shared-view a').click()");await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-received a')");
+ await send("Page.reload");await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-received a')");await evaluate("document.querySelector('.caa-received a').click()");await wait("document.querySelector('.caa-shared-view .caa-preview')");
  const callsBeforePublic=stateCalls;await send("Page.navigate",{url:publicUrl});await wait("document.querySelector('.caa-shared-view .caa-preview')");assert.equal(stateCalls,callsBeforePublic,"public story opens without bootstrapping login or private state");
  assert.equal(await evaluate("Boolean(document.querySelector('.sidebar'))"),false);
  await wait("[...document.querySelectorAll('.caa-preview-pages img')].every(image=>image.complete&&image.naturalWidth>0)");

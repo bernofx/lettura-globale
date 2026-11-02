@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { BookOpen, ChevronDown, Copy, Inbox, Link2, Send, Share2 } from "lucide-react";
 import type { CaaStore } from "../use-caa-stories";
 import type { CaaStored } from "../domain/caa-stories";
@@ -54,5 +53,7 @@ export function CaaReceived({ owner,profileId }: { owner: string; profileId: str
     void refresh(); const timer = setInterval(() => void refresh(),30_000); document.addEventListener("visibilitychange",refresh); window.addEventListener("online",refresh);
     return () => { disposed = true; clearInterval(timer); document.removeEventListener("visibilitychange",refresh); window.removeEventListener("online",refresh); };
   },[owner,profileId]);
-  return <section className="panel caa-received" id="caa-received"><div className="panel-heading"><div><span className="eyebrow">CONDIVISIONI</span><h2>Ricevute da altri terapisti <span className="caa-count">{items.length}</span></h2></div><Inbox size={24} aria-hidden="true" /></div>{error && <p role="status">{error}</p>}{items.length ? <div className="caa-toolbar">{items.map(item => <Link className="ghost-button" href={`/caa?share=${item.token}`} key={item.token}><BookOpen size={17} aria-hidden="true" />{item.title || "Senza titolo"}</Link>)}</div> : <p>Le storie condivise con la tua email di accesso compariranno qui, in sola lettura.</p>}</section>;
+  // Cross the app-shell/public-reader boundary with a document navigation:
+  // client-side Link navigation can leave the private shell mounted unchanged.
+  return <section className="panel caa-received" id="caa-received"><div className="panel-heading"><div><span className="eyebrow">CONDIVISIONI</span><h2>Ricevute da altri terapisti <span className="caa-count">{items.length}</span></h2></div><Inbox size={24} aria-hidden="true" /></div>{error && <p role="status">{error}</p>}{items.length ? <div className="caa-toolbar">{items.map(item => <a className="ghost-button" href={`/caa?share=${item.token}`} key={item.token}><BookOpen size={17} aria-hidden="true" />{item.title || "Senza titolo"}</a>)}</div> : <p>Le storie condivise con la tua email di accesso compariranno qui, in sola lettura.</p>}</section>;
 }

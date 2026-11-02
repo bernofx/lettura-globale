@@ -8,6 +8,9 @@
 
 ## Completato
 
+- [x] Apertura delle storie CAA ricevute corretta: navigazione documento tra shell privata e lettore `/caa?share=…`, anche per “Home / Accedi”, senza cambiare autenticazione, autorizzazioni, scadenza o contenuti. Test browser esteso al clic reale sul titolo (falliva prima della correzione), lettura non modificabile, ritorno alla home e riapertura dopo ricaricamento. Cache PWA v58.
+- [x] Correzione ricevute CAA: regressione browser completa superata dopo la modifica, insieme a typecheck, build e 269 test; lint senza errori, con i cinque avvisi preesistenti sulle immagini dinamiche. Nessuna migrazione o nuova APK.
+
 - [x] Rimossa la scorciatoia ridondante “Ricevute” nell’intestazione CAA: resta solo “Nuova storia”, mentre la sezione delle storie ricevute rimane in fondo con le sue azioni. Eliminato il collegamento hash che l’utente segnalava come ritorno alla home; nessuna modifica al routing globale o ai dati. Regressione browser sull’assenza del link nell’intestazione e sulla presenza delle ricevute in fondo; cache PWA v57.
 
 - [x] CAA uniformata al design dell’app: palette e forme ereditate dalle preferenze, pulsanti e campi coerenti, icone Lucide, gerarchia testo/simboli/anteprima e stato cloud riconoscibili; ricerca archivio, elenco collassabile su telefono, istruzioni e guida stampa apribili a richiesta. Editor frasi estratto senza modificare dati o associazioni. Nessuna skill UX/UI dedicata disponibile: applicati i token e i componenti esistenti, focus visibile, etichette accessibili e controlli touch.
