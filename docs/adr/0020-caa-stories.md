@@ -36,6 +36,10 @@ Le etichette hanno larghezza naturale e non sono sillabate né spezzate: la grig
 
 Foglio singolo A3/A4/A5/A6, Letter/Legal nelle due orientazioni o dimensioni personalizzate intere di 80–600 mm per lato. Libretto su A4/A3/Letter orizzontali, con pagina finita larga metà del foglio; stessa imposizione da taglio/impilamento. Le dimensioni fisiche alimentano sia anteprima sia CSS `@page` e PDF, non soltanto lo zoom. Campi opzionali nello schema JSON/R2 1, validati server-side e conservati nelle nuove condivisioni. Nessun enum D1, migrazione, nuovo provider, permesso, binding o APK. L’impostazione stampante deve comunque rispettare il foglio e la scala 100%.
 
+## Percentuale immagini — scelta manuale
+
+Su richiesta successiva dell’utente la riduzione non è automatica: preferenza opzionale `symbolScale` intera 50–100, con 100% implicito nei documenti precedenti. La dimensione fisica dei simboli è `symbolSize × symbolScale / 100`; la dimensione del testo non cambia, così come il contenuto e la scelta originale/maiuscolo. Campo e cursore sono disponibili in configurazione e direttamente nell’anteprima dell’autore, aggiornano live lettura/fogli/PDF e seguono la normale coda cloud. Gli esterni ricevono la percentuale fissata nello snapshot e non modificano la storia dell’autore. Il blocco stampa resta se la riduzione scelta non basta, indicando le pagine che eccedono. Nessun mutamento di licenze, provider, permessi o schema D1; payload vecchi senza campo non riscritti automaticamente.
+
 ## Futuro
 
 La bacchetta AI richiesta dall’utente è registrata nel MASTER_PLAN: proposta CAA con confronto e conferma adulta, preferenza per soluzioni gratuite/locali, eventuali API autorizzate (non password ChatGPT), con ADR privacy/provider/costi prima di attivarla. Il formato delle storie rimane indipendente dal catalogo di simboli.

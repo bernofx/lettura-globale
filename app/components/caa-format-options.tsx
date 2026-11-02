@@ -1,9 +1,13 @@
 "use client";
-import { CAA_BOOK_PAPERS, CAA_PAPERS, caaPageSize, caaPrintSheetSize, type CaaStory } from "../domain/caa-stories";
+import { CAA_BOOK_PAPERS, CAA_PAPERS, caaPageSize, caaPrintSheetSize, caaSymbolSize, type CaaStory } from "../domain/caa-stories";
 import { NumericField } from "./numeric-field";
 
 export function CaaCaseOption({ story,onChange }: { story: CaaStory; onChange: (story: CaaStory) => void }) {
   return <label>Stile del testo<select className="caa-case-select" value={story.letterCase ?? "original"} onChange={event => onChange({ ...story,letterCase: event.target.value as CaaStory["letterCase"] })}><option value="uppercase">STAMPATELLO MAIUSCOLO</option><option value="original">Mantieni il testo originale</option></select><small className="caa-hint">Si applica a parole e titoli in lettura e nel PDF. Il testo inserito e i simboli non vengono cancellati: puoi cambiare scelta in seguito.</small></label>;
+}
+export function CaaImageScaleOption({ story,onChange }: { story: CaaStory; onChange: (story: CaaStory) => void }) {
+  const value = story.symbolScale ?? 100;
+  return <section className="caa-image-scale"><label>Dimensione immagini: {value}%<input aria-label="Riduzione immagini" type="range" min={50} max={100} step={1} value={value} onChange={event => onChange({ ...story,symbolScale: Number(event.target.value) })} /></label><label>Percentuale (50–100)<NumericField value={value} min={50} max={100} onValueChange={symbolScale => onChange({ ...story,symbolScale })} /></label><p className="caa-hint">Immagini di {caaSymbolSize(story).toLocaleString("it-IT")} mm invece di {story.symbolSize} mm. Cambia la percentuale per aggiornare subito l’anteprima e il PDF: il testo resta della stessa dimensione e le parole non vengono spezzate.</p></section>;
 }
 export function CaaFormatOptions({ story,onChange }: { story: CaaStory; onChange: (story: CaaStory) => void }) {
   const size = caaPrintSheetSize(story),page = caaPageSize(story);
@@ -14,5 +18,5 @@ export function CaaFormatOptions({ story,onChange }: { story: CaaStory; onChange
       <label>Formato fogli del libretto<select className="caa-book-paper-select" value={story.bookPaper ?? "a4"} onChange={event => onChange({ ...story,bookPaper: event.target.value as CaaStory["bookPaper"] })}>{Object.entries(CAA_BOOK_PAPERS).map(([key,paper]) => <option key={key} value={key}>{paper.label}</option>)}</select></label>
       <label>Frasi per pagina<select value={story.sentencesPerPage} onChange={event => onChange({ ...story,sentencesPerPage: Number(event.target.value) as 1 | 2 | 3 })}><option value={1}>Una</option><option value={2}>Due</option><option value={3}>Tre</option></select></label><label className="check-line"><input type="checkbox" checked={story.cover} onChange={event => onChange({ ...story,cover: event.target.checked })} />Copertina con il titolo</label></>}
     <label>Dimensione simboli<select value={story.symbolSize} onChange={event => onChange({ ...story,symbolSize: Number(event.target.value) as 20 | 26 | 32 })}><option value={20}>Compatta · 20 mm</option><option value={26}>Media · 26 mm</option><option value={32}>Grande · 32 mm</option></select></label>
-  </div><p className="caa-hint">PDF: {size.width} × {size.height} mm. {story.format === "book" ? `Ogni pagina di lettura misura ${page.width} × ${page.height} mm. Solo fronte: impila, taglia a metà e rilega.` : "Una sola pagina, A4 predefinito. Il PDF usa le misure selezionate: la stampa viene bloccata se il contenuto non entra."} Le parole non vengono spezzate; le righe vanno a capo soltanto fra parole o gruppi.</p></section>;
+  </div><CaaImageScaleOption story={story} onChange={onChange} /><p className="caa-hint">PDF: {size.width} × {size.height} mm. {story.format === "book" ? `Ogni pagina di lettura misura ${page.width} × ${page.height} mm. Solo fronte: impila, taglia a metà e rilega.` : "Una sola pagina, A4 predefinito. Il PDF usa le misure selezionate: la stampa viene bloccata se il contenuto non entra."} Le parole non vengono spezzate; le righe vanno a capo soltanto fra parole o gruppi.</p></section>;
 }

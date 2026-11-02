@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { arasaacResults,CAA_PAPERS,CAA_BOOK_PAPERS,caaCutSheets,caaDisplayText,caaId,caaLibrarySymbol,caaPages,caaPageSize,caaPrintSheetSize,caaSymbolUrl,editCaaSentence,newCaaStory,parseCaaStory,sentenceText,sentencesFromText,splitCaaText } from "../app/domain/caa-stories.ts";
 import { canReadShare,liveShare,shareToken,type CaaShare } from "../app/api/caa-shares/storage.ts";
-import { caaSearchAllowed,caaSearchTerm } from "../app/domain/caa-stories.ts";
+import { caaSearchAllowed,caaSearchTerm,caaSymbolSize } from "../app/domain/caa-stories.ts";
+
+test("image scale is optional/backward compatible and persists separately from text and symbol associations",() => {
+  const story = {...newCaaStory(),draftText:"Il gatto.",sentences:sentencesFromText("Il gatto.")};
+  assert.equal(caaSymbolSize(story),26); assert.equal(parseCaaStory(story).symbolScale,undefined);
+  const scaled = parseCaaStory({...story,symbolScale:95});
+  assert.equal(caaSymbolSize(scaled),24.7); assert.deepEqual(scaled.sentences,story.sentences);
+  assert.equal(scaled.draftText,story.draftText); assert.equal(scaled.symbolSize,26);
+  assert.equal(caaSymbolSize({...story,symbolSize:20,symbolScale:50}),10);
+  for (const symbolScale of [49,101,0,-5,90.5,NaN,"90",null]) assert.throws(() => parseCaaStory({...story,symbolScale}));
+  for (const symbolScale of [50,85,95,100]) assert.equal(parseCaaStory({...story,symbolScale}).symbolScale,symbolScale);
+});
 
 test("one-letter CAA searches allow A/E/È/I/O, keep È distinct, and exclude consonants and U",() => {
   for (const term of ["A","a","E","e","È","è","I","i","O","o"," I ","e\u0300"]) assert.equal(caaSearchAllowed(term),true,term);
