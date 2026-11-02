@@ -9,6 +9,7 @@ const MAX_IMAGE_BYTES = 2_500_000;
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.has("x-caa-scope") && (!user.adultProfileId || request.headers.get("x-caa-profile") !== user.adultProfileId || request.headers.get("x-caa-scope") !== await ownerStoragePrefix(JSON.stringify([user.userId,user.adultProfileId])))) return Response.json({ error: "profile_changed" }, { status: 401 });
   if (!env.BUCKET) return Response.json({ error: "storage_unavailable" }, { status: 503 });
 
   const mediaId = request.headers.get("x-media-id")?.trim() ?? "";

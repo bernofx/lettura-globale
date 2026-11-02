@@ -1,12 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Una colonna sonora per i palloncini",
+  title: "Prime storie in CAA",
   items: [
-    "La musica dei palloncini parte subito dal primo suono: saltati i dieci secondi iniziali di silenzio, senza modificare il file originale.",
-    "Avvio della musica più affidabile su touch e recupero automatico dopo un’interruzione audio del sistema.",
-    "Se il browser richiede un gesto locale, il gioco mostra il pulsante Avvia musica.",
-    "Aggiunta in Libreria → Suoni la colonna sonora del gioco, con ascolto di prova.",
-    "La musica accompagna sia il premio durante gli esercizi sia la festa finale.",
-    "Riproduzione continua finché il gioco è aperto, arresto alla chiusura e rispetto di volume e audio disattivato.",
+    "Nuova sezione Storie in CAA: testo libero, frasi modificabili e simboli per parole o espressioni.",
+    "Ricerca ARASAAC per uso non commerciale con crediti, immagini della libreria e caricamenti propri.",
+    "Foglio A4/A5 oppure libretto da impilare, tagliare e rilegare: anteprima di lettura e di stampa, Salva PDF dal browser.",
+    "Storie private del profilo adulto nel cloud, con coda offline, duplicazione e archiviazione recuperabile.",
   ],
 };

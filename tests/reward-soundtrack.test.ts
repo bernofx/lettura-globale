@@ -6,7 +6,7 @@ import { createRewardMusic, REWARD_SOUNDTRACK, rewardMusicRange } from "../app/d
 
 function fixture(state = "running") {
   const events = new EventTarget();
-  const sources: Array<{ loop: boolean; loopStart: number; loopEnd: number; offset: number; buffer: unknown; starts: number; stops: number; disconnects: number; connect: () => void; disconnect: () => void; start: (when?: number, offset?: number) => void; stop: () => void }> = [];
+  const sources: Array<{ loop: boolean; loopStart: number; loopEnd: number; offset: number; buffer: unknown; starts: number; stops: number; disconnects: number; connect: () => void; disconnect: () => void; start: (...args: number[]) => void; stop: () => void }> = [];
   const gains: Array<{ gain: { value: number }; connect: () => void; disconnect: () => void }> = [];
   const context = {
     addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), dispatchEvent: events.dispatchEvent.bind(events),

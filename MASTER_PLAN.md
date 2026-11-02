@@ -51,6 +51,16 @@ Vincoli previsti:
 
 Configurazione iniziale proposta per la valutazione: OpenAI Images API con modello rapido/economico, qualità bassa, immagine quadrata e tetto di spesa configurabile. La scelta del provider resta aperta fino all'approvazione dell'ADR; l'abbonamento ChatGPT personale non viene considerato una credenziale API dell'applicazione.
 
+### Prima versione — Storie in CAA
+
+Sezione separata dagli esercizi per testo breve proprio, frasi e associazioni simboliche modificabili, ricerca ARASAAC esplicita per termine soltanto dopo conferma dell’uso non commerciale, immagini della libreria e foto proprie con conferma di diritti/consenso. Anteprima lettura e fogli di stampa; foglio A4/A5 o libretto A5 su A4 orizzontale da impilare, tagliare e rilegare, solo fronte. Crediti anche nella stampa, verifica degli ingombri e delle immagini prima del dialogo browser Stampa/Salva PDF. Nessuna generazione AI, condivisione pubblica o statistica clinica in questa fase. Documenti privati del profilo adulto nel bucket cloud esistente, coda offline e conflitti senza sovrascrittura; vedi ADR 0020.
+
+### Opzione futura — Bacchetta AI per semplificare i testi CAA
+
+Prevedere un comando con icona di bacchetta magica “Semplifica per CAA” nel percorso Testo. Deve proporre frasi brevi, lessico concreto e struttura semplice, preservando significato, negazioni e informazioni essenziali senza aggiungere fatti; nessuna pretesa di validazione clinica automatica. Mostrare originale e proposta/differenze e consentire conferma per frase o dell’intero testo, mantenendo l’originale fino all’accettazione. Le associazioni simboliche delle parti invariate devono sopravvivere.
+
+Valutare prima soluzioni locali/gratuite e poi servizi autorizzati, anche OpenAI API se approvati, confrontando qualità in italiano, privacy, costo e condizioni d’uso. L’account/abbonamento ChatGPT personale non equivale a una credenziale API; non chiedere né memorizzare la password ChatGPT. Nessun invio automatico di testi o dati di minori: occorrono ADR su provider, segreti server-side, consenso, pseudonimizzazione, retention, limiti di spesa e possibilità di disattivare la funzione. Non attivare l’AI nella prima versione.
+
 ### Opzione futura — Storie sociali personalizzabili
 
 La creazione di storie sociali dovrà poter funzionare anche senza AI. L'adulto sceglie uno dei tre percorsi: composizione interamente manuale, procedura guidata con domande pertinenti alla situazione oppure generazione di una bozza modificabile. In tutti i casi il controllo editoriale resta all'adulto.

@@ -1,0 +1,75 @@
+// Local browser UX/offline regression. External providers are explicitly mocked;
+// this does not claim a live ARASAAC availability check.
+import assert from "node:assert/strict";
+import { readFileSync,writeFileSync } from "node:fs";
+const runSeed=String(Date.now());
+const origin="http://127.0.0.1:5180",scope=Number(runSeed).toString(16).padStart(32,"0"),adult="adult-caa-demo";
+const tabs=await(await fetch("http://127.0.0.1:9222/json/list")).json();
+const socket=new WebSocket(tabs.find(tab=>tab.type==="page").webSocketDebuggerUrl);
+await new Promise(resolve=>socket.addEventListener("open",resolve,{once:true}));
+const pending=new Map(),documents=new Map(),errors=[]; let sequence=0,revision=1,arasaacCalls=0,mediaUploads=0;
+const state={schemaVersion:1,therapists:[{id:adult,firstName:"Demo",lastName:"CAA",email:"caa@example.test",role:"Amministratore",childIds:["child-caa-demo"]}],children:[{id:"child-caa-demo",firstName:"Demo",lastName:"",birthYear:"",notes:"",avatarColor:"#7568d9"}],activeChildId:"child-caa-demo",library:[],exercises:[],sequences:[],attempts:[],helps:[],sessionHistory:[]};
+const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
+const fulfill=(requestId,body,status=200,type="application/json")=>send("Fetch.fulfillRequest",{requestId,responseCode:status,responseHeaders:[{name:"Content-Type",value:type},{name:"Access-Control-Allow-Origin",value:"*"}],body:Buffer.from(typeof body==="string"||Buffer.isBuffer(body)?body:JSON.stringify(body)).toString("base64")});
+socket.addEventListener("message",async event=>{
+ const data=JSON.parse(event.data); if(data.id){const handler=pending.get(data.id);pending.delete(data.id);if(data.error?.message?.includes("Invalid InterceptionId"))handler?.resolve({});else if(data.error)handler?.reject(new Error(JSON.stringify(data.error)));else handler?.resolve(data.result);}
+ if(data.method==="Runtime.exceptionThrown")errors.push(data.params.exceptionDetails.text);
+ if(data.method==="Page.javascriptDialogOpening")await send("Page.handleJavaScriptDialog",{accept:true});
+ if(data.method!=="Fetch.requestPaused")return;
+ const{requestId,request}=data.params,url=new URL(request.url);
+ if(url.pathname==="/api/state"||url.pathname==="/api/state/changes")return fulfill(requestId,{state,revision:++revision});
+ if(url.pathname==="/api/caa-stories")return fulfill(requestId,{scope,items:[...documents.values()].map(value=>({id:value.story.id,title:value.story.title,updatedAt:value.story.updatedAt,archived:value.story.archived,etag:value.etag}))});
+ if(url.pathname.startsWith("/api/caa-stories/")){
+   const id=url.pathname.split("/").at(-1),previous=documents.get(id);
+   if(request.method==="GET")return previous?fulfill(requestId,previous):fulfill(requestId,{error:"not_found"},404);
+   const body=JSON.parse(request.postData);if(previous?.operationId===body.operationId&&JSON.stringify(previous.story)===JSON.stringify(body.story))return fulfill(requestId,{etag:previous.etag});if((previous?.etag??null)!==body.baseEtag)return fulfill(requestId,{error:"story_conflict"},409);
+   const value={story:body.story,operationId:body.operationId,etag:(++revision).toString(16).padStart(32,"0")};documents.set(id,value);return fulfill(requestId,{etag:value.etag});
+ }
+ if(url.origin==="https://api.arasaac.org"){arasaacCalls++;assert.ok(url.pathname.endsWith("/gatto"));return fulfill(requestId,[{_id:7114,keywords:[{keyword:"gatto"}]}]);}
+ if(url.origin==="https://static.arasaac.org")return fulfill(requestId,readFileSync("public/lettura-globale-icon-v2.png"),200,"image/png");
+ if(url.pathname==="/api/media"&&request.method==="POST"){mediaUploads++;return fulfill(requestId,{id:request.headers["x-media-id"]});}
+ if(url.origin!==origin)return send("Fetch.failRequest",{requestId,errorReason:"BlockedByClient"});
+ return send("Fetch.continueRequest",{requestId});
+});
+const evaluate=async expression=>{const result=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
+const wait=async expression=>{for(let i=0;i<180;i++){if(await evaluate(`Boolean(${expression})`))return;await new Promise(resolve=>setTimeout(resolve,100));}throw new Error(`Timed out: ${expression}; ${await evaluate("document.body.innerText.slice(0,2200)")}`);};
+const clickText=async text=>evaluate(`[...document.querySelectorAll('button')].find(button=>button.textContent.includes(${JSON.stringify(text)}))?.click()`);
+const fill=async(selector,text)=>{await evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});input.focus();input.select();})()`);await send("Input.insertText",{text});};
+try{
+ await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Fetch.enable",{patterns:[{urlPattern:"*"}]});
+ await send("Emulation.setDeviceMetricsOverride",{width:1280,height:1000,deviceScaleFactor:1,mobile:false});
+ await send("Page.addScriptToEvaluateOnNewDocument",{source:`if(sessionStorage.getItem('caa-test-seeded')!=='${runSeed}'){const state=${JSON.stringify(state)};for(const [name,value]of Object.entries(state)){const keys={therapists:'lg-therapists',children:'lg-children',library:'lg-library',exercises:'lg-exercises',sequences:'lg-sequences',attempts:'lg-attempts',helps:'lg-helps',sessionHistory:'lg-session-history',activeChildId:'lg-active-child'};if(keys[name])localStorage.setItem(keys[name],JSON.stringify(value));}localStorage.setItem('lg-therapist-session',JSON.stringify({therapistId:'${adult}',expiresAt:Date.now()+86400000}));sessionStorage.setItem('caa-test-seeded','${runSeed}');}`});
+ await send("Page.navigate",{url:`${origin}/`});await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-stories-page .page-title-row button:not(:disabled)')");
+ await clickText("Nuova storia");await wait("document.querySelector('.caa-text-form textarea')");await clickText("Inserisci un esempio");await clickText("Dividi in frasi");await wait("document.querySelectorAll('.caa-sentence-editor').length===3");
+ await fill(".caa-sentence-editor textarea","Il gatto si sveglia presto ");assert.ok(await evaluate("document.querySelector('.caa-sentence-editor textarea').value.endsWith(' ')") );
+ await evaluate("[...document.querySelectorAll('.caa-sentence-editor:first-of-type .caa-token-button')].find(button=>button.textContent.includes('gatto'))?.click()");
+ if(!await evaluate("Boolean(document.querySelector('.caa-modal'))"))await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('gatto')).click()");
+ await wait("document.querySelector('.caa-modal')");assert.equal(arasaacCalls,0,"no external search before consent and explicit request");
+ await evaluate("document.querySelector('.caa-modal input[type=checkbox]').click()");await clickText("Cerca in ARASAAC");await wait("document.querySelector('.caa-modal [data-source=arasaac] button')");await evaluate("document.querySelector('.caa-modal [data-source=arasaac] button').click()");await wait("!document.querySelector('.caa-modal')");assert.equal(arasaacCalls,1);
+ await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+ await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('presto')).click()");await wait("document.querySelector('.caa-modal input[type=file]')");
+ await evaluate("document.querySelectorAll('.caa-modal input[type=checkbox]')[1].click()");
+ const fileInput=await send("Runtime.evaluate",{expression:"document.querySelector('.caa-modal input[type=file]')",returnByValue:false});
+ await send("DOM.setFileInputFiles",{files:[`${process.cwd()}/public/lettura-globale-icon-v2.png`],objectId:fileInput.result.objectId});
+ await wait("!document.querySelector('.caa-modal') && document.querySelector('.caa-token-button img[src^=blob]')");assert.equal(mediaUploads,0,"offline photo stays queued locally");
+ await send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+ await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal(mediaUploads,1,"photo uploads before the document is marked saved");
+ await clickText("Riusa simboli e immagini note");await wait("document.querySelectorAll('.caa-token-button img[src*=\"static.arasaac.org\"]').length===3");assert.equal(arasaacCalls,1,"repeat words reuse the chosen symbol without more external queries");
+ await evaluate("document.querySelectorAll('.caa-sentence-editor')[0].querySelectorAll('.caa-token-editor>div')[2].querySelector('.caa-token-operation').click()");await wait("[...document.querySelectorAll('.caa-token-button strong')].some(node=>node.textContent==='si sveglia')");
+ await evaluate("(()=>{const input=document.querySelector('.caa-format select');input.value='book';input.dispatchEvent(new Event('change',{bubbles:true}));})()");await wait("document.querySelector('.caa-format input[type=checkbox]')");await evaluate("document.querySelector('.caa-format input[type=checkbox]').click()");await clickText("Apri anteprima");await wait("document.querySelectorAll('.caa-preview-pages .caa-paper').length===4");
+ await wait("[...document.querySelectorAll('.caa-preview-pages img')].every(image=>image.complete&&image.naturalWidth>0)");
+ assert.deepEqual(await evaluate("[...document.querySelectorAll('#caa-print-root footer b')].map(node=>Number(node.textContent))"),[1,3,2,4]);
+ assert.ok(await evaluate("document.querySelector('#caa-print-root').textContent.includes('Sergio Palao') && document.querySelector('#caa-print-root').textContent.includes('CC BY-NC-SA')"),"ARASAAC credits survive export, not only the picker");
+ await clickText("Fogli di stampa");await wait("document.querySelectorAll('.caa-preview-pages .caa-cut-sheet').length===2");
+ await evaluate("window.print=()=>{window.__caaPrinted=true}");await clickText("Stampa / Salva PDF");await wait("window.__caaPrinted");
+ const pdf=await send("Page.printToPDF",{preferCSSPageSize:true,printBackground:true});const bytes=Buffer.from(pdf.data,"base64");assert.equal(bytes.subarray(0,5).toString(),"%PDF-");writeFileSync("/tmp/lg-caa-book.pdf",bytes);
+ await evaluate("document.querySelector('.caa-editor-heading .text-button').click()");await wait("!document.querySelector('.caa-editor-heading')");await clickText("Archiviate (");await wait("document.querySelector('.caa-story-list strong')");await evaluate("document.querySelector('.caa-story-list strong').closest('button').click()");await wait("document.querySelector('.caa-editor-heading .text-button')?.textContent==='Ripristina'");await clickText("Ripristina");await wait("document.querySelector('.caa-editor-heading .text-button')?.textContent==='Archivia'");await clickText("3. Anteprima");
+ await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate("window.scrollTo(0,0)");await new Promise(resolve=>setTimeout(resolve,300));const screenshot=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});writeFileSync("/tmp/lg-caa-mobile.png",Buffer.from(screenshot.data,"base64"));
+ await clickText("1. Testo");await wait("document.querySelector('.caa-text-form input')");await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});await fill(".caa-text-form input","Bozza offline dimostrativa");await wait("document.querySelector('.caa-save-state').textContent.includes('Bozza sul dispositivo')");
+ await send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal([...documents.values()][0].story.title,"Bozza offline dimostrativa");
+ await fill(".caa-text-form textarea","Il gatto dorme.\nIl cane corre.");assert.ok(await evaluate("[...document.querySelectorAll('.caa-steps button')].filter(button=>button.disabled).length===2"),"edited raw text cannot silently print stale sentences");await clickText("Dividi in frasi");await wait("document.querySelectorAll('.caa-sentence-editor').length===2");await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");
+ await send("Page.reload");await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-story-list strong')");assert.equal(await evaluate("document.querySelector('.caa-story-list strong').textContent"),"Bozza offline dimostrativa");
+ state.therapists[0].role="Terapista";state.therapists[0].childIds=[];state.children=[];
+ await send("Page.reload");await wait("document.querySelector('.child-choice-page')");await clickText("Apri Storie in CAA senza scegliere un bambino");await wait("document.querySelector('.caa-stories-page .caa-story-list strong')");
+ assert.deepEqual(errors,[]);console.log("PASS CAA browser: raw text, spaces, grouping, explicit symbol consent/search, offline photo upload, credits, cut-and-stack pages, printable PDF, mobile preview, offline queue and cloud restore.");
+}finally{socket.close();}
