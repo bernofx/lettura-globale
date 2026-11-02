@@ -6,7 +6,7 @@ Contenitore WebView nativo: carica esclusivamente `https://lettura-globale.berno
 
 1. Aggiornare Android System WebView e installare/attivare una voce italiana nelle impostazioni Android di sintesi vocale. Internet è necessario per il primo caricamento; questa APK non promette disponibilità offline completa.
 2. Impostare un PIN, password o sequenza di blocco schermo del tablet.
-3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.2.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare **come aggiornamento**, senza disinstallare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
+3. Scaricare `https://lettura-globale.bernofx.workers.dev/downloads/lettura-globale-android11-v0.1.3.apk`, autorizzare l'installazione da quella sorgente se Android lo richiede e installare **come aggiornamento**, senza disinstallare. È una versione di prova firmata, non una pubblicazione Play Store. Dopo l'installazione è possibile revocare il permesso alla sorgente.
 4. Aprire Lettura Globale e accedere con il consueto profilo adulto. L'accesso della WebView è separato da Chrome; i dati cloud sono gli stessi, non vengono copiati i cookie del browser.
 
 ## QR e apertura nell’app
@@ -16,6 +16,14 @@ La 0.1.2 registra Android App Links HTTPS per la sola pagina radice del dominio 
 Dopo l’aggiornamento Android deve verificare l’associazione online. Se la fotocamera continua ad aprire Chrome, controllare **Impostazioni → App → Lettura Globale → Apri per impostazione predefinita / Apri link supportati** e abilitare il dominio. Nome e percorso variano per produttore; alcuni lettori QR aprono deliberatamente un browser interno. La verifica automatica va provata sul telefono; non è stata eseguita su un dispositivo/emulatore in questo ambiente. L’accesso nell’app è separato da quello in Chrome: al primo utilizzo può servire il login adulto; il QR rimane pendente durante l’accesso. La sessione locale interrotta non viene cancellata per collegare il controller.
 
 Per diagnosi con ADB su Android 11: `adb shell dumpsys package domain-preferred-apps`; su Android 12+ anche `adb shell pm get-app-links it.letturaglobale.tablet`. Una scansione reale deve verificare apertura a freddo, app già aperta, login necessario e QR DO/Classico. Il certificato è ancora quello di prova: passando a firma definitiva occorrerà aggiornare anche l’associazione del dominio.
+
+## Stampa e salvataggio PDF — APK 0.1.3
+
+Nell’anteprima CAA premere **Stampa / Salva PDF**, confermare le credenziali Android e scegliere una stampante oppure **Salva come PDF**, quindi indicare il documento/cartella nel selettore di sistema. Non serve aprire Chrome. Se l’app è fissata sullo schermo, rimuovere prima il blocco con i comandi Android e il PIN del dispositivo: l’app non lo disattiva automaticamente per esportare.
+
+Il collegamento usa PrintManager e l’adattatore della stessa WebView, con il documento già verificato e le immagini caricate, senza esportare HTML/credenziali verso altri siti. Mantiene ordine del libretto da taglio, formato fisico e percentuale delle immagini. Controllare comunque il formato nell’anteprima Android e scegliere stampa senza ridimensionamenti indesiderati; le stampanti fisiche possono imporre margini. L’apertura del dialogo non equivale a un file salvato: confermare l’operazione nel sistema. Annullare la verifica non stampa nulla. Deve essere disponibile il servizio di stampa Android; la prova su dispositivo reale resta necessaria.
+
+La 0.1.2 e precedenti non espongono questa funzione: il sito mostra un messaggio che richiede l’aggiornamento nativo. Installare la 0.1.3 sopra quella esistente, con la stessa firma, senza cancellare dati. Non vengono aggiunti permessi, provider, sincronizzazioni o file temporanei dell’app; i documenti eventualmente esportati sono gestiti dal sistema e dall’utente.
 
 ## Blocco app e uscita adulta
 
@@ -29,7 +37,7 @@ Per diagnosi con ADB su Android 11: `adb shell dumpsys package domain-preferred-
 
 La sintesi vocale passa al motore TTS italiano Android perché Web Speech non è garantito nelle WebView. Sono rispettati volume, interruzione e callback di fine; la sospensione cancella la richiesta senza avanzare. La scelta del motore e l'eventuale uso di rete dipendono dalle impostazioni Android: per il funzionamento senza rete del solo parlato installare la voce offline. Non si introducono API vocali a pagamento.
 
-Il selettore file usa i documenti scelti esplicitamente dall'adulto. Il CSV viene salvato con il selettore documenti Android, dopo verifica adulta. L'unico permesso richiesto nel manifest è Internet; niente permessi generali di archiviazione, microfono o fotocamera. Traffico HTTP, navigazione fuori dal dominio, popup e debug WebView sono disabilitati. Le verifiche TLS rimangono quelle di Android. Il bridge espone soltanto voce/stop/export CSV, non accesso generico a filesystem o comandi. L'esportazione nativa è limitata a circa 6 MB; per file maggiori usare il PC.
+Il selettore file usa i documenti scelti esplicitamente dall'adulto. Il CSV viene salvato con il selettore documenti Android, dopo verifica adulta. L'unico permesso richiesto nel manifest è Internet; niente permessi generali di archiviazione, microfono o fotocamera. Traffico HTTP, navigazione fuori dal dominio, popup e debug WebView sono disabilitati. Le verifiche TLS rimangono quelle di Android. Il bridge espone soltanto voce/stop/export CSV e stampa CAA, non accesso generico a filesystem o comandi. L'esportazione CSV nativa è limitata a circa 6 MB; per file maggiori usare il PC.
 
 Il cloud resta la fonte primaria. La WebView conserva cookie e copia/coda locale nello spazio privato dell'app; il backup Android è disabilitato. Non cancellare dati né disinstallare l'app con modifiche ancora non sincronizzate. Nessuna migrazione D1/R2/DO è richiesta per il contenitore.
 

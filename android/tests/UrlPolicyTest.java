@@ -21,5 +21,12 @@ public class UrlPolicyTest {
         if (PinningUiPolicy.allowImmersive(false, true)) throw new AssertionError("Immersive riattivata mentre l'app è fissata");
         if (PinningUiPolicy.allowImmersive(true, true)) throw new AssertionError("Comandi Android nascosti durante la transizione");
         System.out.println("PASS: barre Android visibili durante richiesta e blocco, senza nascondere la conferma.");
+        if (!PrintPolicy.valid("Storia demo", 297, 210, "print-demo-01")) throw new AssertionError("Formato libretto A4 respinto");
+        if (!PrintPolicy.valid("Storia demo", 180, 240, "print-demo-02")) throw new AssertionError("Formato personalizzato respinto");
+        for (double size : new double[] { 0, 79, 601, Double.NaN, Double.POSITIVE_INFINITY }) if (PrintPolicy.valid("Demo", size, 210, "print-demo-03")) throw new AssertionError("Formato non valido ammesso");
+        if (PrintPolicy.valid("", 297, 210, "demo") || PrintPolicy.valid("Demo", 297, 210, "../escape")) throw new AssertionError("Titolo/ID non valido ammesso");
+        if (PrintPolicy.mils(210) != 8268 || PrintPolicy.mils(297) != 11693) throw new AssertionError("Misure A4 errate");
+        if (PrintPolicy.jobName("Demo/\\\n").contains("\n")) throw new AssertionError("Nome stampa non normalizzato");
+        System.out.println("PASS: stampa CAA limitata, formati A4/libretto/personalizzati e parametri non validi respinti.");
     }
 }

@@ -40,6 +40,10 @@ Foglio singolo A3/A4/A5/A6, Letter/Legal nelle due orientazioni o dimensioni per
 
 Su richiesta successiva dell’utente la riduzione non è automatica: preferenza opzionale `symbolScale` intera 50–100, con 100% implicito nei documenti precedenti. La dimensione fisica dei simboli è `symbolSize × symbolScale / 100`; la dimensione del testo non cambia, così come il contenuto e la scelta originale/maiuscolo. Campo e cursore sono disponibili in configurazione e direttamente nell’anteprima dell’autore, aggiornano live lettura/fogli/PDF e seguono la normale coda cloud. Gli esterni ricevono la percentuale fissata nello snapshot e non modificano la storia dell’autore. Il blocco stampa resta se la riduzione scelta non basta, indicando le pagine che eccedono. Nessun mutamento di licenze, provider, permessi o schema D1; payload vecchi senza campo non riscritti automaticamente.
 
+## Stampa nell’APK 0.1.3
+
+La limitazione iniziale della stampa al browser è superata dal bridge PrintManager dell’APK 0.1.3 (ADR 0017 aggiornato), su richiesta dell’utente. Dopo i medesimi controlli di media, accesso e ingombri, il sito invia soltanto titolo/dimensioni fisiche/ID di richiesta e apre il dialogo nativo con verifica adulta. Salva come PDF è una destinazione del dialogo Android, non un nuovo servizio o provider PDF. Vecchie APK richiedono aggiornamento; browser invariato. Il salvataggio effettivo e la resa su hardware Android richiedono verifica dell’utente.
+
 ## Futuro
 
 La bacchetta AI richiesta dall’utente è registrata nel MASTER_PLAN: proposta CAA con confronto e conferma adulta, preferenza per soluzioni gratuite/locali, eventuali API autorizzate (non password ChatGPT), con ADR privacy/provider/costi prima di attivarla. Il formato delle storie rimane indipendente dal catalogo di simboli.

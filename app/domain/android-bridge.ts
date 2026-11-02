@@ -2,6 +2,7 @@ export type AndroidBridge = {
   speak: (text: string, id: string, volume: number) => void;
   stop: () => void;
   saveCsv: (base64: string) => void;
+  printCaa?: (title: string, widthMm: number, heightMm: number, id: string) => void;
 };
 
 export function androidBridge(): AndroidBridge | undefined {

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 const root = resolve(import.meta.dirname, "..");
 const out = mkdtempSync(join(tmpdir(), "lg-android-test-"));
 for (const args of [
-  ["com.sun.tools.javac.Main", "-d", out, join(root, "android/app/src/main/java/it/letturaglobale/tablet/UrlPolicy.java"), join(root, "android/app/src/main/java/it/letturaglobale/tablet/PinningUiPolicy.java"), join(root, "android/tests/UrlPolicyTest.java")],
+  ["com.sun.tools.javac.Main", "-d", out, join(root, "android/app/src/main/java/it/letturaglobale/tablet/UrlPolicy.java"), join(root, "android/app/src/main/java/it/letturaglobale/tablet/PinningUiPolicy.java"), join(root, "android/app/src/main/java/it/letturaglobale/tablet/PrintPolicy.java"), join(root, "android/tests/UrlPolicyTest.java")],
   ["-cp", out, "it.letturaglobale.tablet.UrlPolicyTest"],
 ]) {
   const result = spawnSync("java", args, { stdio: "inherit" });
@@ -28,6 +28,12 @@ assert.match(links[0].target.sha256_cert_fingerprints[0], /^(?:[A-F0-9]{2}:){31}
 const activity = readFileSync(join(root, "android/app/src/main/java/it/letturaglobale/tablet/MainActivity.java"), "utf8");
 assert.match(activity, /onNewIntent\(Intent intent\)/);
 assert.match(activity, /Intent\.ACTION_VIEW\.equals/);
+assert.match(activity, /@JavascriptInterface public void printCaa/);
+assert.match(activity, /web\.createPrintDocumentAdapter\(name\)/);
+assert.match(activity, /PrintAttributes\.Margins\.NO_MARGINS/);
+assert.match(activity, /generation != pageGeneration/);
+assert.match(activity, /if \(isPinned\(\)\) \{ printResult/);
+assert.match(activity, /authenticate\(\(\) ->/);
 const permissions = [...manifest.matchAll(/uses-permission android:name="([^"]+)"/g)].map((match) => match[1]);
 assert.deepEqual(permissions, ["android.permission.INTERNET"]);
 console.log("PASS: Android 11 minimo, solo Internet, niente backup o HTTP.");

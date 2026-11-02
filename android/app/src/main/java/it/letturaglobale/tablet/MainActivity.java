@@ -10,6 +10,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.util.Base64;
@@ -42,6 +45,9 @@ public class MainActivity extends Activity {
     private Speech pendingSpeech;
     private String activeSpeechId;
     private Runnable adultAction;
+    private Runnable adultCancelled;
+    private String pendingPrintId;
+    private int pageGeneration;
     private ValueCallback<Uri[]> fileCallback;
     private byte[] pendingCsv;
     private boolean pinRequestPending;
@@ -97,6 +103,7 @@ public class MainActivity extends Activity {
                 return blocked;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                pageGeneration++;
                 stopVoice();
                 if (!UrlPolicy.trusted(url)) { view.stopLoading(); view.loadUrl(UrlPolicy.HOME); }
             }
@@ -204,12 +211,15 @@ public class MainActivity extends Activity {
         if (web != null && web.canGoBack()) web.goBack(); else authenticate(this::showAdultMenu);
     }
     private void authenticate(Runnable action) {
-        if (adultAction != null) return;
+        authenticate(action, null);
+    }
+    private void authenticate(Runnable action, Runnable cancelled) {
+        if (adultAction != null) { if (cancelled != null) cancelled.run(); return; }
         KeyguardManager keyguard = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
         Intent intent = keyguard.createConfirmDeviceCredentialIntent("Area adulto", "Usa il PIN o la sequenza di sblocco del tablet");
-        if (intent == null) { toast("Imposta prima un PIN di blocco schermo nelle impostazioni Android"); return; }
-        adultAction = action;
-        try { startActivityForResult(intent, AUTH); } catch (Exception error) { adultAction = null; toast("Verifica adulta non disponibile"); }
+        if (intent == null) { toast("Imposta prima un PIN di blocco schermo nelle impostazioni Android"); if (cancelled != null) cancelled.run(); return; }
+        adultAction = action; adultCancelled = cancelled;
+        try { startActivityForResult(intent, AUTH); } catch (Exception error) { adultAction = null; adultCancelled = null; toast("Verifica adulta non disponibile"); if (cancelled != null) cancelled.run(); }
     }
     private void showAdultMenu() {
         new AlertDialog.Builder(this).setTitle("Area adulto")
@@ -252,7 +262,41 @@ public class MainActivity extends Activity {
             if (trustedPage() && !isFinishing()) web.evaluateJavascript("window.dispatchEvent(new CustomEvent('lg-native-speech-end',{detail:{id:" + JSONObject.quote(id) + ",error:" + error + ",cancelled:" + cancelled + "}}))", null);
         });
     }
+    private void printResult(String id, String status, String message) {
+        if (id.equals(pendingPrintId)) pendingPrintId = null;
+        if (trustedPage() && !isFinishing()) web.evaluateJavascript("window.dispatchEvent(new CustomEvent('lg-native-print-result',{detail:{id:" + JSONObject.quote(id) + ",status:" + JSONObject.quote(status) + ",message:" + JSONObject.quote(message) + "}}))", null);
+    }
+    private void printCaaDocument(String title, double widthMm, double heightMm, String id) {
+        if (!trustedPage() || isFinishing()) return;
+        if (pendingPrintId != null) { printResult(id, "error", "Un’altra richiesta di stampa è già in corso."); return; }
+        if (isPinned()) { printResult(id, "error", "Prima di stampare, rimuovi il blocco app con i comandi Android e il PIN del dispositivo."); return; }
+        pendingPrintId = id;
+        final int generation = pageGeneration;
+        authenticate(() -> {
+            if (!trustedPage() || generation != pageGeneration || isFinishing()) { pendingPrintId = null; return; }
+            web.evaluateJavascript("Boolean(document.body.classList.contains('caa-print-active') && document.getElementById('caa-print-root') && document.querySelector('#caa-print-root .caa-paper'))", ready -> {
+                if (!trustedPage() || generation != pageGeneration || !"true".equals(ready)) { printResult(id, "error", "Riapri l’anteprima della storia prima di stampare."); return; }
+                try {
+                    PrintManager manager = (PrintManager) getSystemService(PRINT_SERVICE);
+                    if (manager == null) throw new IllegalStateException();
+                    String name = PrintPolicy.jobName(title);
+                    PrintAttributes attributes = new PrintAttributes.Builder()
+                        .setMediaSize(new PrintAttributes.MediaSize("LG_CAA", "Formato storia CAA", PrintPolicy.mils(widthMm), PrintPolicy.mils(heightMm)))
+                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                        .setResolution(new PrintAttributes.Resolution("LG_CAA", "Storia CAA", 300, 300))
+                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR).build();
+                    PrintDocumentAdapter adapter = web.createPrintDocumentAdapter(name);
+                    if (manager.print(name, adapter, attributes) == null) throw new IllegalStateException();
+                    printResult(id, "opened", "");
+                } catch (Exception error) { printResult(id, "error", "Stampa Android non disponibile. Verifica che il servizio di stampa sia attivo sul dispositivo."); }
+            });
+        }, () -> printResult(id, "cancelled", "Verifica adulta annullata o non disponibile."));
+    }
     public final class NativeBridge {
+        @JavascriptInterface public void printCaa(String title, double widthMm, double heightMm, String id) {
+            if (!PrintPolicy.valid(title, widthMm, heightMm, id)) return;
+            runOnUiThread(() -> printCaaDocument(title, widthMm, heightMm, id));
+        }
         @JavascriptInterface public void speak(String text, String id, double volume) {
             if (text == null || text.length() > 600 || id == null || !id.matches("[a-zA-Z0-9-]{1,80}")) return;
             runOnUiThread(() -> { if (trustedPage()) MainActivity.this.speak(new Speech(text, id, (float) Math.max(0, Math.min(1, volume)))); });
@@ -274,7 +318,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == AUTH) { Runnable action = adultAction; adultAction = null; if (result == RESULT_OK && action != null) action.run(); }
+        if (request == AUTH) { Runnable action = adultAction, cancelled = adultCancelled; adultAction = null; adultCancelled = null; if (result == RESULT_OK && action != null) action.run(); else if (cancelled != null) cancelled.run(); }
         if (request == PICK_FILE && fileCallback != null) { fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data)); fileCallback = null; }
         if (request == SAVE_CSV) {
             byte[] bytes = pendingCsv; pendingCsv = null;
@@ -290,7 +334,7 @@ public class MainActivity extends Activity {
         if (fileCallback != null) fileCallback.onReceiveValue(null);
         if (voice != null) { voice.stop(); voice.shutdown(); }
         if (web != null) { web.removeJavascriptInterface("LetturaGlobaleAndroid"); web.destroy(); }
-        pendingCsv = null; adultAction = null;
+        pendingCsv = null; adultAction = null; adultCancelled = null; pendingPrintId = null;
         super.onDestroy();
     }
 }

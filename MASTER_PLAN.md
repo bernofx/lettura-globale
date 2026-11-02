@@ -61,6 +61,8 @@ Leggibilità: nuove storie in stampatello maiuscolo per impostazione predefinita
 
 L’adulto può ridurre solo le immagini dal 100% al 50%, con cursore/campo percentuale in configurazione e nell’anteprima live. Font, parole e scelta maiuscolo/originale restano invariati. La percentuale è una preferenza cloud della storia, inclusa nelle nuove copie condivise; nessuna riduzione automatica o modifica dell’originale implicita. Il controllo di stampa indica le pagine che ancora non entrano, senza tagliare silenziosamente contenuti o crediti.
 
+L’APK 0.1.3 aggiunge stampa/Salva come PDF dal dialogo Android dopo conferma adulta, tramite PrintManager e la stessa WebView, con formato, ordine e dimensioni della storia. Nessun invio di HTML/credenziali a servizi esterni o permesso storage aggiuntivo; blocco app da rimuovere manualmente prima dell’esportazione. Le vecchie APK chiedono aggiornamento; stessa firma per installazione sopra la precedente e prove hardware richieste. ADR 0017 e 0020 aggiornati.
+
 ### Opzione futura — Bacchetta AI per semplificare i testi CAA
 
 Prevedere un comando con icona di bacchetta magica “Semplifica per CAA” nel percorso Testo. Deve proporre frasi brevi, lessico concreto e struttura semplice, preservando significato, negazioni e informazioni essenziali senza aggiungere fatti; nessuna pretesa di validazione clinica automatica. Mostrare originale e proposta/differenze e consentire conferma per frase o dell’intero testo, mantenendo l’originale fino all’accettazione. Le associazioni simboliche delle parti invariate devono sopravvivere.

@@ -56,7 +56,7 @@ const checkPdf=async(name,width,height)=>{
  return execFileSync("pdftotext",[file,"-"],{encoding:"utf8"});
 };
 try{
- await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Fetch.enable",{patterns:[{urlPattern:"*"}]});
+ await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Network.setBypassServiceWorker",{bypass:true});await send("Fetch.enable",{patterns:[{urlPattern:"*"}]});
  await send("Emulation.setDeviceMetricsOverride",{width:1280,height:1000,deviceScaleFactor:1,mobile:false});
  await send("Page.addScriptToEvaluateOnNewDocument",{source:`if(sessionStorage.getItem('caa-test-seeded')!=='${runSeed}'){const state=${JSON.stringify(state)};for(const [name,value]of Object.entries(state)){const keys={therapists:'lg-therapists',children:'lg-children',library:'lg-library',exercises:'lg-exercises',sequences:'lg-sequences',attempts:'lg-attempts',helps:'lg-helps',sessionHistory:'lg-session-history',activeChildId:'lg-active-child'};if(keys[name])localStorage.setItem(keys[name],JSON.stringify(value));}localStorage.setItem('lg-therapist-session',JSON.stringify({therapistId:'${adult}',expiresAt:Date.now()+86400000}));sessionStorage.setItem('caa-test-seeded','${runSeed}');}`});
  await send("Page.navigate",{url:`${origin}/`});await wait("document.querySelector('.sidebar')");await clickText("Storie in CAA");await wait("document.querySelector('.caa-stories-page .page-title-row button:not(:disabled)')");
@@ -145,5 +145,9 @@ try{
  assert.ok(await evaluate("[...document.querySelectorAll('#caa-print-root .caa-paper')].every(p=>p.style.getPropertyValue('--caa-symbol-size')==='24.7mm')"),"preview and print use the same scale");
  await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal(documents.get(fitStory.id).story.symbolScale,95);
  await send("Page.reload");await wait("document.querySelector('.child-choice-page')");await clickText("Apri Storie in CAA senza scegliere un bambino");await wait("[...document.querySelectorAll('.caa-story-list strong')].some(n=>n.textContent==='Prova adattamento immagini')");await evaluate("[...document.querySelectorAll('.caa-story-list strong')].find(n=>n.textContent==='Prova adattamento immagini').closest('button').click()");await wait("document.querySelector('.caa-format .caa-image-scale input[inputmode=numeric]')?.value==='95'");
- assert.deepEqual(errors,[]);console.log("PASS CAA browser: uppercase/original PDF text, whole long picture labels, overflow guard, actual A4/A5/A3/custom/book PDF dimensions, LETTO, offline photos/cloud restore, credits, mobile and sharing/revocation.");
+ await clickText("3. Anteprima");await wait("document.querySelector('.caa-preview')");
+ await evaluate("window.LetturaGlobaleAndroid={speak(){},stop(){},saveCsv(){}};window.print=()=>{throw new Error('native path must not invoke window.print')}");await clickText("Stampa / Salva PDF");await wait("document.querySelector('.caa-preview .caa-error')?.textContent.includes('0.1.3')");
+ await evaluate("window.__nativePrintCalls=[];window.LetturaGlobaleAndroid.printCaa=(title,width,height,id)=>{window.__nativePrintCalls.push({title,width,height,id});setTimeout(()=>window.dispatchEvent(new CustomEvent('lg-native-print-result',{detail:{id,status:'opened'}})),0)}");await clickText("Stampa / Salva PDF");await wait("window.__nativePrintCalls.length===1 && document.querySelector('.caa-preview [role=status]')?.textContent.includes('Salva come PDF')");
+ assert.deepEqual(await evaluate("({width:window.__nativePrintCalls[0].width,height:window.__nativePrintCalls[0].height})"),{width:297,height:210});await evaluate("delete window.LetturaGlobaleAndroid");
+ assert.deepEqual(errors,[]);console.log("PASS CAA browser: PDF, image scale/cloud, sharing, legacy APK update message and native print routing/physical size (bridge simulated; Android hardware not tested).");
 }finally{socket.close();}

@@ -1,5 +1,15 @@
 # ADR 0017 — Contenitore Android 11 per il tablet
 
+## Stampa CAA nativa — 2 novembre 2026
+
+Richiesta esplicita dell’utente: stampare o almeno salvare il PDF dall’APK. La 0.1.3 aggiunge un bridge limitato `printCaa(titolo, larghezza, altezza, id)`, non caricamento di HTML/URL/file arbitrari. L’origine principale è verificata, la stampa è ammessa soltanto con anteprima CAA attiva, credenziali Android confermate e pagina non cambiata durante la verifica. Se screen pinning è attivo viene chiesto di rimuoverlo manualmente; nessuna disattivazione implicita del blocco. Formati 80–600 mm finiti, titolo/ID limitati e nome lavoro normalizzato.
+
+PrintManager riceve l’adattatore di stampa della stessa WebView e il formato fisico selezionato, senza margini aggiunti dall’app. Riusa il DOM di stampa con immagini già caricate, crediti, imposizione del libretto e percentuale simboli; il sito esegue prima gli stessi controlli di accesso/overflow del browser. Nel dialogo Android l’utente sceglie stampante o Salva come PDF. Non si conferma un file salvato al solo avvio del dialogo; annullamenti, errori e mancanza di risposta sono distinti. Le vecchie APK mostrano richiesta di aggiornamento invece di un tentativo silenzioso di window.print.
+
+Non si aggiungono permessi di storage, provider, librerie PDF, backend o migrazioni D1/R2/DO. I dati restano nel contenitore e nel sistema di stampa Android, salvo la destinazione/stampante scelta esplicitamente dall’adulto; il servizio di stampa deve essere attivo. Stessa chiave di prova e App Links invariati, versionCode 4. Controlli JVM/compilazione reale e test browser con bridge simulato non sostituiscono una prova sul tablet Android 11: stampa fisica e selezione Salva come PDF restano da confermare sul dispositivo.
+
+## Contenitore e vincoli esistenti
+
 Accettato su richiesta dell'utente del 22 ottobre 2026: APK collegata al sito, senza duplicare gli esercizi, con primo livello di protezione tramite blocco app Android. Non è autorizzata/configurata la gestione device owner del tablet né un kiosk gestito.
 
 Un'Activity Android nativa senza dipendenze di terze parti apre esclusivamente il dominio HTTPS esistente, preservando la pipeline Git → Cloudflare e la fonte dati cloud D1/R2/DO. Non si crea un secondo backend o una seconda implementazione delle attività. La WebView ha cookie/sessione propri, dom storage e coda offline già gestita dall'app web; non si promette una disponibilità offline completa.
