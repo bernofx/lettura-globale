@@ -53,6 +53,8 @@ Configurazione iniziale proposta per la valutazione: OpenAI Images API con model
 
 ### Prima versione — Storie in CAA
 
+Coerenza UI: usare gli stessi token colore, forme, pannelli, campi e pulsanti dell’app; percorso Testo → Frasi e formato → Anteprima con stato attivo esplicito. Archivio ricercabile e collassato su mobile, istruzioni estese su richiesta, controlli tastiera/focus e target touch. Editor delle frasi separato in un componente presentazionale. Nessuna modifica al modello cloud, autorizzazioni, snapshot, scala o misure fisiche della stampa.
+
 Sezione separata dagli esercizi per testo breve proprio, frasi e associazioni simboliche modificabili, ricerca ARASAAC esplicita per termine soltanto dopo conferma dell’uso non commerciale, immagini della libreria e foto proprie con conferma di diritti/consenso. Anteprima lettura e fogli di stampa; foglio A4/A5 o libretto A5 su A4 orizzontale da impilare, tagliare e rilegare, solo fronte. Crediti anche nella stampa, verifica degli ingombri e delle immagini prima del dialogo browser Stampa/Salva PDF. Nessuna generazione AI, condivisione pubblica o statistica clinica in questa fase. Documenti privati del profilo adulto nel bucket cloud esistente, coda offline e conflitti senza sovrascrittura; vedi ADR 0020.
 
 Estensione richiesta: condivisione selettiva di copie immutabili, in sola lettura/stampabili, fra profili adulti attivi identificati dall’email cloud (anche di account differenti), visibili in Ricevute; link esterno esplicito senza login. Snapshot con soli media citati e indipendente dal catalogo d’origine, scadenza a 30 giorni e revoca uniforme su documento/immagini, consenso e avviso di inoltrabilità del link. Nessun accesso all’intera libreria o ai dati degli esercizi; ADR 0021.

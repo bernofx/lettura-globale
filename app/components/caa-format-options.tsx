@@ -1,4 +1,5 @@
 "use client";
+import { LayoutTemplate } from "lucide-react";
 import { CAA_BOOK_PAPERS, CAA_PAPERS, caaPageSize, caaPrintSheetSize, caaSymbolSize, type CaaStory } from "../domain/caa-stories";
 import { NumericField } from "./numeric-field";
 
@@ -12,7 +13,7 @@ export function CaaImageScaleOption({ story,onChange }: { story: CaaStory; onCha
 export function CaaFormatOptions({ story,onChange }: { story: CaaStory; onChange: (story: CaaStory) => void }) {
   const size = caaPrintSheetSize(story),page = caaPageSize(story);
   const setPaper = (paper: CaaStory["paper"]) => onChange({ ...story,paper,...(paper === "custom" ? { customPaper: story.customPaper ?? { width: 210,height: 297 } } : {}) });
-  return <section className="panel caa-format"><h2>Formato del PDF / foglio di stampa</h2><div className="caa-format-fields">
+  return <section className="panel caa-format"><div className="panel-heading"><div><span className="eyebrow">IMPAGINAZIONE</span><h2>Formato del PDF / foglio di stampa</h2><p>Scegli il foglio e le dimensioni dei simboli. Potrai rifinire la scala nell’anteprima.</p></div><LayoutTemplate size={24} aria-hidden="true" /></div><div className="caa-format-fields">
     <label>Produzione<select value={story.format} onChange={event => onChange({ ...story,format: event.target.value as CaaStory["format"] })}><option value="sheet">Foglio singolo</option><option value="book">Libretto da tagliare e rilegare</option></select></label>
     {story.format === "sheet" ? <><label>Formato del foglio<select className="caa-paper-select" value={story.paper} onChange={event => setPaper(event.target.value as CaaStory["paper"])}>{Object.entries(CAA_PAPERS).map(([key,paper]) => <option value={key} key={key}>{paper.label} · {paper.width} × {paper.height} mm</option>)}<option value="custom">Personalizzato</option></select></label>{story.paper === "custom" && <><label>Larghezza (mm)<NumericField value={story.customPaper!.width} min={80} max={600} onValueChange={width => onChange({ ...story,customPaper: { ...story.customPaper!,width } })} /></label><label>Altezza (mm)<NumericField value={story.customPaper!.height} min={80} max={600} onValueChange={height => onChange({ ...story,customPaper: { ...story.customPaper!,height } })} /></label></>}</> : <>
       <label>Formato fogli del libretto<select className="caa-book-paper-select" value={story.bookPaper ?? "a4"} onChange={event => onChange({ ...story,bookPaper: event.target.value as CaaStory["bookPaper"] })}>{Object.entries(CAA_BOOK_PAPERS).map(([key,paper]) => <option key={key} value={key}>{paper.label}</option>)}</select></label>

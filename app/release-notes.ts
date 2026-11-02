@@ -1,10 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Stampa e salvataggio PDF nell’app Android",
+  title: "Storie in CAA, nello stile dell’app",
   items: [
-    "Con l’APK 0.1.3 Stampa / Salva PDF apre il dialogo Android, anche per libretti e formati personalizzati.",
-    "Scegli una stampante oppure Salva come PDF; le versioni APK precedenti indicano come aggiornare.",
-    "Il documento conserva formato, ordine delle pagine e percentuale delle immagini già scelti nell’anteprima.",
-    "Conferma adulta e blocco app rispettati; l’apertura del dialogo non viene confusa con un PDF già salvato.",
+    "Pulsanti, campi e schede CAA seguono i colori e le forme scelti nelle preferenze dell’app.",
+    "Un percorso più chiaro guida tra testo, simboli e anteprima; puoi cercare le tue storie nell’archivio.",
+    "Su telefono l’elenco delle storie si apre a richiesta, lasciando più spazio all’editor.",
+    "Stampa, PDF, salvataggio cloud e condivisioni mantengono le funzionalità già disponibili.",
   ],
 };

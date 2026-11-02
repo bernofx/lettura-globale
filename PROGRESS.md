@@ -8,6 +8,10 @@
 
 ## Completato
 
+- [x] CAA uniformata al design dell’app: palette e forme ereditate dalle preferenze, pulsanti e campi coerenti, icone Lucide, gerarchia testo/simboli/anteprima e stato cloud riconoscibili; ricerca archivio, elenco collassabile su telefono, istruzioni e guida stampa apribili a richiesta. Editor frasi estratto senza modificare dati o associazioni. Nessuna skill UX/UI dedicata disponibile: applicati i token e i componenti esistenti, focus visibile, etichette accessibili e controlli touch.
+- [x] Verifica browser con soli dati sintetici: desktop/mobile 390 px senza overflow, temi/forme e dimensioni dei controlli, ricerca senza perdita bozza, offline/cloud, simboli, archiviazione e condivisioni, PDF fisici/maiuscolo/scala e routing stampa Android simulato. Regole CSS di stampa fisica invariate; nessuna nuova APK, migrazione o modifica di accesso. Il fixture HTTP disabilita il service worker per evitare richieste di background non simulate; non è una prova del flusso di autenticazione reale né di hardware Android.
+- [x] Restyling CAA: typecheck, build e 269 test superati; lint senza errori (cinque avvisi preesistenti sulle immagini dinamiche). Cache PWA v56 e novità in home aggiornate.
+
 - [x] Scritture granulari compatibili con le viste ridotte per ruolo: gli ordini inviati da terapisti e supervisori preservano nel documento completo sequenze, bambini ed eventi non visibili, evitando il ciclo `400 invalid_state_change` senza perdere la coda locale.
 - [x] Controlli della sessione compattati: il QR è un indicatore nella barra superiore e apre il pannello solo su richiesta; il volume di voce e suoni è regolabile da 0 a 100; `Termina` richiede due secondi ed è disponibile anche mentre un telefono controlla l'avanzamento.
 - [x] Su mobile le attività standard con due risposte mostrano le immagini una sotto l’altra per massimizzarne l’area; `IL / LA` conserva la propria disposizione dedicata. Le cinque scene del cane nel catalogo frasi usano ora un mantello grigio, distinguibile dal gatto rosso, mantenendo azioni e stile fotografico coerenti.
