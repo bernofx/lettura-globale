@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.KeyguardManager;
+import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -122,7 +123,10 @@ public class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
-                try { startActivityForResult(params.createIntent(), PICK_FILE); }
+                Intent picker = params.createIntent();
+                // createIntent does not always forward the page's `multiple` attribute.
+                if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                try { startActivityForResult(picker, PICK_FILE); }
                 catch (Exception error) { fileCallback.onReceiveValue(null); fileCallback = null; toast("Selettore file non disponibile"); }
                 return true;
             }
@@ -292,7 +296,27 @@ public class MainActivity extends Activity {
             });
         }, () -> printResult(id, "cancelled", "Verifica adulta annullata o non disponibile."));
     }
+    /**
+     * parseResult only reads data.getData(): pickers that return several files
+     * (or one file in multiple mode) put them in ClipData, and the page received
+     * nothing. Read ClipData first, then fall back to the single result.
+     */
+    private static Uri[] chosenFiles(int result, Intent data) {
+        if (result != RESULT_OK || data == null) return null;
+        ClipData clip = data.getClipData();
+        if (clip != null && clip.getItemCount() > 0) {
+            java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
+            for (int index = 0; index < clip.getItemCount(); index++) {
+                Uri uri = clip.getItemAt(index).getUri();
+                if (uri != null) uris.add(uri);
+            }
+            if (!uris.isEmpty()) return uris.toArray(new Uri[0]);
+        }
+        return WebChromeClient.FileChooserParams.parseResult(result, data);
+    }
     public final class NativeBridge {
+        /** Lets the page enable multi-file pickers only on APKs that return every chosen file. */
+        @JavascriptInterface public boolean multipleFiles() { return true; }
         @JavascriptInterface public void printCaa(String title, double widthMm, double heightMm, String id) {
             if (!PrintPolicy.valid(title, widthMm, heightMm, id)) return;
             runOnUiThread(() -> printCaaDocument(title, widthMm, heightMm, id));
@@ -319,7 +343,7 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == AUTH) { Runnable action = adultAction, cancelled = adultCancelled; adultAction = null; adultCancelled = null; if (result == RESULT_OK && action != null) action.run(); else if (cancelled != null) cancelled.run(); }
-        if (request == PICK_FILE && fileCallback != null) { fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data)); fileCallback = null; }
+        if (request == PICK_FILE && fileCallback != null) { fileCallback.onReceiveValue(chosenFiles(result, data)); fileCallback = null; }
         if (request == SAVE_CSV) {
             byte[] bytes = pendingCsv; pendingCsv = null;
             if (result == RESULT_OK && data != null && data.getData() != null && bytes != null) {

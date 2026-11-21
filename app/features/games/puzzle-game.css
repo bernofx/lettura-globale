@@ -3,19 +3,64 @@
   background: var(--lavender) url("/images/categories/casa.webp") center / contain no-repeat;
 }
 
-.puzzle-setup {
+.puzzle-gallery {
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: clamp(12px, 2vw, 22px);
+}
+
+.puzzle-gallery-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--panel-radius);
+  background: var(--paper);
+}
+
+.puzzle-preview {
+  aspect-ratio: 3 / 2;
+  border-radius: var(--control-radius);
+  background: var(--lavender) center / contain no-repeat;
+}
+
+.puzzle-gallery-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.puzzle-formats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.puzzle-formats button {
+  min-height: 44px;
+  min-width: 0;
+  padding-inline: 3px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.puzzle-gallery-tools {
+  margin-top: 16px;
   max-width: 460px;
 }
 
-.puzzle-setup label {
+.puzzle-gallery-tools summary { cursor: pointer; }
+
+.puzzle-gallery-tools label {
   display: grid;
   gap: 6px;
   min-width: 0;
+  margin-top: 12px;
 }
 
-.puzzle-setup select, .puzzle-setup input {
+.puzzle-gallery-tools select, .puzzle-gallery-tools input {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);
@@ -25,9 +70,6 @@
   padding: 8px;
   font: inherit;
 }
-
-.puzzle-setup button { justify-self: start; }
-.puzzle-setup p { margin: 0; }
 
 html:has(.puzzle-dialog[open]) { overflow: hidden; }
 

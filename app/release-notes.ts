@@ -1,8 +1,9 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Puzzle a incastro in Giochi",
+  title: "Carica i tuoi puzzle dalla Libreria",
   items: [
-    "Componi un puzzle da 16, 20 o 25 pezzi con la Casa di esempio o una tua immagine.",
+    "Premi Aggiungi immagini in Libreria → Puzzle per scegliere uno o più file (sull’app Android attuale, uno alla volta). Le immagini salvate compaiono in Giochi.",
+    "Guarda le anteprime e avvia il puzzle nel formato 4 × 4, 4 × 5 o 5 × 5 con un tocco.",
     "Sposta i pezzi sul tavolo per scoprire quelli sotto. Puoi mostrare l’immagine guida quando vuoi.",
     "In Palloncini puoi anche trascinare il dito: scoppiano tutti i palloncini che attraversi, con una scia luminosa.",
     "Il dettaglio di ogni gioco mostra il suo nome e il pulsante Torna ai giochi.",

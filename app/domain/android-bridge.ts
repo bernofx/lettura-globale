@@ -3,7 +3,19 @@ export type AndroidBridge = {
   stop: () => void;
   saveCsv: (base64: string) => void;
   printCaa?: (title: string, widthMm: number, heightMm: number, id: string) => void;
+  /** APK 0.1.4+: the file chooser returns every selected file. */
+  multipleFiles?: () => boolean;
 };
+
+/**
+ * Whether `<input type="file" multiple>` can be used. APKs up to 0.1.3 read only
+ * a single picker result, so a multi-file request gave the page no file at all:
+ * there the page must ask for one file at a time.
+ */
+export function supportsMultipleFiles(bridge: AndroidBridge | undefined = androidBridge()) {
+  if (!bridge) return true;
+  try { return bridge.multipleFiles?.() === true; } catch { return false; }
+}
 
 export function androidBridge(): AndroidBridge | undefined {
   return typeof window === "undefined" ? undefined : (window as Window & { LetturaGlobaleAndroid?: AndroidBridge }).LetturaGlobaleAndroid;

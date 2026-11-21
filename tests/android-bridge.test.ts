@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startAndroidSpeech, type AndroidBridge } from "../app/domain/android-bridge.ts";
+import { startAndroidSpeech, supportsMultipleFiles, type AndroidBridge } from "../app/domain/android-bridge.ts";
 
 function fixture() {
   const events = new EventTarget();
@@ -39,4 +39,12 @@ test("una nuova richiesta interrompe quella precedente senza callback obsolete",
   f.end(f.spoken[0].id); f.end(f.spoken[1].id);
   assert.equal(oldDone, 0); assert.equal(newDone, 1); assert.ok(f.stops() >= 1);
   assert.equal(f.spoken[1].volume, 1);
+});
+
+test("la selezione di più file è attiva nel browser e solo negli APK che la dichiarano", () => {
+  const base = { speak: () => {}, stop: () => {}, saveCsv: () => {} };
+  assert.equal(supportsMultipleFiles(undefined), true, "browser normale");
+  assert.equal(supportsMultipleFiles(base), false, "APK fino alla 0.1.3: un file alla volta");
+  assert.equal(supportsMultipleFiles({ ...base, multipleFiles: () => true }), true, "APK 0.1.4");
+  assert.equal(supportsMultipleFiles({ ...base, multipleFiles: () => { throw new Error("bridge"); } }), false);
 });

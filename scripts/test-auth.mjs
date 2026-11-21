@@ -159,6 +159,37 @@ try {
   assert.equal((await request(soundtrackPath, { method: "DELETE", headers: { cookie: adminCookie } })).status, 200);
   assert.equal((await (await info()).json()).soundtrack, null);
   console.log("PASS: MP3 validation, authorized private R2 audio and byte ranges, account isolation and reset.");
+  const puzzlePath = "/api/puzzle-images";
+  const puzzleUrl = puzzlePath + "?image=synthetic-test";
+  const catalogRead = async (key) => (await request(puzzlePath, { headers: { cookie: key } })).json();
+  const { scope } = await catalogRead(adminCookie);
+  const puzzleHeaders = { cookie: adminCookie, "x-puzzle-profile": "adult-a", "x-puzzle-scope": scope };
+  const photo = readFileSync("public/images/categories/casa.webp");
+  const uploadPuzzle = (body, headers = {}) => request(puzzleUrl, {
+    method: "PUT", body, headers: {
+      ...puzzleHeaders, "content-type": "image/webp", "x-puzzle-title": encodeURIComponent("Città allegra"),
+      "x-puzzle-rights": "confirmed", ...headers,
+    },
+  });
+  assert.equal((await request(puzzlePath)).status, 401);
+  assert.equal((await uploadPuzzle(photo, { "x-puzzle-rights": "" })).status, 400);
+  assert.equal((await uploadPuzzle(photo, { "x-puzzle-scope": "another" })).status, 401);
+  assert.equal((await uploadPuzzle(photo, { "x-puzzle-profile": "adult-b" })).status, 401);
+  assert.equal((await uploadPuzzle(Buffer.from("non è un WebP"))).status, 422);
+  assert.equal((await uploadPuzzle(photo)).status, 200);
+  assert.equal((await uploadPuzzle(photo)).status, 200);
+  assert.deepEqual((await catalogRead(secondCookie)).images, [{ id: "synthetic-test", title: "Città allegra", image: puzzleUrl }]);
+  assert.deepEqual((await catalogRead(outsiderCookie)).images, []);
+  assert.equal((await request(puzzleUrl, { headers: { cookie: outsiderCookie } })).status, 404);
+  const puzzleImage = await request(puzzleUrl, { headers: { cookie: secondCookie } });
+  assert.equal(puzzleImage.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(Buffer.from(await puzzleImage.arrayBuffer()), photo);
+  assert.equal((await request(puzzleUrl, { method: "DELETE", headers: { ...puzzleHeaders, cookie: outsiderCookie } })).status, 401);
+  assert.equal((await request(puzzleUrl, { method: "DELETE", headers: puzzleHeaders })).status, 200);
+  assert.equal((await uploadPuzzle(photo)).status, 410, "a late upload retry cannot restore a removed image");
+  assert.deepEqual((await catalogRead(adminCookie)).images, []);
+  assert.equal((await request(puzzleUrl, { headers: { cookie: adminCookie } })).status, 404);
+  console.log("PASS: puzzle WebP validation, private scope, repeated upload and removal on R2.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

@@ -3,6 +3,7 @@
 import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, VolumeX, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
+import type { PuzzleImage } from "../../domain/puzzle-library";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import type { LibraryItem } from "../../shared/types";
 import { PageHeader } from "../../shared/ui/headings";
@@ -10,7 +11,8 @@ import { BalloonGame, BalloonThumbnail } from "./balloon-game";
 import { ColoringCanvas, coloringFrame, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
-import { PuzzleGame, PuzzleSetup, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
+import { PuzzleGame, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
+import { PuzzleGallery } from "./puzzle-gallery";
 import "./games-view.css";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
@@ -38,7 +40,7 @@ type Game = (typeof games)[number];
 type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
   { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection };
 
-export function GamesView({ library, soundVolume, onPlayingChange }: { library: LibraryItem[]; soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
+export function GamesView({ library, puzzleImages, soundVolume, onPlayingChange }: { library: LibraryItem[]; puzzleImages: PuzzleImage[]; soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [game, setGame] = useState<ActiveGame | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
@@ -96,7 +98,7 @@ export function GamesView({ library, soundVolume, onPlayingChange }: { library: 
         </section>
       )}
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
-      {selectedGame?.id === "puzzle" && <PuzzleSetup library={library} onStart={selection => setGame({ id: "puzzle", selection })} />}
+      {selectedGame?.id === "puzzle" && <PuzzleGallery library={library} puzzleImages={puzzleImages} onStart={selection => setGame({ id: "puzzle", selection })} />}
       {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {game?.id === "coloring" && (
         <ColoringGame
