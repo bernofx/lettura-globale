@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Lo sfondo del foglio in Colorare si colora con tutti gli strumenti, con i contorni che isolano ciascuna zona. Musica predefinita: estratto di «Tummy-Rumble Calypso» di DURU-AI (CC0). Cache PWA v65.
+
 - [x] Sistemato lo scorrimento orizzontale su smartphone nella barra dell’app, nella scelta del profilo e nelle schede con nomi lunghi. In Colorare, strumenti e tavolozza sono due colonne affiancate. Cache PWA v64.
 
 - [x] Colorare segue la porzione di schermo visibile anche con lo zoom del browser. I comandi restano raggiungibili, il gesto a due dita è disponibile e il tratto a un dito resta confinato. Cache PWA v63.

@@ -5,6 +5,7 @@ export type ColoringPoint = { x: number; y: number };
 type PaintedArea = { fill?: string; marks?: CanvasRenderingContext2D };
 
 const outlineColor = "#312d43";
+const backgroundIndex = 0;
 
 export class ColoringCanvas {
   private readonly areas: Path2D[];
@@ -12,7 +13,9 @@ export class ColoringCanvas {
   private readonly paint = new Map<number, PaintedArea>();
 
   constructor(page: ColoringPage) {
-    this.areas = page.areas.map(path => new Path2D(path));
+    const background = new Path2D();
+    background.rect(0, 0, COLORING_WIDTH, COLORING_HEIGHT);
+    this.areas = [background, ...page.areas.map(path => new Path2D(path))];
     this.details = page.details.map(path => new Path2D(path));
   }
 
@@ -62,10 +65,14 @@ export class ColoringCanvas {
     context.lineWidth = 6;
     for (const [index, path] of this.areas.entries()) {
       const area = this.paint.get(index);
-      context.fillStyle = area?.fill ?? "#ffffff";
-      context.fill(path);
+      const isBackground = index === backgroundIndex;
+      const fill = area?.fill ?? (isBackground ? undefined : "#ffffff");
+      if (fill) {
+        context.fillStyle = fill;
+        context.fill(path);
+      }
       if (area?.marks) context.drawImage(area.marks.canvas, 0, 0);
-      context.stroke(path);
+      if (!isBackground) context.stroke(path);
     }
     for (const [index, path] of this.details.entries()) {
       context.lineWidth = index === 0 ? 11 : 4;

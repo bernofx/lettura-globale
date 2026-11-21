@@ -100,6 +100,7 @@ const rgb = (x, y) => evaluate(`Array.from(document.querySelector('.coloring-boa
 const white = [255, 255, 255, 255];
 const red = [232, 66, 82, 255];
 const green = [43, 155, 88, 255];
+const yellow = [248, 210, 69, 255];
 
 try {
   await send("Page.enable");
@@ -113,7 +114,10 @@ try {
     const nativeStop = AudioBufferSourceNode.prototype.stop;
     const nativeConnect = AudioBufferSourceNode.prototype.connect;
     AudioBufferSourceNode.prototype.start = function (...args) {
-      if (this.loop) window.testMusic.starts++;
+      if (this.loop) {
+        window.testMusic.starts++;
+        window.testMusic.duration = this.buffer?.duration;
+      }
       return nativeStart.apply(this, args);
     };
     AudioBufferSourceNode.prototype.connect = function (target, ...args) {
@@ -170,6 +174,7 @@ try {
   await touch("touchMove", 300, 210);
   await touch("touchEnd");
   await wait("window.testMusic.starts === 1 && window.testMusic.gain?.value > 0");
+  assert.ok(Math.abs(await evaluate("window.testMusic.duration") - 64) < 0.1, "the bundled Calypso excerpt plays");
   await button("Musica di sottofondo");
   await wait("window.testMusic.gain?.value === 0");
   await button("Musica di sottofondo");
@@ -197,7 +202,8 @@ try {
   await touch("touchStart", 115, 140);
   await touch("touchMove", 355, 135);
   await touch("touchEnd");
-  assert.deepEqual(await rgb(355, 135), white, "a gesture started outside the drawing cannot enter a paintable area");
+  assert.deepEqual(await rgb(140, 140), red, "the paper outside the drawing can be painted");
+  assert.deepEqual(await rgb(355, 135), white, "a stroke on the background stays behind the figure");
 
   await button("Pastello");
   await button("Blu");
@@ -214,6 +220,12 @@ try {
   assert.deepEqual(await rgb(340, 330), green, "bucket fills all of the door");
   assert.deepEqual(await rgb(235, 355), white, "bucket leaves the wall outside the door untouched");
   assert.deepEqual(await rgb(315, 215), red, "bucket preserves existing strokes in other zones");
+  await button("Giallo");
+  await touch("touchStart", 125, 140);
+  await touch("touchEnd");
+  assert.deepEqual(await rgb(600, 420), yellow, "bucket fills the full background");
+  assert.deepEqual(await rgb(340, 330), green, "background fill preserves previously colored areas");
+  assert.deepEqual(await rgb(355, 135), white, "background fill leaves the unpainted figure white");
   await viewport(390, 800);
   await wait("window.testMusic.gain?.value === 0");
   await viewport(568, 320);

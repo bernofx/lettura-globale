@@ -104,7 +104,7 @@
   justify-content: center;
   min-height: 0;
   min-width: 0;
-  background: white;
+  background: var(--canvas);
   border: 1px solid var(--line);
   border-radius: var(--panel-radius, 22px);
   overflow: hidden;
@@ -117,6 +117,8 @@
   max-height: 100%;
   width: min(100cqw, 150cqh);
   height: auto;
+  background: white;
+  box-shadow: 0 0 0 1px var(--line);
   touch-action: pinch-zoom;
   user-select: none;
   cursor: crosshair;

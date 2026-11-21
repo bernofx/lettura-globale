@@ -15,3 +15,7 @@ Il catalogo comprende 24 disegni originali creati per Lettura Globale. La colonn
 Il dialogo segue dimensioni e posizione di `VisualViewport` e compensa localmente la scala, così pannelli e tasto Esci sono accessibili anche se la pagina è ingrandita. Il browser gestisce il gesto a due dita sul disegno. Una variazione del viewport conclude l’eventuale tratto in corso prima di adattare la superficie.
 
 Pennello, pastello e secchio sono disposti in una colonna verticale compatta, a fianco della colonna scorrevole dei colori.
+
+Lo sfondo è la prima area del foglio. La selezione delle zone privilegia quelle sovrapposte e la figura copre i segni dipinti sullo sfondo, indipendentemente dallo strumento.
+
+Il sottofondo predefinito è «Tummy-Rumble Calypso» di DURU-AI, [pubblicato dall’autore](https://github.com/uncle-sheepsky/duru-ai-cc0-bgm/tree/21f08fd3e3e63454e6993666ae48a45ab7db60cc) con licenza [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Il file locale `public/audio/coloring-calypso.mp3` è un estratto mono dei primi 64 secondi, con brevi dissolvenze. È distribuito insieme all’app.

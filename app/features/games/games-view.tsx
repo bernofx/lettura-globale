@@ -23,7 +23,7 @@ const colors = [
   ["Bianco", "#ffffff"],
 ] as const;
 
-const COLORING_MUSIC = "/audio/coloring-game.mp3";
+const COLORING_MUSIC = "/audio/coloring-calypso.mp3";
 
 export function GamesView({ soundVolume }: { soundVolume: number }) {
   const [game, setGame] = useState<{ page: ColoringPage; painting: ColoringCanvas } | null>(null);
