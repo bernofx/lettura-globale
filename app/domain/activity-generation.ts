@@ -71,7 +71,10 @@ export function createRandomRecognitionRounds(candidates: ActivityCandidate[], c
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
   const fixedPrompt = config.fixedPromptId ? candidates.find((item) => item.id === config.fixedPromptId) : undefined;
-  const compatiblePool = candidates.filter((item) => (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
+  // Sentence scenes are not single words: they enter a recognition round only
+  // when the adult selected them explicitly (fixed target or chosen items).
+  const isExplicit = (item: ActivityCandidate) => item.id === config.fixedPromptId || Boolean(allowed?.has(item.id));
+  const compatiblePool = candidates.filter((item) => (item.contentKind !== "sentence" || isExplicit(item)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
   // With a fixed target, selected IDs are preferred distractors rather than a
   // hard requirement: random distractors can always be completed from the
   // compatible library. With a random target they remain a true pool filter.

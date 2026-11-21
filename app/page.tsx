@@ -70,7 +70,7 @@ function HomePageContent() {
   const appUpdating = useAppUpdating();
   const [view, setView] = useUpdateState<View>("root:view", "home");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [toast, notify] = useToastMessage();
+  const [toast, notify, dismissToast] = useToastMessage();
   const [saveJournalOpen, setSaveJournalOpen] = useState(false);
   const sharingLaunch = useRef(false);
   const data = useAppData(notify);
@@ -324,6 +324,9 @@ function HomePageContent() {
 
   const cloud = useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify });
   const { backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave } = cloud;
+  // Management messages (e.g. "Dati aggiornati dal cloud") must not stay on the
+  // child-facing screen; messages raised during the session are still shown.
+  useEffect(() => { if (sessionActive) dismissToast(); }, [dismissToast, sessionActive]);
 
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
@@ -1054,7 +1057,7 @@ function HomePageContent() {
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
-    return <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main></AudioVolumeContext.Provider>;
+    return <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}{toast && <div className={sessionActive ? "toast toast-in-session" : "toast"} role="status"><Check size={18} />{toast}</div>}</main></AudioVolumeContext.Provider>;
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
   if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={cloud.retryLoad} onContinueLocal={cloud.fallBackToLocal} />;
@@ -1069,7 +1072,7 @@ function HomePageContent() {
       <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content" inert={rewardActive} aria-hidden={rewardActive || undefined}>
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive || sessionReady ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
-        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceCount={sequenceExercises.length} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
+        {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.length} exerciseCount={visibleExercises.length} sequenceTotal={visibleSequences.length} activeSequence={activeSequence ? { title: activeSequence.title, exerciseTitles: sequenceExercises.map((exercise) => exercise.title) } : undefined} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
         {view === "library" && <LibraryView categorySymbols={categorySymbols} onCategorySymbol={(category, id) => setCategorySymbols((current) => { const next = { ...current }; if (id) next[category] = id; else delete next[category]; return next; })} onCategoryUpload={async (category, image) => {
           const id = crypto.randomUUID();
           const remote = navigator.onLine && backendStatus !== "local" ? await uploadRemoteImage(crypto.randomUUID(), image) : null;
@@ -1099,7 +1102,7 @@ function HomePageContent() {
       {pendingStatsReset && <ContentDeleteDialog title={`Azzerare le statistiche di ${activeChild.firstName}?`} detail="Saranno eliminati tutti i tentativi e gli aiuti registrati per questo bambino. Profili, immagini, esercizi e sequenze restano invariati." onCancel={() => setPendingStatsReset(false)} onConfirm={() => { setAttempts((current) => current.filter((attempt) => attempt.childId && attempt.childId !== activeChild.id)); setHelps((current) => current.filter((help) => help.childId && help.childId !== activeChild.id)); setPendingStatsReset(false); notify("Statistiche del bambino azzerate"); }} />}
       {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
       {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
-      {toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}
+      {toast && <div className={sessionActive ? "toast toast-in-session" : "toast"} role="status"><Check size={18} />{toast}</div>}
       {rewardActive && sessionActive && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="remote-reward" continuous onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
       {celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="completion-reward" onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
     </div>

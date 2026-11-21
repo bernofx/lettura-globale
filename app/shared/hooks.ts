@@ -49,8 +49,13 @@ export function useToastMessage() {
     setMessage(next);
     timer.current = window.setTimeout(() => { setMessage(null); timer.current = null; }, durationMs);
   }, []);
+  const dismiss = useCallback(() => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    setMessage(null);
+  }, []);
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
-  return [message, notify] as const;
+  return [message, notify, dismiss] as const;
 }
 
 export function useStoredState<T>(key: string, fallback: T, migrate?: (saved: T) => T, prepare?: (value: T) => T) {

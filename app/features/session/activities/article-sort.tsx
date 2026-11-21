@@ -20,7 +20,7 @@ export function ArticleSortSession({ previewLabel, exercise, library, mode, manu
   const [wrongArticle, setWrongArticle] = useUpdateState<Article | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:wrongArticle`, null);
   const [correctId, setCorrectId] = useUpdateState<string | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:correctId`, null);
   const [correctArticle, setCorrectArticle] = useUpdateState<Article | null>(`ArticleSortSession:${exercise.id}:${currentIndex}:correctArticle`, null);
-  const [feedback, setFeedback] = useUpdateState(`ArticleSortSession:${exercise.id}:${currentIndex}:feedback`, "Tocca IL o LA, oppure trascina l’immagine nel box.");
+  const [feedback, setFeedback] = useUpdateState(`ArticleSortSession:${exercise.id}:${currentIndex}:feedback`, "");
   useEffect(() => {
     if (!wrongId) return;
     const timer = window.setTimeout(() => { setWrongId(null); setWrongArticle(null); }, 900);

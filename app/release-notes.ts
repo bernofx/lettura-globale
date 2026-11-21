@@ -1,10 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Storie in CAA, nello stile dell’app",
+  title: "Più leggibile su tablet e telefono",
   items: [
-    "Pulsanti, campi e schede CAA seguono i colori e le forme scelti nelle preferenze dell’app.",
-    "Un percorso più chiaro guida tra testo, simboli e anteprima; puoi cercare le tue storie nell’archivio.",
-    "Su telefono l’elenco delle storie si apre a richiesta, lasciando più spazio all’editor.",
-    "Stampa, PDF, salvataggio cloud e condivisioni mantengono le funzionalità già disponibili.",
+    "Sui tablet in verticale il menu si apre dal pulsante in alto e le pagine non scorrono più di lato.",
+    "Testi più grandi e più contrastati, e pulsanti più comodi da toccare.",
+    "La Home mostra la sequenza attiva con i suoi esercizi; Configurazione permette di cercare e filtrare il catalogo.",
+    "Durante gli esercizi i messaggi non coprono più gli aiuti dell’adulto, e “Trova la parola” propone solo parole singole, salvo scelta manuale.",
   ],
 };
