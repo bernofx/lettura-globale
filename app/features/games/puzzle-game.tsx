@@ -1,13 +1,11 @@
 "use client";
 
-import { Play, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
-import { prepareUploadedImage } from "../../shared/media-storage";
-import type { LibraryItem } from "../../shared/types";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
-import { buildPuzzleArt, demoPuzzleImage, drawPuzzleBoard, PUZZLE_ART_SCALE, puzzleGrids, type PuzzleSize } from "./puzzle-art";
+import { buildPuzzleArt, drawPuzzleBoard, PUZZLE_ART_SCALE, puzzleGrids, type PuzzleSize } from "./puzzle-art";
 import "./puzzle-game.css";
 
 export type PuzzleSelection = { image: HTMLImageElement; size: PuzzleSize };
@@ -18,83 +16,6 @@ const clamp = (value: number) => Math.max(0, Math.min(1, value));
 
 export function PuzzleThumbnail() {
   return <div className="coloring-card-art puzzle-thumbnail" aria-hidden="true" />;
-}
-
-export function PuzzleSetup({ library, onStart }: { library: LibraryItem[]; onStart: (selection: PuzzleSelection) => void }) {
-  const [size, setSize] = useState<PuzzleSize>("4x4");
-  const [imageId, setImageId] = useState("");
-  const [localImage, setLocalImage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const active = useRef(false);
-  useEffect(() => {
-    active.current = true;
-    return () => { active.current = false; };
-  }, []);
-  const images = library.filter(item => item.image);
-
-  async function upload(file: File | undefined) {
-    if (!file) return;
-    setBusy(true);
-    setError("");
-    try {
-      const source = await prepareUploadedImage(file);
-      if (active.current) setLocalImage(source);
-    } catch {
-      if (active.current) setError("Immagine non valida. Scegli un file JPEG, PNG o WebP.");
-    } finally {
-      if (active.current) setBusy(false);
-    }
-  }
-
-  async function start() {
-    setError("");
-    setBusy(true);
-    try {
-      const image = new Image();
-      image.src = localImage || images.find(item => item.id === imageId)?.image || demoPuzzleImage;
-      await image.decode();
-      if (active.current) onStart({ image, size });
-    } catch {
-      if (active.current) setError("Impossibile caricare l’immagine. Provane un’altra.");
-    } finally {
-      if (active.current) setBusy(false);
-    }
-  }
-
-  return (
-    <section className="panel puzzle-setup">
-      <label>Griglia
-        <select value={size} disabled={busy} onChange={event => setSize(event.target.value as PuzzleSize)}>
-          <option value="4x4">4 × 4 · 16 pezzi</option>
-          <option value="5x4">5 × 4 · 20 pezzi</option>
-          <option value="5x5">5 × 5 · 25 pezzi</option>
-        </select>
-      </label>
-      <label>Immagine
-        <select value={localImage ? "device" : imageId} disabled={busy} onChange={event => {
-          if (event.target.value === "device") return;
-          setImageId(event.target.value);
-          setLocalImage("");
-          setError("");
-        }}>
-          <option value="">Casa · esempio</option>
-          {images.map(item => <option key={item.id} value={item.id}>{item.word}</option>)}
-          {localImage && <option value="device">Immagine dal dispositivo</option>}
-        </select>
-      </label>
-      <label>Oppure prova con un file dal dispositivo
-        <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => {
-          void upload(event.target.files?.[0]);
-          event.target.value = "";
-        }} />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" className="primary-button" disabled={busy} onClick={() => void start()}>
-        <Play size={18} aria-hidden="true" />{busy ? "Caricamento…" : "Inizia"}
-      </button>
-    </section>
-  );
 }
 
 function PuzzleTile({ tile }: { tile: HTMLCanvasElement }) {

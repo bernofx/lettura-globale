@@ -461,11 +461,14 @@ try {
   await send("Emulation.setEmulatedMedia", { features: [] });
   await button("Torna ai giochi");
   await button("Puzzle a incastro");
-  await wait("document.querySelector('.puzzle-setup')");
-  assert.equal(await evaluate(documentFitsWidth), true, "puzzle setup fits a narrow phone");
-  await evaluate("document.querySelector('.puzzle-setup select').value='5x4'; document.querySelector('.puzzle-setup select').dispatchEvent(new Event('change',{bubbles:true}))");
+  await wait("document.querySelector('.puzzle-gallery-card[aria-label=Casa] .puzzle-preview')");
+  assert.equal(await evaluate(documentFitsWidth), true, "puzzle gallery fits a narrow phone");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.puzzle-gallery-card[aria-label=Casa] button')].map(button=>button.textContent)"),
+    ["4 × 4", "4 × 5", "5 × 5"]);
+  assert.ok(await evaluate("[...document.querySelectorAll('.puzzle-formats button')].every(button=>button.offsetWidth>=44 && button.offsetHeight>=44)"));
+  await evaluate("document.querySelector('.puzzle-gallery-tools summary').click()");
   await evaluate(`(() => {
-    const input = document.querySelector('.puzzle-setup input[type=file]');
+    const input = document.querySelector('.puzzle-gallery-tools input[type=file]');
     const photo = document.createElement('canvas');
     photo.width = 1280;
     photo.height = 720;
@@ -483,9 +486,11 @@ try {
       input.dispatchEvent(new Event('change', {bubbles:true}));
     });
   })()`);
-  await wait("document.querySelectorAll('.puzzle-setup select')[1].value === 'device'");
+  await wait("document.querySelector('.puzzle-gallery-card[aria-label=panoramica-sintetica] .puzzle-preview')");
+  assert.equal(await evaluate("document.querySelectorAll('.puzzle-gallery-card').length"), 2);
+  assert.equal(await evaluate("document.querySelectorAll('.puzzle-gallery-card[aria-label=panoramica-sintetica] button').length"), 3);
   await viewport(568, 320);
-  await button("Inizia");
+  await button("panoramica-sintetica · 4 × 5 · 20 pezzi");
   await wait("document.querySelectorAll('.puzzle-tray button').length === 20");
   await wait("document.querySelector('.puzzle-piece').offsetWidth >= 44");
   assert.equal(await evaluate("document.querySelector('.puzzle-board canvas').width / document.querySelector('.puzzle-board canvas').height"), 1.25);
@@ -521,13 +526,12 @@ try {
   await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Puzzle completato!'");
   await button("Esci dal puzzle");
   await wait("!history.state?.lgGameGuard");
-  for (const [size, pieces] of [["4x4",16],["5x5",25]]) {
+  for (const [size, pieces] of [["4 × 4",16],["5 × 5",25]]) {
     await viewport(320, 800);
-    await evaluate("document.querySelector('.puzzle-setup select').value="+JSON.stringify(size)+"; document.querySelector('.puzzle-setup select').dispatchEvent(new Event('change',{bubbles:true}))");
-    await button("Inizia");
+    await button("Casa · " + size + " · " + pieces + " pezzi");
     await wait("document.querySelectorAll('.puzzle-tray button').length === "+pieces);
     await wait("document.querySelector('.puzzle-dialog').dataset.rotated === 'true'");
-    if (size === "5x5") {
+    if (pieces === 25) {
       const from = await center(".puzzle-tray button:last-child");
       const id = Number(await tileAt(from));
       const to = await center(".puzzle-slots button:nth-child(" + (id + 1) + ")");
@@ -579,7 +583,7 @@ try {
   assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
   console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
   console.log("PASS Palloncini: dedicated detail page, playable touch targets, new waves, uploaded soundtrack and close button.");
-  console.log("PASS Puzzle: 16, 20 and 25 pieces, device image, touch stacking, completion, rotation and protected exit.");
+  console.log("PASS Puzzle gallery: previews and direct launch of 16, 20 and 25 pieces, device image, stacking, completion, rotation and protected exit.");
   console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {

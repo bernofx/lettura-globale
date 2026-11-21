@@ -1,6 +1,6 @@
 export const puzzleGrids = {
   "4x4": { columns: 4, rows: 4 },
-  "5x4": { columns: 5, rows: 4 },
+  "4x5": { columns: 5, rows: 4 },
   "5x5": { columns: 5, rows: 5 },
 } as const;
 export type PuzzleSize = keyof typeof puzzleGrids;

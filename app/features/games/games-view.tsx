@@ -10,7 +10,8 @@ import { BalloonGame, BalloonThumbnail } from "./balloon-game";
 import { ColoringCanvas, coloringFrame, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
-import { PuzzleGame, PuzzleSetup, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
+import { PuzzleGame, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
+import { PuzzleGallery } from "./puzzle-gallery";
 import "./games-view.css";
 
 const tools = [
@@ -95,7 +96,7 @@ export function GamesView({ library, soundVolume, onPlayingChange }: { library: 
         </section>
       )}
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
-      {selectedGame?.id === "puzzle" && <PuzzleSetup library={library} onStart={selection => setGame({ id: "puzzle", selection })} />}
+      {selectedGame?.id === "puzzle" && <PuzzleGallery library={library} onStart={selection => setGame({ id: "puzzle", selection })} />}
       {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {game?.id === "coloring" && (
         <ColoringGame
