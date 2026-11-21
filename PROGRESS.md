@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Colorare mostra il nome del disegno nella galleria e come etichetta accessibile del canvas. La barra del gioco contiene i comandi Musica ed Esci. Cache PWA v62.
+
 - [x] Colorare ampliato a 24 disegni originali. Strumenti a icone in fila accanto ai colori a pallini in una colonna scorrevole, con etichette accessibili. Musica originale a volume basso con comando dedicato, controllo audio generale e silenzio fuori dalla vista di gioco. Cache PWA v61.
 - [x] Verificati 271 test, build e typecheck. Lint con cinque avvisi preesistenti. In Chromium, controlli interamente visibili a 568 × 320 px, ultimo colore raggiungibile, 24 anteprime disegnate, gesti confinati e avvio, silenziamento e arresto del sottofondo.
 

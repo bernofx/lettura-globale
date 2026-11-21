@@ -64,13 +64,7 @@
 .coloring-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.coloring-heading h2 {
-  margin: 0 0 0 4px;
-  font-size: clamp(21px, 4vh, 32px);
+  justify-content: flex-end;
 }
 
 .coloring-header-actions {

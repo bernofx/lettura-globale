@@ -199,12 +199,11 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   }
 
   return (
-    <dialog ref={dialog} className="coloring-dialog" aria-labelledby="coloring-title" onClick={() => music.current?.retry()} onCancel={event => {
+    <dialog ref={dialog} className="coloring-dialog" aria-label="Colorare" onClick={() => music.current?.retry()} onCancel={event => {
       event.preventDefault();
       onClose();
     }}>
       <header className="coloring-heading">
-        <h2 id="coloring-title">{page.title}</h2>
         <div className="coloring-header-actions">
           <button
             type="button"

@@ -123,6 +123,8 @@ try {
     canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0))`);
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
+  assert.equal(await evaluate("document.querySelector('.coloring-heading').textContent.trim()"), "Esci");
+  assert.equal(await evaluate("document.querySelector('.coloring-dialog').getAttribute('aria-label')"), "Colorare");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.coloring-workspace')).display"), "none");
   assert.equal(await evaluate("document.querySelector('.coloring-rotate').checkVisibility()"), true);
   await viewport(800, 390);
