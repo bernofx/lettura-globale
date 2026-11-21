@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { AppVersionBadge } from "../../components/app-update";
 import { RemoteHostBadge } from "../remote/remote-host";
 import { type SessionNavigationProps } from "./session-view";
-import { helpTypes } from "../../shared/constants";
+import { PROTECTED_EXIT_HOLD_MS, helpTypes } from "../../shared/constants";
 import { AudioVolumeContext, RemoteHostContext } from "../../shared/hooks";
 
 export function SessionTools({ onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
@@ -36,12 +36,12 @@ function ProtectedExitButton({ onComplete }: { onComplete: () => void }) {
       timer.current = null;
       setHolding(false);
       onComplete();
-    }, 2_000);
+    }, PROTECTED_EXIT_HOLD_MS);
   };
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
   }, []);
-  return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label="Tieni premuto per 2 secondi per terminare"><span>{holding ? "Premi…" : "Termina"}</span><i aria-hidden="true" /></button>;
+  return <button className={`ghost-button protected-exit-button ${holding ? "holding" : ""}`} type="button" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel} onKeyDown={(event) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") cancel(); }} onClick={(event) => event.preventDefault()} aria-label={`Tieni premuto per ${PROTECTED_EXIT_HOLD_MS / 1000} secondi per terminare`} style={{ "--protected-exit-duration": `${PROTECTED_EXIT_HOLD_MS}ms` } as React.CSSProperties}><span>{holding ? "Premi…" : "Termina"}</span><i aria-hidden="true" /></button>;
 }
 
 export function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolean }) {

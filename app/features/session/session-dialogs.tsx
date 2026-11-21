@@ -3,6 +3,8 @@ import { useState } from "react";
 import { type RecoverableSession } from "../../domain/session-recovery";
 import { verifyStoredPin } from "../../domain/pin-credentials";
 import { type Therapist } from "../../shared/types";
+import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
+import { PinField } from "../../shared/ui/form-controls";
 
 export function SessionExitDialog({ therapist, onCancel, onConfirm }: { therapist: Therapist; onCancel: () => void; onConfirm: () => void }) {
   const [pin, setPin] = useState("");
@@ -13,12 +15,28 @@ export function SessionExitDialog({ therapist, onCancel, onConfirm }: { therapis
     if (!valid) { setError("PIN non corretto."); return; }
     onConfirm();
   };
-  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="session-exit-title"><form className="modal protected-exit-modal" onSubmit={submit}><span className="auth-icon"><LockKeyhole /></span><span className="eyebrow">USCITA PROTETTA</span><h2 id="session-exit-title">Termina la sessione?</h2><p>Inserisci il PIN di {therapist.firstName} per tornare al pannello.</p><label>PIN<input autoFocus type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" /></label>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="ghost-button" type="button" onClick={onCancel}>Continua l’esercizio</button><button className="primary-button" type="submit" disabled={!pin}><LockKeyhole />Termina</button></div></form></div>;
+  return <Modal labelledBy="session-exit-title" className="protected-exit-modal" onClose={onCancel} onSubmit={submit}>
+    <span className="auth-icon"><LockKeyhole /></span>
+    <ModalTitle id="session-exit-title" eyebrow="USCITA PROTETTA">Termina la sessione?</ModalTitle>
+    <p>Inserisci il PIN di {therapist.firstName} per tornare al pannello.</p>
+    <PinField autoFocus value={pin} onChange={(value) => { setPin(value); setError(""); }} />
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <ModalActions onCancel={onCancel} cancelLabel="Continua l’esercizio">
+      <button className="primary-button" type="submit" disabled={!pin}><LockKeyhole />Termina</button>
+    </ModalActions>
+  </Modal>;
 }
 
 export function SessionRecoveryDialog({ saved, childName, onResume, onDiscard }: { saved: RecoverableSession; childName: string; onResume: () => void; onDiscard: () => void }) {
   const position = Math.min(saved.currentIndex + 1, saved.plan.length);
-  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="session-recovery-title"><div className="modal recovery-modal"><span className="auth-icon"><RefreshCw /></span><span className="eyebrow">SESSIONE INTERROTTA</span><h2 id="session-recovery-title">Riprendere da dove eri rimasto?</h2><p><strong>{saved.descriptor.title}</strong> con {childName}, passaggio {position} di {saved.plan.length}.</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={onDiscard}>Scarta</button><button className="primary-button" type="button" onClick={onResume}><Play />Riprendi</button></div></div></div>;
+  return <Modal labelledBy="session-recovery-title" className="recovery-modal">
+    <span className="auth-icon"><RefreshCw /></span>
+    <ModalTitle id="session-recovery-title" eyebrow="SESSIONE INTERROTTA">Riprendere da dove eri rimasto?</ModalTitle>
+    <p><strong>{saved.descriptor.title}</strong> con {childName}, passaggio {position} di {saved.plan.length}.</p>
+    <ModalActions onCancel={onDiscard} cancelLabel="Scarta">
+      <button className="primary-button" type="button" onClick={onResume}><Play />Riprendi</button>
+    </ModalActions>
+  </Modal>;
 }
 
 export function UnavailableExercise({ onExit }: { onExit: () => void }) {

@@ -64,3 +64,13 @@ export function backendStateForStorage(state: BackendState): BackendState {
 export function compileExercises(selectedExercises: Exercise[], sourceLibrary: LibraryItem[], categorySymbols?: CategorySymbols) {
   return compileSessionPlan(selectedExercises, sourceLibrary, { articleFor, categorySymbols });
 }
+
+/** Fills the optional collections of a cloud state so it can be diffed and applied. */
+export function normalizeBackendState(saved: BackendState): BackendState {
+  return {
+    schemaVersion: 1,
+    therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
+    activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
+    attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences, categorySymbols: saved.categorySymbols,
+  };
+}

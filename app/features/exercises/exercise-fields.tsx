@@ -1,5 +1,6 @@
 import { type SyllableFilter } from "../../domain/syllabification";
 import { type CategoryOptions, type DistractorSource, type Presentation } from "../../shared/types";
+import { CheckLine } from "../../shared/ui/form-controls";
 
 export function CategoryExerciseOptions({ value, onChange }: { value: CategoryOptions; onChange: (next: CategoryOptions) => void }) {
   return <fieldset className="category-options"><legend>Presentazione parola e categorie</legend>{([
@@ -14,11 +15,11 @@ export function WizardBack({ onClick }: { onClick: () => void }) {
 }
 
 export function CorrectMatchPronunciation({ kind, checked, onChange }: { kind: "articles" | "word-categories"; checked: boolean; onChange: (value: boolean) => void }) {
-  return <label className="check-line pronunciation-option"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><span><strong>Pronuncia dopo l’abbinamento corretto</strong><small>{kind === "articles" ? "Legge articolo e parola, ad esempio: il gatto." : "Legge il nome della categoria corretta."}</small></span></label>;
+  return <CheckLine className="pronunciation-option" checked={checked} onChange={onChange} title="Pronuncia dopo l’abbinamento corretto" detail={kind === "articles" ? "Legge articolo e parola, ad esempio: il gatto." : "Legge il nome della categoria corretta."} />;
 }
 
 export function RecognitionPresentationFields({ presentation, autoPronounce, onPresentationChange, onAutoPronounceChange }: { presentation: Presentation; autoPronounce: boolean; onPresentationChange: (value: Presentation) => void; onAutoPronounceChange: (value: boolean) => void }) {
-  return <><label>Presentazione<select value={presentation} onChange={(event) => onPresentationChange(event.target.value as Presentation)}><option value="images">Foto + parole</option><option value="words">Solo parole</option></select></label><label className="check-line pronunciation-option"><input type="checkbox" checked={autoPronounce} onChange={(event) => onAutoPronounceChange(event.target.checked)} /><span><strong>Pronuncia automatica</strong><small>Legge la parola quando compare, con immagini o con sole parole.</small></span></label></>;
+  return <><label>Presentazione<select value={presentation} onChange={(event) => onPresentationChange(event.target.value as Presentation)}><option value="images">Foto + parole</option><option value="words">Solo parole</option></select></label><CheckLine className="pronunciation-option" checked={autoPronounce} onChange={onAutoPronounceChange} title="Pronuncia automatica" detail="Legge la parola quando compare, con immagini o con sole parole." /></>;
 }
 
 export function RecognitionRandomParameterFields({ distractorCount, distractorSource, syllables, onDistractorCountChange, onDistractorSourceChange, onSyllablesChange }: { distractorCount: 1 | 2 | 3 | 4; distractorSource: DistractorSource; syllables: SyllableFilter; onDistractorCountChange: (value: 1 | 2 | 3 | 4) => void; onDistractorSourceChange: (value: DistractorSource) => void; onSyllablesChange: (value: SyllableFilter) => void }) {
@@ -26,5 +27,5 @@ export function RecognitionRandomParameterFields({ distractorCount, distractorSo
 }
 
 export function QuantityLearningOptions({ speakNumbers, errorless, onSpeakNumbersChange, onErrorlessChange }: { speakNumbers: boolean; errorless: boolean; onSpeakNumbersChange: (value: boolean) => void; onErrorlessChange: (value: boolean) => void }) {
-  return <><label className="check-line pronunciation-option quick-wide-setting"><input type="checkbox" checked={speakNumbers} onChange={(event) => onSpeakNumbersChange(event.target.checked)} /><span><strong>Pronuncia i numeri selezionati</strong><small>Conta uno, due, tre… quando viene selezionato un oggetto. Rispetta il volume della sessione.</small></span></label><label className="check-line pronunciation-option quick-wide-setting"><input type="checkbox" checked={errorless} onChange={(event) => onErrorlessChange(event.target.checked)} /><span><strong>Apprendimento senza errori</strong><small>Al raggiungimento della quantità corretta registra il successo e blocca gli oggetti. Nessun timer di errore o avanzamento automatico: prosegui solo con Continua o dal telefono. Modalità indicata separatamente nelle statistiche.</small></span></label></>;
+  return <><CheckLine className="pronunciation-option quick-wide-setting" checked={speakNumbers} onChange={onSpeakNumbersChange} title="Pronuncia i numeri selezionati" detail="Conta uno, due, tre… quando viene selezionato un oggetto. Rispetta il volume della sessione." /><CheckLine className="pronunciation-option quick-wide-setting" checked={errorless} onChange={onErrorlessChange} title="Apprendimento senza errori" detail="Al raggiungimento della quantità corretta registra il successo e blocca gli oggetti. Nessun timer di errore o avanzamento automatico: prosegui solo con Continua o dal telefono. Modalità indicata separatamente nelle statistiche." /></>;
 }

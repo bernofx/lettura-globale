@@ -3,8 +3,7 @@
 import { Check, Menu, Pause } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { recognitionModeFor } from "./domain/activity-generation";
-import { categoryImageError, type CategorySymbols } from "./domain/category-images";
-import { seedDefaultCategorySymbols } from "./domain/category-symbol-catalog";
+import { categoryImageError } from "./domain/category-images";
 import { isWordCategoryContent, wordCategoryNames } from "./domain/word-category-content";
 import { filterQuickCandidates } from "./domain/session-planning";
 import { SessionAdvanceGuard } from "./domain/session-advance";
@@ -14,33 +13,30 @@ import { CELEBRATION_DURATION_MS } from "./domain/celebration";
 import { AppUpdateProvider, AppVersionBadge, useAppUpdating, useBeforeAppUpdate, useUpdateState } from "./components/app-update";
 import { articleFor } from "./domain/article-classification";
 import { validateSharedExercises } from "./domain/shared-preview-validation";
-import { cloudSaveCanSettle, prepareCloudShare } from "./domain/share-preparation";
+import { prepareCloudShare } from "./domain/share-preparation";
 import { playBalloonPop } from "./domain/balloon-audio";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { listenForAudioGestures } from "./domain/audio-activation";
 import { CaaStoriesView } from "./components/caa-stories-view";
 import { useCaaStories } from "./use-caa-stories";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents } from "./domain/session-events";
-import { deduplicateLibraryPlaceholders, recoverPendingRemoteUploads } from "./domain/library-deduplication";
 import { buildSessionHistoryItems, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
 import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access";
 import { hydrateSyllables, matchesSyllableFilter } from "./domain/syllabification";
 import { hasArtwork } from "./domain/library-availability";
 import { completesSequenceExercise, type SessionActivity } from "./domain/session-compilation";
-import { type AppearanceSettings, defaultAppearance, hydrateAppearance } from "./domain/appearance";
 import { ACTIVE_SESSION_STORAGE_KEY, parseRecoverableSession, type RecoverableSession, serializeRecoverableSession } from "./domain/session-recovery";
-import { retryOperation } from "./domain/retry";
-import { buildStateChange, rebaseStateChange } from "./domain/state-changes";
 import { createPersistentTherapistSession, parsePersistentTherapistSession, THERAPIST_SESSION_STORAGE_KEY } from "./domain/therapist-session";
 import { libraryItemWasEdited } from "./domain/library-edit";
 import { appendSaveJournal } from "./domain/save-journal";
 import { quantityObjectLabel } from "./domain/quantity-exercise";
-import { defaultSoundPreferences, hydrateSoundPreferences, type SoundPreferences } from "./domain/sound-preferences";
 import { remoteCommandDisposition, type RemoteControllerEvent, type RemoteSessionSnapshot } from "./domain/remote-controller";
 import { useRemoteSessionHost } from "./use-remote-session-host";
 import { isSimpleSentenceScene, sentenceMatchingAvailability } from "./domain/sentence-matching";
 import { logoutFromCloud } from "./domain/cloud-auth-client";
+import { useAppData } from "./features/app-state/use-app-data";
+import { useCloudSync } from "./features/app-state/use-cloud-sync";
 import { ExerciseBuilder } from "./features/exercises/exercise-builder";
 import { ContentDeleteDialog, SequenceDialog } from "./features/exercises/exercise-dialogs";
 import { ExercisesView } from "./features/exercises/exercises-view";
@@ -58,13 +54,13 @@ import { Sidebar, Topbar } from "./features/shell/navigation";
 import { StatsView } from "./features/stats/stats-view";
 import { preloadArtwork } from "./shared/artwork";
 import { applyAudioVolume, applySoundPreferences, cancelSpeech, feedbackContext, playFeedbackTone, playSoundCue, preloadFeedbackSounds, primeFeedbackSounds, speakWord, startRewardMusic } from "./shared/audio";
-import { backendResponseError, clearPendingCloudSave, fetchWithTimeout, readPendingCloudSave, saveErrorDetails, storePendingCloudSave } from "./shared/cloud-client";
-import { exerciseKind, helpTypes } from "./shared/constants";
+import { fetchWithTimeout, storePendingCloudSave } from "./shared/cloud-client";
+import { PROTECTED_EXIT_HOLD_HINT, exerciseKind, helpTypes } from "./shared/constants";
 import { AudioVolumeContext, emitRemoteComponentCommand, RemoteHostContext, RewardActiveContext, useStoredState, useToastMessage } from "./shared/hooks";
-import { prepareUploadedImage, readLibraryImage, storeLibraryImage, uploadRemoteImage } from "./shared/media-storage";
-import { initialAdministrator, initialChildren, initialExercises, initialSequences, initialTherapists, stockItems } from "./shared/seed-data";
-import { backendStateForStorage, compileExercises, discardUnauthorizedNewSequences, hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, remapExerciseLibraryIds } from "./shared/state-hydration";
-import { type Attempt, type BackendState, type BackendStatus, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Mode, type Presentation, type QuickStartConfig, type Sequence, type SharedPreviewPayload, type Therapist, type View } from "./shared/types";
+import { prepareUploadedImage, storeLibraryImage, uploadRemoteImage } from "./shared/media-storage";
+import { initialAdministrator } from "./shared/seed-data";
+import { compileExercises } from "./shared/state-hydration";
+import { type ChildProfile, type Exercise, type LibraryItem, type Mode, type Presentation, type QuickStartConfig, type Sequence, type SharedPreviewPayload, type View } from "./shared/types";
 
 export default function HomePage() {
   return <AppUpdateProvider><HomePageContent /></AppUpdateProvider>;
@@ -74,13 +70,15 @@ function HomePageContent() {
   const appUpdating = useAppUpdating();
   const [view, setView] = useUpdateState<View>("root:view", "home");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [therapists, setTherapists, therapistsLoaded] = useStoredState<Therapist[]>("lg-therapists", initialTherapists, (saved) => {
-    if (localStorage.getItem("lg-profiles-v2-seeded")) return mergeById(saved, [initialAdministrator]);
-    localStorage.setItem("lg-profiles-v2-seeded", "1");
-    return mergeById(saved, initialTherapists);
-  });
-  const [children, setChildren, childrenLoaded] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
-  const [activeChildId, setActiveChildId, activeChildLoaded] = useStoredState<string>("lg-active-child", initialChildren[0].id);
+  const [toast, notify] = useToastMessage();
+  const [saveJournalOpen, setSaveJournalOpen] = useState(false);
+  const sharingLaunch = useRef(false);
+  const data = useAppData(notify);
+  const {
+    therapists, setTherapists, children, setChildren, activeChildId, setActiveChildId, library, setLibrary, exercises, setExercises,
+    sequences, setSequences, activeSequenceId, setActiveSequenceId, attempts, setAttempts, helps, setHelps, sessionHistory, setSessionHistory,
+    appearance, setAppearance, categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot,
+  } = data;
   const [loggedInTherapistId, setLoggedInTherapistId] = useState<string | null>(null);
   const [showTherapistLogin, setShowTherapistLogin] = useState(false);
   const [logoutState, setLogoutState] = useState<"idle" | "pending" | "failed">("idle");
@@ -89,36 +87,7 @@ function HomePageContent() {
   const [controllerToken, setControllerToken] = useState<string | null>(null);
   const controllerActiveRef = useRef(false);
   const [realtimeControllerSessionId, setRealtimeControllerSessionId] = useState<string | null>(null);
-  const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
-  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
-  const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, hydrateSequences);
-  const [activeSequenceId, setActiveSequenceId, activeSequenceLoaded] = useStoredState<string>("lg-active-sequence", initialSequences[0].id);
-  const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
-  const [helps, setHelps, helpsLoaded] = useStoredState<HelpEvent[]>("lg-helps", []);
-  const [sessionHistory, setSessionHistory, sessionHistoryLoaded] = useStoredState<SessionHistoryRecord[]>("lg-session-history", []);
-  const [appearance, setAppearance, appearanceLoaded] = useStoredState<AppearanceSettings>("lg-appearance", defaultAppearance, hydrateAppearance);
   const [search, setSearch] = useState("");
-  const [toast, notify] = useToastMessage();
-  const [localLoadSlow, setLocalLoadSlow] = useState(false);
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
-  const [saveJournalOpen, setSaveJournalOpen] = useState(false);
-  const [backendRetryKey, setBackendRetryKey] = useState(0);
-  const [backendRefreshKey, setBackendRefreshKey] = useState(0);
-  const [backendSaveRetryKey, setBackendSaveRetryKey] = useState(0);
-  const [backendInitialized, setBackendInitialized] = useState(false);
-  const backendHydrating = useRef(true);
-  const backendSaveTimer = useRef<number | null>(null);
-  const backendRevision = useRef(0);
-  const lastStateReadTag = useRef("");
-  const lastStateReadAdultId = useRef<string | null>(null);
-  const lastSyncedBackendState = useRef<BackendState | null>(null);
-  const localFallbackBaseline = useRef<BackendState | null>(null);
-  const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
-  const backendPendingWrites = useRef(0);
-  const sharingLaunch = useRef(false);
-  const granularWritesUnavailable = useRef(false);
-  const localMediaRepairing = useRef(false);
-  const lastBackendSaveError = useRef("");
   const [showUpload, setShowUpload] = useState<"word" | "sentence" | null>(null);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -137,8 +106,6 @@ function HomePageContent() {
   const [sessionMode, setSessionMode] = useUpdateState<Mode>("root:sessionMode", "test");
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [soundVolume, setSoundVolume] = useStoredState<number>("lg-sound-volume", 100, (saved) => Math.min(100, Math.max(0, Number(saved) || 0)));
-  const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
-  const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [celebratingSequence, setCelebratingSequence] = useState(false);
   const [rewardActive, setRewardActive] = useUpdateState("root:rewardActive", false);
   const rewardActiveRef = useRef(rewardActive);
@@ -199,7 +166,6 @@ function HomePageContent() {
   }, [effectiveSoundVolume]);
 
   const sessionReturnView = useRef<View>("session");
-  const lastResumeCheck = useRef(0);
   const modalHistoryMarker = useRef<string | null>(null);
   const ignoreNextModalPop = useRef(false);
   const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete) || exitPinOpen || Boolean(recoveryCandidate) || saveJournalOpen;
@@ -262,32 +228,6 @@ function HomePageContent() {
     return () => window.clearTimeout(timeout);
   }, [celebratingSequence]);
 
-  useEffect(() => {
-    const resume = (event?: PageTransitionEvent) => {
-      if (document.visibilityState === "hidden") return;
-      if ("serviceWorker" in navigator) void navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => undefined);
-      const now = Date.now();
-      if (!backendInitialized && (event?.persisted || backendStatus === "loading" || backendStatus === "error" || backendStatus === "local") && navigator.onLine && now - lastResumeCheck.current > 15_000) {
-        lastResumeCheck.current = now;
-        setBackendStatus("loading");
-        setBackendRetryKey((current) => current + 1);
-      } else if (backendInitialized && (backendStatus === "ready" || backendStatus === "error") && navigator.onLine && now - lastResumeCheck.current > 15_000) {
-        lastResumeCheck.current = now;
-        if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
-        else setBackendRefreshKey((current) => current + 1);
-      }
-    };
-    const onVisibilityChange = () => resume();
-    const onPageShow = (event: PageTransitionEvent) => resume(event);
-    window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("online", onVisibilityChange);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("online", onVisibilityChange);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [backendInitialized, backendStatus]);
 
   useEffect(() => {
     if (modalOpen && !modalHistoryMarker.current) {
@@ -370,7 +310,7 @@ function HomePageContent() {
       const nextView = (["home", "library", "exercises", "session", "stats", "profiles", "appearance", "caa"] as View[]).includes(event.state?.lgView) ? event.state.lgView as View : "home";
       if (sessionActive) {
         window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
-        notify("Per uscire tieni premuto Termina per 4 secondi", 3200);
+        notify(PROTECTED_EXIT_HOLD_HINT, 3200);
         return;
       }
       setView(nextView);
@@ -382,381 +322,9 @@ function HomePageContent() {
     return () => window.removeEventListener("popstate", onPopState);
   }, [notify, sessionActive, setSessionReady, setView]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const restoreImages = async () => {
-      const missing = library.filter((item) => item.imageKey && !item.image);
-      const legacy = library.filter((item) => item.privateUpload && item.image?.startsWith("data:") && !item.imageKey);
-      if (!missing.length && !legacy.length) return;
-      const restored = new Map<string, string>();
-      await Promise.all(missing.map(async (item) => { const image = await readLibraryImage(item.imageKey!); if (image) restored.set(item.id, image); }));
-      await Promise.all(legacy.map(async (item) => { const key = `library-image-${item.id}`; await storeLibraryImage(key, item.image!); restored.set(item.id, item.image!); }));
-      if (cancelled || !restored.size) return;
-      setLibrary((current) => current.map((item) => {
-        const legacyItem = legacy.find((candidate) => candidate.id === item.id);
-        return restored.has(item.id) ? { ...item, image: restored.get(item.id), imageKey: item.imageKey ?? (legacyItem ? `library-image-${item.id}` : undefined) } : item;
-      }));
-    };
-    restoreImages().catch(() => notify("Non è stato possibile recuperare una foto salvata"));
-    return () => { cancelled = true; };
-  }, [library, notify, setLibrary]);
+  const cloud = useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify });
+  const { backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave } = cloud;
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded;
-  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols });
-
-  useEffect(() => {
-    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols };
-  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols]);
-
-  useEffect(() => {
-    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
-    const baseline = lastSyncedBackendState.current;
-    if (!baseline) return;
-    const local = backendStateForStorage(localBootstrapSnapshot.current);
-    if (buildStateChange(baseline, local, crypto.randomUUID(), backendRevision.current)) return;
-    let cancelled = false;
-    const refresh = async () => {
-      await backendSaveQueue.current.catch(() => undefined);
-      const scopeChanged = lastStateReadAdultId.current !== loggedInTherapistId;
-      const tag = scopeChanged ? "" : lastStateReadTag.current;
-      const response = await fetchWithTimeout("/api/state", { cache: "no-store", headers: tag ? { "if-none-match": tag } : {} }, 6500);
-      if (response.status === 304) return;
-      if (!response.ok) throw await backendResponseError(response, "backend_refresh_failed");
-      const result = await response.json() as { state: BackendState | null; revision: number };
-      if (cancelled || !result.state || result.revision < backendRevision.current) return;
-      const confirmed = lastSyncedBackendState.current;
-      if (confirmed && buildStateChange(confirmed, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current)) return;
-      lastStateReadTag.current = response.headers.get("etag") ?? "";
-      lastStateReadAdultId.current = loggedInTherapistId;
-      if (result.revision === backendRevision.current && !scopeChanged) return;
-      const saved = result.state;
-      const savedBaseline: BackendState = {
-        schemaVersion: 1,
-        therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
-        activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
-        attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences, categorySymbols: saved.categorySymbols,
-      };
-      backendHydrating.current = true;
-      backendRevision.current = result.revision;
-      lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
-      setTherapists(mergeById(saved.therapists ?? [], [initialAdministrator]));
-      setChildren(saved.children?.length ? saved.children : initialChildren);
-      setActiveChildId(saved.activeChildId || saved.children?.[0]?.id || initialChildren[0].id);
-      setLibrary(hydrateLibrary(saved.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-      setExercises(hydrateExercises(saved.exercises ?? []));
-      setSequences(hydrateSequences(saved.sequences ?? []));
-      setActiveSequenceId(saved.activeSequenceId || saved.sequences?.[0]?.id || initialSequences[0].id);
-      setAttempts(saved.attempts ?? []);
-      setHelps(saved.helps ?? []);
-      setSessionHistory(saved.sessionHistory ?? []);
-      setAppearance(hydrateAppearance(saved.appearance));
-      setCategorySymbols(seedDefaultCategorySymbols(saved.categorySymbols ?? {}, saved.library ?? []));
-      if (saved.soundPreferences) setSoundPreferences(hydrateSoundPreferences(saved.soundPreferences));
-      backendHydrating.current = false;
-      setBackendStatus("ready");
-      notify("Dati aggiornati dal cloud");
-    };
-    void refresh().catch((error) => {
-      if (cancelled) return;
-      appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "refresh_failed", revision: backendRevision.current, ...saveErrorDetails(error) });
-      // This effect only runs when the local snapshot matches the last confirmed
-      // cloud revision. A failed read therefore does not mean that data is unsaved.
-      setBackendStatus("ready");
-    });
-    return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences, setCategorySymbols]);
-
-  useEffect(() => {
-    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        if (backendStatus === "error") setBackendSaveRetryKey((current) => current + 1);
-        else setBackendRefreshKey((current) => current + 1);
-      }
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [backendInitialized, backendStatus, loggedInTherapistId, logoutState, sessionActive, sessionReady]);
-
-  useEffect(() => {
-    if (allLocalDataLoaded) return;
-    const timer = window.setTimeout(() => setLocalLoadSlow(true), 6000);
-    return () => window.clearTimeout(timer);
-  }, [allLocalDataLoaded]);
-
-  useEffect(() => {
-    if (!libraryLoaded || !exercisesLoaded) return;
-    const deduplicated = deduplicateLibraryPlaceholders(library);
-    if (!deduplicated.replacements.size) return;
-    if (deduplicated.items.some((item, index) => item !== library[index])) setLibrary(deduplicated.items);
-    const repaired = exercises.map((exercise) => remapExerciseLibraryIds(exercise, deduplicated.replacements));
-    if (repaired.some((exercise, index) => exercise !== exercises[index])) setExercises(repaired);
-  }, [library, exercises, libraryLoaded, exercisesLoaded, setLibrary, setExercises]);
-
-  useEffect(() => {
-    if (!allLocalDataLoaded || backendInitialized) return;
-    let cancelled = false;
-    const initializeBackend = async () => {
-      if (!backendInitialized) setBackendStatus("loading");
-      const response = await retryOperation(async () => {
-        const result = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
-        if (result.status >= 500) throw new Error(`backend_http_${result.status}`);
-        return result;
-      }, { attempts: 3, delayMs: 400 });
-      if (response.status === 401) {
-        if (!cancelled) {
-          localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
-          sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
-          setLoggedInTherapistId(null);
-          setBackendStatus("local");
-        }
-        return;
-      }
-      if (!response.ok) throw new Error("backend_load_failed");
-      const result = await response.json() as { state: BackendState | null; revision: number };
-      if (cancelled) return;
-      lastStateReadTag.current = response.headers.get("etag") ?? "";
-      lastStateReadAdultId.current = loggedInTherapistId;
-
-      if (result.state) {
-        const saved = result.state;
-        const savedBaseline: BackendState = {
-          schemaVersion: 1,
-          therapists: saved.therapists ?? [], children: saved.children ?? [], activeChildId: saved.activeChildId ?? "",
-          activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
-          attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences, categorySymbols: saved.categorySymbols,
-        };
-        let restoredState = savedBaseline;
-        const pendingSave = readPendingCloudSave();
-        let recoveredPendingSave = false;
-        if (pendingSave) {
-          try {
-            restoredState = rebaseStateChange(savedBaseline, pendingSave.change, crypto.randomUUID(), result.revision).state as BackendState;
-            restoredState = discardUnauthorizedNewSequences(savedBaseline, restoredState, loggedInTherapistId);
-            recoveredPendingSave = Boolean(buildStateChange(savedBaseline, restoredState, crypto.randomUUID(), result.revision));
-            if (!recoveredPendingSave) clearPendingCloudSave();
-          } catch {
-            clearPendingCloudSave();
-          }
-        }
-        const recoveredLibrary = recoverPendingRemoteUploads(restoredState.library, localBootstrapSnapshot.current.library);
-        backendRevision.current = result.revision;
-        lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
-        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_loaded", revision: result.revision, sequenceCount: restoredState.sequences.length });
-        localFallbackBaseline.current = null;
-        setTherapists(mergeById(restoredState.therapists ?? [], [initialAdministrator]));
-        setChildren(restoredState.children?.length ? restoredState.children : initialChildren);
-        setActiveChildId(restoredState.activeChildId || restoredState.children?.[0]?.id || initialChildren[0].id);
-        setLibrary(hydrateLibrary(recoveredLibrary).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-        setExercises(hydrateExercises(restoredState.exercises ?? []));
-        setSequences(hydrateSequences(restoredState.sequences ?? []));
-        setActiveSequenceId(restoredState.activeSequenceId || restoredState.sequences?.[0]?.id || initialSequences[0].id);
-        setAttempts(restoredState.attempts ?? []);
-        setHelps(restoredState.helps ?? []);
-        setSessionHistory(restoredState.sessionHistory ?? []);
-        setAppearance(hydrateAppearance(restoredState.appearance));
-        setCategorySymbols(seedDefaultCategorySymbols(restoredState.categorySymbols ?? {}, restoredState.library ?? []));
-        setSoundPreferences(hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences));
-        backendHydrating.current = false;
-        setBackendInitialized(true);
-        setBackendStatus(recoveredPendingSave ? "syncing" : "ready");
-        return;
-      }
-
-      setBackendStatus("migrating");
-      const local = localBootstrapSnapshot.current;
-      const migratedLibrary: LibraryItem[] = [];
-      for (const item of local.library) {
-        if (!item.privateUpload || item.remoteImageId) { migratedLibrary.push(item); continue; }
-        const localImage = item.image?.startsWith("data:") ? item.image : item.imageKey ? await readLibraryImage(item.imageKey) : undefined;
-        if (!localImage) { migratedLibrary.push(item); continue; }
-        const remote = await uploadRemoteImage(crypto.randomUUID(), localImage);
-        migratedLibrary.push({ ...item, image: localImage, remoteImageId: remote.id });
-      }
-      const migrated: BackendState = { ...local, library: migratedLibrary, categorySymbols: seedDefaultCategorySymbols(local.categorySymbols ?? {}, []) };
-      const saveResponse = await retryOperation(() => fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(result.revision) }, body: JSON.stringify(backendStateForStorage(migrated)) }, 6500), { attempts: 2, delayMs: 500 });
-      if (!saveResponse.ok) throw new Error("backend_migration_failed");
-      const saveResult = await saveResponse.json() as { revision: number };
-      if (cancelled) return;
-      backendRevision.current = saveResult.revision;
-      lastSyncedBackendState.current = backendStateForStorage(migrated);
-      setLibrary(migratedLibrary);
-      setCategorySymbols(migrated.categorySymbols ?? {});
-      backendHydrating.current = false;
-      setBackendInitialized(true);
-      setBackendStatus("ready");
-    };
-    initializeBackend().catch((error) => {
-      if (cancelled) return;
-      appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_load_failed", ...saveErrorDetails(error) });
-      localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
-      backendHydrating.current = false;
-      setBackendStatus("local");
-    });
-    return () => { cancelled = true; };
-  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, loggedInTherapistId, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences, setCategorySymbols]);
-
-  useEffect(() => {
-    if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
-    const watchdog = window.setTimeout(() => {
-      localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
-      backendHydrating.current = false;
-      setBackendStatus("local");
-    }, 16_000);
-    return () => window.clearTimeout(watchdog);
-  }, [backendInitialized, backendStatus, backendRetryKey]);
-
-  const settleBackendSaveStatus = useCallback(() => {
-    const baseline = lastSyncedBackendState.current;
-    if (!baseline || !loggedInTherapistId || logoutState !== "idle") return;
-    const current = backendStateForStorage(localBootstrapSnapshot.current);
-    const dirty = Boolean(buildStateChange(baseline, current, crypto.randomUUID(), backendRevision.current));
-    if (!cloudSaveCanSettle(backendPendingWrites.current, backendSaveTimer.current !== null, dirty)) return;
-    clearPendingCloudSave();
-    setBackendStatus((status) => status === "syncing" ? "ready" : status);
-  }, [loggedInTherapistId, logoutState]);
-
-  const enqueueBackendSave = useCallback((snapshot: BackendState) => {
-    backendPendingWrites.current += 1;
-    const requestedSnapshot = snapshot;
-    let attemptedOperationId = "";
-    const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
-        const previous = lastSyncedBackendState.current;
-        if (!previous) throw new Error("missing_sync_baseline");
-        snapshot = discardUnauthorizedNewSequences(previous, snapshot, loggedInTherapistId);
-        const operationId = crypto.randomUUID();
-        attemptedOperationId = operationId;
-        const change = buildStateChange(previous, snapshot, operationId, backendRevision.current);
-        if (!change) return;
-        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_started", operationId, revision: backendRevision.current, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: snapshot.sequences.length });
-        setBackendStatus("syncing");
-        let response: Response;
-        if (granularWritesUnavailable.current) {
-          response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
-        } else {
-          const body = JSON.stringify(change);
-          response = await retryOperation(async () => {
-            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500);
-            if (result.status >= 500) throw await backendResponseError(result, "backend_save_failed");
-            return result;
-          }, { attempts: 2, delayMs: 400 });
-          if ([404, 405, 501].includes(response.status)) {
-            granularWritesUnavailable.current = true;
-            response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
-          }
-        }
-        let syncedSnapshot = snapshot;
-        if (response.status === 409) {
-          const latestResponse = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
-          if (!latestResponse.ok) throw new Error("backend_conflict_reload_failed");
-          const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
-          if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
-          const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
-          appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_rebased", operationId, revision: latest.revision, changedSequences: change.collections.sequences?.upserts.length ?? 0 });
-          syncedSnapshot = rebased.state as BackendState;
-          response = await retryOperation(async () => {
-            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(rebased.change) }, 6500);
-            if (result.status >= 500) throw await backendResponseError(result, "backend_conflict_failed");
-            return result;
-          }, { attempts: 2, delayMs: 400 });
-        }
-        if (!response.ok) throw await backendResponseError(response, "backend_save_failed");
-        const result = await response.json() as { revision: number };
-        lastBackendSaveError.current = "";
-        backendRevision.current = result.revision;
-        lastSyncedBackendState.current = syncedSnapshot;
-        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_succeeded", operationId, revision: result.revision, httpStatus: response.status, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: syncedSnapshot.sequences.length });
-        if (syncedSnapshot !== requestedSnapshot) {
-          backendHydrating.current = true;
-          setTherapists(mergeById(syncedSnapshot.therapists ?? [], [initialAdministrator]));
-          setChildren(syncedSnapshot.children?.length ? syncedSnapshot.children : initialChildren);
-          setActiveChildId(syncedSnapshot.activeChildId || syncedSnapshot.children?.[0]?.id || initialChildren[0].id);
-          setLibrary(hydrateLibrary(syncedSnapshot.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-          setExercises(hydrateExercises(syncedSnapshot.exercises ?? []));
-          setSequences(hydrateSequences(syncedSnapshot.sequences ?? []));
-          setActiveSequenceId(syncedSnapshot.activeSequenceId || syncedSnapshot.sequences?.[0]?.id || initialSequences[0].id);
-          setAttempts(syncedSnapshot.attempts ?? []);
-          setHelps(syncedSnapshot.helps ?? []);
-          setSessionHistory(syncedSnapshot.sessionHistory ?? []);
-          setAppearance(hydrateAppearance(syncedSnapshot.appearance));
-          setCategorySymbols(seedDefaultCategorySymbols(syncedSnapshot.categorySymbols ?? {}, syncedSnapshot.library ?? []));
-          setSoundPreferences(hydrateSoundPreferences(syncedSnapshot.soundPreferences));
-          backendHydrating.current = false;
-        }
-        const currentSnapshot = syncedSnapshot !== requestedSnapshot
-          ? syncedSnapshot
-          : backendStateForStorage(localBootstrapSnapshot.current);
-        const stillDirty = Boolean(buildStateChange(syncedSnapshot, currentSnapshot, crypto.randomUUID(), result.revision));
-        if (stillDirty || backendPendingWrites.current > 1 || backendSaveTimer.current !== null) setBackendStatus("syncing");
-        else {
-          clearPendingCloudSave();
-          setBackendStatus("ready");
-        }
-      }).catch((error) => {
-        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_failed", operationId: attemptedOperationId, ...saveErrorDetails(error) });
-        throw error;
-      }).finally(() => {
-        backendPendingWrites.current -= 1;
-        settleBackendSaveStatus();
-      });
-    backendSaveQueue.current = task;
-    return task;
-  }, [loggedInTherapistId, settleBackendSaveStatus, setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setSoundPreferences, setCategorySymbols]);
-
-  useEffect(() => {
-    if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
-    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols });
-    if (!backendInitialized) {
-      if (!localFallbackBaseline.current) return;
-      const localChange = buildStateChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
-      if (localChange) storePendingCloudSave(localChange);
-      return;
-    }
-    const baseline = lastSyncedBackendState.current;
-    if (!baseline) return;
-    const pendingChange = buildStateChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current);
-    if (!pendingChange) {
-      const idleTimer = window.setTimeout(settleBackendSaveStatus, 0);
-      return () => window.clearTimeout(idleTimer);
-    }
-    storePendingCloudSave(pendingChange);
-    const statusTimer = window.setTimeout(() => setBackendStatus("syncing"), 0);
-    if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
-    backendSaveTimer.current = window.setTimeout(() => {
-      backendSaveTimer.current = null;
-      void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
-    }, 500);
-    return () => { window.clearTimeout(statusTimer); if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
-  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, enqueueBackendSave, settleBackendSaveStatus]);
-
-  useEffect(() => {
-    if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;
-    const candidates = library.filter((item) => item.privateUpload && !item.remoteImageId && (item.image?.startsWith("data:") || item.imageKey));
-    if (!candidates.length) return;
-    let cancelled = false;
-    localMediaRepairing.current = true;
-    const repair = async () => {
-      const uploaded = new Map<string, string>();
-      for (const item of candidates) {
-        const image = item.image?.startsWith("data:") ? item.image : item.imageKey ? await readLibraryImage(item.imageKey) : undefined;
-        if (!image) continue;
-        const remote = await uploadRemoteImage(crypto.randomUUID(), image);
-        uploaded.set(item.id, remote.id);
-      }
-      if (cancelled || !uploaded.size) return;
-      const nextLibrary = localBootstrapSnapshot.current.library.map((item) => uploaded.has(item.id) ? { ...item, remoteImageId: uploaded.get(item.id) } : item);
-      setLibrary(nextLibrary);
-      await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
-      if (cancelled) return;
-      const labels = candidates.filter((item) => uploaded.has(item.id)).map((item) => item.word).join(", ");
-      notify(`${labels}: immagini recuperate nel cloud`, 3200);
-    };
-    void repair().catch(() => {
-      if (!cancelled) {
-        notify("Le immagini locali non sono ancora state sincronizzate", 3200);
-      }
-    }).finally(() => { localMediaRepairing.current = false; });
-    return () => { cancelled = true; };
-  }, [backendInitialized, backendRefreshKey, backendStatus, loggedInTherapistId, logoutState, library, notify, enqueueBackendSave, setLibrary]);
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
   const caaStories = useCaaStories(therapist?.id ?? null);
@@ -768,12 +336,11 @@ function HomePageContent() {
     }
     if (sessionFromSharedLink || !loggedInTherapistId) return;
     if (!backendInitialized || !navigator.onLine) throw new Error("cloud_save_unavailable");
-    if (backendSaveTimer.current !== null) { window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; }
+    cloud.cancelScheduledSave();
     for (let attempt = 0; attempt < 3; attempt++) {
-      await enqueueBackendSave(backendStateForStorage(localBootstrapSnapshot.current));
-      await backendSaveQueue.current;
-      const latest = backendStateForStorage(localBootstrapSnapshot.current);
-      if (lastSyncedBackendState.current && !buildStateChange(lastSyncedBackendState.current, latest, crypto.randomUUID(), backendRevision.current)) return;
+      await cloud.saveNow();
+      await cloud.saveQueue();
+      if (cloud.isSynced()) return;
     }
     throw new Error("cloud_save_pending");
   });
@@ -970,34 +537,14 @@ function HomePageContent() {
     });
   }, [attempts, helps, library, sessionChildId, sessionComplete, sessionDescriptor, sessionFromSharedLink, sessionIsTrial, sessionMode, sessionPlan, sessionPresentation, sessionRunId, sessionStartedAt, setSessionHistory, therapist]);
 
-  const persistLibraryImmediately = async (nextLibrary: LibraryItem[]) => {
-    setLibrary(nextLibrary);
-    if (!backendInitialized || backendStatus === "local") return "local" as const;
-    try {
-      await enqueueBackendSave(backendStateForStorage({ ...localBootstrapSnapshot.current, library: nextLibrary }));
-      return "cloud" as const;
-    } catch (error) {
-      lastBackendSaveError.current = error instanceof Error ? error.message : "errore sconosciuto";
-      setBackendStatus("error");
-      return "pending" as const;
-    }
-  };
   const shareLaunch = async (launch: SharedLaunch, title: string) => {
     if (sharingLaunch.current) return;
     sharingLaunch.current = true;
     let url = "";
     try {
       if (!backendInitialized || !loggedInTherapistId || logoutState !== "idle" || !navigator.onLine) throw new Error("share_sync_pending");
-      if (backendSaveTimer.current !== null) window.clearTimeout(backendSaveTimer.current);
-      backendSaveTimer.current = null;
-      const revision = await prepareCloudShare(
-        () => enqueueBackendSave(backendStateForStorage(localBootstrapSnapshot.current)),
-        () => {
-          const baseline = lastSyncedBackendState.current;
-          return !baseline || Boolean(buildStateChange(baseline, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current));
-        },
-        () => backendRevision.current,
-      );
+      cloud.cancelScheduledSave();
+      const revision = await prepareCloudShare(() => cloud.saveNow(), () => !cloud.isSynced(), cloud.revision);
       const response = await fetchWithTimeout("/api/shared-launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...launch, revision }) }, 8000);
       if (!response.ok) {
         const error = await response.json().catch(() => ({})) as { error?: string; exerciseId?: string };
@@ -1026,7 +573,7 @@ function HomePageContent() {
     } finally { sharingLaunch.current = false; }
   };
   const navigate = (next: View) => {
-    if (sessionActive && next !== "session") { notify("Per uscire tieni premuto Termina per 4 secondi"); return; }
+    if (sessionActive && next !== "session") { notify(PROTECTED_EXIT_HOLD_HINT); return; }
     if (next !== "session") { sessionReadyRef.current = false; setSessionReady(false); }
     if (next !== view) window.history.pushState({ lgView: next }, "", window.location.pathname);
     setView(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1407,7 +954,7 @@ function HomePageContent() {
     const exists = sequences.some((item) => item.id === sequence.id);
     const ownedSequence = { ...sequence, therapistId: sequence.therapistId || therapist?.id || initialAdministrator.id };
     setSequences((current) => exists ? current.map((item) => item.id === ownedSequence.id ? ownedSequence : item) : [...current, ownedSequence]);
-    appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "sequence_changed", revision: backendRevision.current, changedSequences: 1, sequenceCount: exists ? sequences.length : sequences.length + 1 });
+    appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "sequence_changed", revision: cloud.revision(), changedSequences: 1, sequenceCount: exists ? sequences.length : sequences.length + 1 });
     setActiveSequenceId(ownedSequence.id);
     setEditingSequence(null);
     notify(exists ? "Sequenza rinominata" : "Nuova sequenza creata");
@@ -1455,14 +1002,12 @@ function HomePageContent() {
     if (logoutInFlight.current) return;
     logoutInFlight.current = true;
     setLogoutState("pending");
-    if (backendSaveTimer.current !== null) window.clearTimeout(backendSaveTimer.current);
-    backendSaveTimer.current = null;
-    const snapshot = backendStateForStorage(localBootstrapSnapshot.current);
-    const baseline = lastSyncedBackendState.current;
-    const pendingChange = baseline ? buildStateChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current) : null;
+    cloud.cancelScheduledSave();
+    const snapshot = cloud.currentSnapshot();
+    const hasBaseline = cloud.hasBaseline();
+    const pendingChange = cloud.pendingChange(snapshot);
     if (pendingChange) storePendingCloudSave(pendingChange);
-    lastStateReadTag.current = "";
-    lastStateReadAdultId.current = null;
+    cloud.resetReadScope();
     localStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     sessionStorage.removeItem(THERAPIST_SESSION_STORAGE_KEY);
     exitController();
@@ -1472,8 +1017,8 @@ function HomePageContent() {
     try {
       // Finish queued/profile writes under the old cookie before revoking it.
       // A failed flush remains in the existing offline queue, never discarded.
-      if (loggedInTherapistId && backendInitialized && baseline) await enqueueBackendSave(snapshot).catch(() => undefined);
-      else await backendSaveQueue.current.catch(() => undefined);
+      if (loggedInTherapistId && backendInitialized && hasBaseline) await enqueueBackendSave(snapshot).catch(() => undefined);
+      else await cloud.saveQueue().catch(() => undefined);
       await logoutFromCloud((input, init) => fetchWithTimeout(input, init, 6500));
       setBackendStatus("local");
       setLogoutState("idle");
@@ -1512,7 +1057,7 @@ function HomePageContent() {
     return <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} />}{toast && <div className="toast" role="status"><Check size={18} />{toast}</div>}</main></AudioVolumeContext.Provider>;
   }
   if (!allLocalDataLoaded) return <LoadingScreen label="Caricamento dati…" stalled={localLoadSlow} />;
-  if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={() => setBackendRetryKey((current) => current + 1)} onContinueLocal={() => { localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current); backendHydrating.current = false; setBackendStatus("local"); }} />;
+  if (!backendInitialized && (backendStatus === "loading" || backendStatus === "migrating")) return <LoadingScreen label={backendStatus === "migrating" ? "Trasferimento dei dati nel cloud…" : "Sincronizzazione dei dati…"} stalled onRetry={cloud.retryLoad} onContinueLocal={cloud.fallBackToLocal} />;
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin defaultEmail={therapists[0]?.email ?? ""} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}</>;
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild && view === "caa") return <div className="app-shell"><Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} /><main className="main-content"><header className="topbar"><button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Apri menu"><Menu /></button><button className="ghost-button" onClick={() => navigate("home")}>Torna alla scelta del profilo</button><AppVersionBadge /></header><CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} /></main></div>;
@@ -1541,8 +1086,8 @@ function HomePageContent() {
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
-      {showUpload && <UploadDialog kind={showUpload} onClose={() => setShowUpload(null)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await persistLibraryImmediately([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Elemento locale · errore cloud: ${lastBackendSaveError.current}`); } catch { notify("Impossibile salvare l’elemento"); } }} />}
-      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { if (!libraryItemWasEdited({ ...hydrateSyllables(editingItem), article: articleFor(editingItem) ?? null }, updated)) { setEditingItem(null); notify("Nessuna modifica da salvare"); return; } let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await persistLibraryImmediately(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Modifica locale · errore cloud: ${lastBackendSaveError.current}`); } catch { notify("Impossibile salvare le modifiche"); } }} />}
+      {showUpload && <UploadDialog kind={showUpload} onClose={() => setShowUpload(null)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await cloud.persistLibraryNow([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Elemento locale · errore cloud: ${cloud.lastSaveError()}`); } catch { notify("Impossibile salvare l’elemento"); } }} />}
+      {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { if (!libraryItemWasEdited({ ...hydrateSyllables(editingItem), article: articleFor(editingItem) ?? null }, updated)) { setEditingItem(null); notify("Nessuna modifica da salvare"); return; } let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await cloud.persistLibraryNow(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Modifica locale · errore cloud: ${cloud.lastSaveError()}`); } catch { notify("Impossibile salvare le modifiche"); } }} />}
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
       {showBuilder && <ExerciseBuilder categorySymbols={categorySymbols} kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
