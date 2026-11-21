@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 2 novembre 2026
+**Aggiornato:** 21 novembre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -8,6 +8,9 @@
 
 ## Completato
 
+- [x] Refactor di `app/page.tsx` (da 3.595 a circa 1.100 righe) senza modifiche di comportamento: moduli per area in `app/features/*` (accesso, navigazione, home, libreria, esercizi, sessione con un file per attività, progressi, profili, impostazioni, console remota) e codice comune in `app/shared/*`. Stato persistito e sincronizzazione cloud estratti in `useAppData` e `useCloudSync`, con un solo `applyBackendState` al posto di tre copie e un'API esplicita (`saveNow`, `isSynced`, `pendingChange`, `cancelScheduledSave`, `fallBackToLocal`…) per aggiornamento app, condivisione e logout. Componenti condivisi `Modal`/`ConfirmDialog`/`PageHeader`/`PanelHeading`/`CheckLine`/`PinField` al posto di 17 modali e delle intestazioni duplicate; tutte le modali si chiudono con Esc (eccetto il ripristino sessione) e gestiscono il focus. Durata dell'uscita protetta unificata a 2 secondi (i messaggi dicevano 4). Nessuna migrazione D1, nessun cambio di API, cache PWA o APK.
+- [x] Verifiche del refactor: 269 test, typecheck e build verdi; lint senza errori, con i cinque avvisi preesistenti. Smoke test Playwright locale (Worker + D1 locale, API autenticate simulate) su 10 viste × desktop/mobile e sulle sei tipologie di esercizio avviate dall'avvio rapido, con aiuto, uscita protetta e ripristino: testo visibile identico alla versione precedente e nessun errore nuovo. Non coperti: QR/telefono reale, conflitti di salvataggio reali, Android.
+- [x] CI GitHub (`.github/workflows/ci.yml`) con lint, typecheck, test e build; `pnpm test` aggiunto anche alla pipeline GitLab. `AGENTS.md` allineato all'ADR 0011. ADR duplicati 0005 distinti in 0005a/0005b, con indice `docs/adr/README.md`. Proposte ADR 0022 (staging), 0023 (backup e ripristino) e 0024 (distribuzione APK), in attesa di approvazione.
 - [x] Apertura delle storie CAA ricevute corretta: navigazione documento tra shell privata e lettore `/caa?share=…`, anche per “Home / Accedi”, senza cambiare autenticazione, autorizzazioni, scadenza o contenuti. Test browser esteso al clic reale sul titolo (falliva prima della correzione), lettura non modificabile, ritorno alla home e riapertura dopo ricaricamento. Cache PWA v58.
 - [x] Correzione ricevute CAA: regressione browser completa superata dopo la modifica, insieme a typecheck, build e 269 test; lint senza errori, con i cinque avvisi preesistenti sulle immagini dinamiche. Nessuna migrazione o nuova APK.
 
@@ -148,9 +151,11 @@
 5. Verificare sul D1 pubblicato che la diagnostica resti `ready` e che storico e statistiche siano equivalenti.
 6. Spostare validazione, resize e varianti immagini nel Worker mantenendo R2 privato.
 7. Completare test end-to-end desktop/mobile, accessibilità e sicurezza.
-8. Definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
-9. Separare staging e produzione Cloudflare e aggiungere una promozione protetta fra i due ambienti.
-10. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
+8. Approvare ADR 0023 e definire retention, backup e prova di ripristino D1/R2; solo dopo valutare il ritiro del mirror JSON.
+9. Approvare ADR 0022 e separare staging e produzione Cloudflare con una promozione protetta fra i due ambienti.
+10. Approvare ADR 0024 e spostare gli APK fuori dal repository.
+11. Correggere lo scorrimento orizzontale a 768–800 px (Oggi, Configurazione, Profili), il contrasto del testo secondario e i testi sotto 12 px emersi dalla revisione UI.
+12. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 
 ## Verifiche della versione corrente
 
