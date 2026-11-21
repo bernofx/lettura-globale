@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Puzzle a incastro in Giochi con 4 × 4, 5 × 4 e 5 × 5. Immagine Casa, scelta da Libreria o file di prova dal dispositivo. Vassoio riordinabile, aggancio dei pezzi, guida e X. Cache PWA v70.
+
 - [x] Palloncini è disponibile nel catalogo Giochi come partita libera con ondate, suono dello scoppio, colonna sonora dei giochi e uscita dalla X. Nel dettaglio compare il nome del gioco, con freccia e testo di Torna ai giochi sulla stessa riga. Cache PWA v69.
 
 - [x] Durante Colorare e i palloncini, Indietro ed Esc lasciano il gioco aperto. La X chiude il gioco e ripristina la navigazione normale. Cache PWA v68.

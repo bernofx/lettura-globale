@@ -206,9 +206,9 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   assert.equal(await evaluate(documentFitsWidth), true, "profile selection fits a narrow phone");
   await button("Apri Giochi");
-  await wait("document.querySelectorAll('.game-picker button').length === 2");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.game-picker button')].map(button => button.textContent.trim())"), ["Colorare", "Palloncini"]);
-  assert.equal(await evaluate("document.querySelectorAll('.game-picker button .coloring-card-art').length"), 2);
+  await wait("document.querySelectorAll('.game-picker button').length === 3");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.game-picker button')].map(button => button.textContent.trim())"), ["Colorare", "Palloncini", "Puzzle a incastro"]);
+  assert.equal(await evaluate("document.querySelectorAll('.game-picker button .coloring-card-art').length"), 3);
   assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Giochi");
   await button("Colorare");
   await wait("document.querySelectorAll('.coloring-card').length >= 24");
@@ -459,6 +459,89 @@ try {
   await wait(`window.testMusic.stops === ${stopsBeforeBalloons} + 1`);
   assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Palloncini");
   await send("Emulation.setEmulatedMedia", { features: [] });
+  await button("Torna ai giochi");
+  await button("Puzzle a incastro");
+  await wait("document.querySelector('.puzzle-setup')");
+  assert.equal(await evaluate(documentFitsWidth), true, "puzzle setup fits a narrow phone");
+  await evaluate("document.querySelector('.puzzle-setup select').value='5x4'; document.querySelector('.puzzle-setup select').dispatchEvent(new Event('change',{bubbles:true}))");
+  await evaluate(`(() => {
+    const input = document.querySelector('.puzzle-setup input[type=file]');
+    const photo = document.createElement('canvas');
+    photo.width = 1280;
+    photo.height = 720;
+    const ctx = photo.getContext('2d');
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(0, 0, 1280, 720);
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(0, 0, 100, 720);
+    ctx.fillStyle = '#00f';
+    ctx.fillRect(1180, 0, 100, 720);
+    photo.toBlob(blob => {
+      const inputData = new DataTransfer();
+      inputData.items.add(new File([blob], 'panoramica-sintetica.png', {type:'image/png'}));
+      input.files = inputData.files;
+      input.dispatchEvent(new Event('change', {bubbles:true}));
+    });
+  })()`);
+  await wait("document.querySelectorAll('.puzzle-setup select')[1].value === 'device'");
+  await viewport(568, 320);
+  await button("Inizia");
+  await wait("document.querySelectorAll('.puzzle-tray button').length === 20");
+  await wait("document.querySelector('.puzzle-piece').offsetWidth >= 44");
+  assert.equal(await evaluate("document.querySelector('.puzzle-board canvas').width / document.querySelector('.puzzle-board canvas').height"), 1.25);
+  const center = (selector) => evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x:r.left+r.width/2,y:r.top+r.height/2,id:1 }; })()`);
+  const tile = await center(".puzzle-tray button:last-child");
+  const below = await center(".puzzle-tray button:nth-child(8)");
+  const tileAt = ({x,y}) => evaluate("document.elementFromPoint(" + x + "," + y + ")?.closest('button')?.dataset.piece");
+  const topId = await tileAt(tile);
+  const belowId = await tileAt(below);
+  assert.ok(topId && belowId && topId !== belowId);
+  for (const [from,to] of [[tile,below],[below,tile]]) {
+    await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+    await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [to] });
+    await touch("touchEnd");
+    assert.equal(await tileAt(below), from === tile ? topId : belowId);
+  }
+  await assertGameIgnoresBack(".puzzle-dialog[open]");
+  await button("Mostra immagine");
+  assert.ok(await evaluate(`(() => {
+    const canvas = document.querySelector('.puzzle-board canvas');
+    const ctx = canvas.getContext('2d');
+    const left = ctx.getImageData(12, 215, 1, 1).data;
+    const right = ctx.getImageData(canvas.width-13, 215, 1, 1).data;
+    return left[0] > 220 && left[2] < 40 && right[2] > 220 && right[0] < 40;
+  })()`), "the guide keeps both sides of a wide photo");
+  for (let index = 0; index < 20; index++) {
+    const piece = `document.querySelector('.puzzle-piece[data-piece="${index}"]')`;
+    await evaluate(`${piece}.click()`);
+    await wait(`${piece}.getAttribute('aria-pressed') === 'true'`);
+    await evaluate("document.querySelectorAll('.puzzle-slots button')[" + index + "].click()");
+    await wait(`!${piece}`);
+  }
+  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Puzzle completato!'");
+  await button("Esci dal puzzle");
+  await wait("!history.state?.lgGameGuard");
+  for (const [size, pieces] of [["4x4",16],["5x5",25]]) {
+    await viewport(320, 800);
+    await evaluate("document.querySelector('.puzzle-setup select').value="+JSON.stringify(size)+"; document.querySelector('.puzzle-setup select').dispatchEvent(new Event('change',{bubbles:true}))");
+    await button("Inizia");
+    await wait("document.querySelectorAll('.puzzle-tray button').length === "+pieces);
+    await wait("document.querySelector('.puzzle-dialog').dataset.rotated === 'true'");
+    if (size === "5x5") {
+      const from = await center(".puzzle-tray button:last-child");
+      const id = Number(await tileAt(from));
+      const to = await center(".puzzle-slots button:nth-child(" + (id + 1) + ")");
+      await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+      await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [to] });
+      await touch("touchEnd");
+      await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === '1/25 pezzi'");
+      await viewport(568, 320);
+      await wait("document.querySelector('.puzzle-dialog').dataset.rotated === 'false'");
+      await wait("[...document.querySelectorAll('.puzzle-piece')].every(piece => piece.offsetWidth >= 44)");
+    }
+    await button("Esci dal puzzle");
+    await wait("!history.state?.lgGameGuard");
+  }
   await button("Apri menu");
   await button("Libreria");
   await wait("document.querySelector('.game-soundtrack-current strong')?.textContent === 'coloring-game.mp3'");
@@ -496,6 +579,7 @@ try {
   assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
   console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
   console.log("PASS Palloncini: dedicated detail page, playable touch targets, new waves, uploaded soundtrack and close button.");
+  console.log("PASS Puzzle: 16, 20 and 25 pieces, device image, touch stacking, completion, rotation and protected exit.");
   console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {
