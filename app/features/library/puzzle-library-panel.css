@@ -1,23 +1,3 @@
-.puzzle-library-form {
-  display: grid;
-  gap: 12px;
-  justify-items: start;
-  margin-bottom: 16px;
-}
-
-.puzzle-library-form > label:first-child {
-  display: grid;
-  gap: 6px;
-  width: min(100%, 380px);
-  min-width: 0;
-}
-
-.puzzle-library-form input[type=file] {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-}
-
 .puzzle-library-art {
   background-position: center;
   background-size: contain;

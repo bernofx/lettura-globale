@@ -611,16 +611,25 @@ try {
 
   await button("Apri menu");
   await button("Libreria");
-  await wait("document.querySelector('.puzzle-library input[type=file]')");
+  await wait("document.querySelector('.puzzle-library .section-heading button.primary-button')?.textContent === 'Aggiungi immagini'");
+  await button("Aggiungi immagini");
+  await wait("document.querySelector('.puzzle-upload-dialog .drop-zone') && history.state?.lgModal");
+  assert.equal(await evaluate(documentFitsWidth), true, "the puzzle upload dialog fits a narrow phone");
+  await evaluate("history.back()");
+  await wait("!document.querySelector('.puzzle-upload-dialog') && document.querySelector('.nav-item.active')?.textContent === 'Libreria'");
+  await button("Aggiungi immagini");
+  await wait("document.querySelector('.puzzle-upload-dialog input[type=file]')?.multiple");
   const libraryDocument = await send("DOM.getDocument");
-  const files = await send("DOM.querySelector", { nodeId: libraryDocument.root.nodeId, selector: ".puzzle-library input[type=file]" });
+  const files = await send("DOM.querySelector", { nodeId: libraryDocument.root.nodeId, selector: ".puzzle-upload-dialog input[type=file]" });
   await send("DOM.setFileInputFiles", {
     nodeId: files.nodeId,
     files: ["casa", "giochi"].map(name => new URL("../public/images/categories/" + name + ".webp", import.meta.url).pathname),
   });
-  await evaluate("document.querySelector('.puzzle-library input[type=checkbox]').click()");
-  await wait("document.querySelector('.puzzle-library button[type=submit]:not(:disabled)')");
+  await wait("document.querySelector('.puzzle-upload-dialog .drop-zone strong')?.textContent === '2 immagini selezionate'");
+  await evaluate("document.querySelector('.puzzle-upload-dialog input[type=checkbox]').click()");
+  await wait("document.querySelector('.puzzle-upload-dialog button[type=submit]:not(:disabled)')");
   await button("Carica immagini");
+  await wait("!document.querySelector('.puzzle-upload-dialog') && !history.state?.lgModal");
   await wait("[...document.querySelectorAll('.puzzle-library [role=status]')].some(node => node.textContent.includes('in attesa di sincronizzazione'))");
   assert.equal(puzzleUploads.size, 1, "an unavailable upload is queued while the other image is saved");
   postponePuzzleUpload = false;
