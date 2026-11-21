@@ -12,7 +12,15 @@ const burstDirections = Array.from({ length: 8 }, (_, index) => ({
   "--burst-angle": `${index * 45}deg`,
 } as CSSProperties));
 
-export function SequenceCelebration({ onPop, onClose, continuous = false, startMusic, musicVolume = 0 }: { onPop?: () => void; onClose: () => void; continuous?: boolean; startMusic?: (volume: number) => RewardMusicPlayer; musicVolume?: number }) {
+export function SequenceCelebration({ onPop, onClose, mode = "completion", startMusic, musicVolume = 0 }: {
+  onPop?: () => void;
+  onClose: () => void;
+  mode?: "completion" | "reward" | "game";
+  startMusic?: (volume: number) => RewardMusicPlayer;
+  musicVolume?: number;
+}) {
+  const continuous = mode !== "completion";
+  const isGame = mode === "game";
   const music = useRef<RewardMusicPlayer | null>(null);
   const [musicNeedsStart, setMusicNeedsStart] = useState(false);
   const volume = useRef(musicVolume);
@@ -66,7 +74,9 @@ export function SequenceCelebration({ onPop, onClose, continuous = false, startM
     setPopCount((count) => count + 1);
     onPop?.();
   };
-  return <div className="sequence-celebration" role="dialog" aria-modal="true" aria-label={`${continuous ? "Premio" : "Festa di fine sequenza"}: tocca i palloncini per farli scoppiare`} style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
+  return <div className="sequence-celebration" role={isGame ? undefined : "dialog"} aria-modal={isGame ? undefined : true}
+    aria-label={isGame ? undefined : `${mode === "reward" ? "Premio" : "Festa di fine sequenza"}: tocca i palloncini per farli scoppiare`}
+    style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
     onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); }
       if (event.key !== "Tab") return;

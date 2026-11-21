@@ -1123,7 +1123,7 @@ function HomePageContent() {
       {exitPinOpen && <SessionExitDialog therapist={therapist} onCancel={() => setExitPinOpen(false)} onConfirm={closeActiveSession} />}
       {recoveryCandidate && <SessionRecoveryDialog saved={recoveryCandidate} childName={children.find((child) => child.id === recoveryCandidate.childId)?.firstName ?? "il bambino"} onResume={resumeRecoveredSession} onDiscard={discardRecoveredSession} />}
       {toast && <div className={sessionActive ? "toast toast-in-session" : "toast"} role="status"><Check size={18} />{toast}</div>}
-      {rewardActive && sessionActive && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="remote-reward" continuous onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
+      {rewardActive && sessionActive && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="remote-reward" mode="reward" onPop={playBalloonPopSound} onClose={() => changeReward(false)} />}
       {celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} key="completion-reward" onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}
     </div>
     </RewardActiveContext.Provider>

@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Palloncini è disponibile nel catalogo Giochi come partita libera con ondate, suono dello scoppio, colonna sonora dei giochi e uscita dalla X. Nel dettaglio compare il nome del gioco, con freccia e testo di Torna ai giochi sulla stessa riga. Cache PWA v69.
+
 - [x] Durante Colorare e i palloncini, Indietro ed Esc lasciano il gioco aperto. La X chiude il gioco e ripristina la navigazione normale. Cache PWA v68.
 
 - [x] Colorare usa tutto il pannello per il foglio. Il disegno cresce senza perdere le proporzioni, lo sfondo colorabile arriva ai bordi e Musica ed Esci sono nella colonna degli strumenti. Cache PWA v67.
