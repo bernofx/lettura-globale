@@ -14,6 +14,8 @@ Il catalogo comprende 24 disegni originali creati per Lettura Globale. Il riprod
 
 Il dialogo segue dimensioni e posizione di `VisualViewport` e compensa localmente la scala, così pannelli e tasto Esci sono accessibili anche se la pagina è ingrandita. Se il viewport è più alto che largo, l’interfaccia ruota di 90 gradi e il canvas trasforma le coordinate dei tocchi. Il browser gestisce il gesto a due dita sul disegno. Una variazione del viewport conclude l’eventuale tratto in corso prima di adattare la superficie.
 
+Durante Colorare e i palloncini, l’app usa un passo di cronologia nello stesso documento per assorbire Indietro in silenzio. Esc lascia il gioco aperto. L’uscita dalla X rimuove il passo attivo. I palloncini mantengono il timer della festa finale e il comando remoto del premio.
+
 Pennello, pastello e secchio sono disposti in una colonna verticale compatta, a fianco della colonna scorrevole dei colori. Musica ed Esci sono sopra le due colonne, così il foglio può occupare tutta l’altezza disponibile.
 
 Il canvas riempie il pannello. Il disegno scala uniformemente e i margini del foglio diventano parte dello sfondo colorabile. I segni usano le coordinate del disegno, così restano al loro posto anche quando cambia la larghezza del foglio. La selezione privilegia le zone sovrapposte e la figura copre i segni dipinti sullo sfondo.

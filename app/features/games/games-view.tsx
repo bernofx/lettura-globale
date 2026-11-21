@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, VolumeX, X } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
 import { DEFAULT_GAME_SOUNDTRACK, GAME_SOUNDTRACK_URL } from "../../domain/game-soundtrack";
 import { createRewardMusic, type RewardMusicPlayer } from "../../domain/reward-soundtrack";
@@ -45,11 +45,17 @@ async function loadGameSoundtrack(context: AudioContext, signal: AbortSignal) {
   return standard.ok ? context.decodeAudioData(await standard.arrayBuffer()) : null;
 }
 
-export function GamesView({ soundVolume }: { soundVolume: number }) {
+export function GamesView({ soundVolume, onPlayingChange }: { soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
   const [selectedGame, setSelectedGame] = useState<GameId | null>(null);
   const [game, setGame] = useState<{ page: ColoringPage; painting: ColoringCanvas } | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const artwork = useRef(new Map<string, ColoringCanvas>());
+  const playing = game !== null;
+  useLayoutEffect(() => {
+    if (!playing) return;
+    onPlayingChange(true);
+    return () => onPlayingChange(false);
+  }, [onPlayingChange, playing]);
 
   function paintingFor(page: ColoringPage) {
     const existing = artwork.current.get(page.id);
@@ -304,10 +310,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   }
 
   return (
-    <dialog ref={dialog} className="coloring-dialog" aria-label="Colorare" onClick={() => music.current?.retry()} onCancel={event => {
-      event.preventDefault();
-      onClose();
-    }}>
+    <dialog ref={dialog} className="coloring-dialog" aria-label="Colorare" onClick={() => music.current?.retry()} onCancel={event => event.preventDefault()}>
       <div className="coloring-workspace">
         <div className="coloring-board">
           <canvas

@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Durante Colorare e i palloncini, Indietro ed Esc lasciano il gioco aperto. La X chiude il gioco e ripristina la navigazione normale. Cache PWA v68.
+
 - [x] Colorare usa tutto il pannello per il foglio. Il disegno cresce senza perdere le proporzioni, lo sfondo colorabile arriva ai bordi e Musica ed Esci sono nella colonna degli strumenti. Cache PWA v67.
 
 - [x] Giochi mostra un catalogo di tessere con immagine e nome. Colorare apre la galleria e dispone subito il gioco in orizzontale, con tocchi e zoom adattati al viewport. Libreria → Audio permette di ascoltare, caricare e rimuovere la colonna sonora MP3 dell’account su R2. Cache PWA v66.

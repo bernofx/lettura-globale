@@ -19,6 +19,7 @@ import { SequenceCelebration } from "./components/sequence-celebration";
 import { listenForAudioGestures } from "./domain/audio-activation";
 import { CaaStoriesView } from "./components/caa-stories-view";
 import { GamesView } from "./features/games/games-view";
+import { useGameBackGuard } from "./features/games/use-game-back-guard";
 import { useCaaStories } from "./use-caa-stories";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents } from "./domain/session-events";
 import { buildSessionHistoryItems, type SessionHistoryRecord } from "./domain/session-history";
@@ -108,6 +109,7 @@ function HomePageContent() {
   const [soundEffects, setSoundEffects] = useStoredState<boolean>("lg-sound-effects", true);
   const [soundVolume, setSoundVolume] = useStoredState<number>("lg-sound-volume", 100, (saved) => Math.min(100, Math.max(0, Number(saved) || 0)));
   const [celebratingSequence, setCelebratingSequence] = useState(false);
+  const [standaloneGameOpen, setStandaloneGameOpen] = useState(false);
   const [rewardActive, setRewardActive] = useUpdateState("root:rewardActive", false);
   const rewardActiveRef = useRef(rewardActive);
   const changeReward = useCallback((active: boolean) => {
@@ -170,6 +172,7 @@ function HomePageContent() {
   const modalHistoryMarker = useRef<string | null>(null);
   const ignoreNextModalPop = useRef(false);
   const modalOpen = showUpload || showBuilder || Boolean(editingSequence) || Boolean(pendingExerciseDelete) || Boolean(pendingSequenceDelete) || Boolean(editingItem) || Boolean(pendingLibraryDelete) || Boolean(pendingDelete) || pendingStatsReset || Boolean(pendingHistoryDelete) || exitPinOpen || Boolean(recoveryCandidate) || saveJournalOpen;
+  const guardGameBack = useGameBackGuard((view === "games" && standaloneGameOpen) || celebratingSequence || (sessionActive && rewardActive));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -286,6 +289,7 @@ function HomePageContent() {
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
+      if (guardGameBack()) return;
       if (ignoreNextModalPop.current) {
         ignoreNextModalPop.current = false;
         return;
@@ -321,7 +325,7 @@ function HomePageContent() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [notify, sessionActive, setSessionReady, setView]);
+  }, [guardGameBack, notify, sessionActive, setSessionReady, setView]);
 
   const cloud = useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify });
   const { backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave } = cloud;
@@ -1073,7 +1077,7 @@ function HomePageContent() {
           <button className="ghost-button" onClick={() => navigate("home")}>Torna alla scelta del profilo</button>
           <AppVersionBadge />
         </header>
-        {view === "games" ? <GamesView soundVolume={effectiveSoundVolume / 100} /> : (
+        {view === "games" ? <GamesView soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} /> : (
           <CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} />
         )}
       </main>
@@ -1101,7 +1105,7 @@ function HomePageContent() {
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "caa" && <CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} />}
-        {view === "games" && <GamesView soundVolume={effectiveSoundVolume / 100} />}
+        {view === "games" && <GamesView soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>

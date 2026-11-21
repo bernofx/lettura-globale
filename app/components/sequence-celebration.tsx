@@ -68,7 +68,7 @@ export function SequenceCelebration({ onPop, onClose, continuous = false, startM
   };
   return <div className="sequence-celebration" role="dialog" aria-modal="true" aria-label={`${continuous ? "Premio" : "Festa di fine sequenza"}: tocca i palloncini per farli scoppiare`} style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
     onKeyDown={(event) => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); }
       if (event.key !== "Tab") return;
       const controls = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([tabindex="-1"])'));
       const first = controls[0], last = controls[controls.length - 1];

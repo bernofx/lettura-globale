@@ -86,6 +86,23 @@ async function button(label) {
     .find(button => (button.getAttribute('aria-label') ?? button.textContent.trim()) === ${JSON.stringify(label)}).click()`);
 }
 
+async function assertGameIgnoresBack(selector) {
+  await wait("history.state?.lgGameGuard");
+  const state = await evaluate("history.state.lgGameGuard");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { currentIndex, entries } = await send("Page.getNavigationHistory");
+    const pops = await evaluate("window.testGamePops");
+    await send("Page.navigateToHistoryEntry", { entryId: entries[currentIndex - 1].id });
+    await wait(`window.testGamePops > ${pops}`);
+    assert.equal(await evaluate("history.state?.lgGameGuard"), state, "Back restored the active game's history guard");
+    assert.equal((await send("Page.getNavigationHistory")).currentIndex, currentIndex, "Back does not accumulate entries");
+    assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Back leaves the game open");
+  }
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Escape leaves the game open");
+}
+
 async function viewport(width, height) {
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: true });
   await wait(`innerWidth === ${width} && innerHeight === ${height}`);
@@ -158,6 +175,8 @@ try {
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
+    window.testGamePops = 0;
+    window.addEventListener("popstate", () => window.testGamePops++);
     const nativeStart = AudioBufferSourceNode.prototype.start;
     const nativeStop = AudioBufferSourceNode.prototype.stop;
     const nativeConnect = AudioBufferSourceNode.prototype.connect;
@@ -222,6 +241,9 @@ try {
   await touch("touchEnd");
   await assertPixel(-65, 145, red, "the expanded left margin is paintable");
   await wait("window.testMusic.starts === 1 && window.testMusic.gain?.value > 0");
+  await assertGameIgnoresBack(".coloring-dialog[open]");
+  await assertPixel(-65, 145, red, "Back preserves the current painting");
+  assert.equal(await evaluate("window.testMusic.stops"), 0, "Back does not interrupt the game's music");
   await viewport(800, 390);
   await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'false'");
   await wait(canvasFillsBoard);
@@ -317,6 +339,7 @@ try {
   writeFileSync("/tmp/lg-coloring-landscape.png", Buffer.from(screenshot.data, "base64"));
   await button("Esci");
   await wait("!document.querySelector('.coloring-dialog')");
+  await wait("!history.state?.lgGameGuard");
   await wait("window.testMusic.stops === 1");
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
@@ -405,12 +428,38 @@ try {
   await wait("document.querySelector('.game-soundtrack-current strong')?.textContent === 'coloring-game.mp3'");
   await button("Ripristina musica predefinita");
   await wait("document.querySelector('.game-soundtrack-current strong')?.textContent.includes('Calypso')");
+
+  await button("Apri menu");
+  await button("Sessione");
+  await wait("document.querySelector('.wizard-paths button')");
+  await evaluate("document.querySelector('.wizard-paths button').click()");
+  await wait("document.querySelector('.session-wizard').textContent.includes('Numero quantità')");
+  await evaluate("[...document.querySelectorAll('.session-wizard button')].find(button => button.textContent.startsWith('Numero quantità')).click()");
+  await evaluate(`(() => {
+    const input = [...document.querySelectorAll('.session-wizard label')].find(label => label.textContent.startsWith('Numero di turni')).querySelector('input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '1');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await button("Continua");
+  await wait("document.querySelector('.review-step')");
+  await button("Continua");
+  await wait("document.querySelector('.ready-screen')");
+  await button("Inizia");
+  await wait("document.querySelector('.quantity-session')");
+  await button("Numero errato");
+  await wait("document.querySelector('.sequence-celebration')");
+  await assertGameIgnoresBack(".sequence-celebration");
+  await button("Chiudi il gioco dei palloncini");
+  await wait("!document.querySelector('.sequence-celebration') && !history.state?.lgGameGuard");
+  assert.ok(await evaluate("Boolean(document.querySelector('.session-complete-screen'))"), "the X returns to the session summary");
+
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
   await send("Page.reload");
   await wait("document.querySelector('.topbar .app-version.has-update button')?.textContent === 'Aggiorna'");
   assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
   console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
+  console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {
   socket.close();
