@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Colorare usa tutto il pannello per il foglio. Il disegno cresce senza perdere le proporzioni, lo sfondo colorabile arriva ai bordi e Musica ed Esci sono nella colonna degli strumenti. Cache PWA v67.
+
 - [x] Giochi mostra un catalogo di tessere con immagine e nome. Colorare apre la galleria e dispone subito il gioco in orizzontale, con tocchi e zoom adattati al viewport. Libreria → Audio permette di ascoltare, caricare e rimuovere la colonna sonora MP3 dell’account su R2. Cache PWA v66.
 
 - [x] Lo sfondo del foglio in Colorare si colora con tutti gli strumenti, con i contorni che isolano ciascuna zona. Musica predefinita: estratto di «Tummy-Rumble Calypso» di DURU-AI (CC0). Cache PWA v65.

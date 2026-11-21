@@ -91,7 +91,7 @@ async function viewport(width, height) {
   await wait(`innerWidth === ${width} && innerHeight === ${height}`);
 }
 
-const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-heading button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
+const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-header-actions button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
   const bounds = element.getBoundingClientRect();
   const { offsetLeft, offsetTop, width, height } = visualViewport;
   return bounds.width > 0 && bounds.height > 0 &&
@@ -99,7 +99,21 @@ const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-headin
     bounds.right <= offsetLeft + width + 1 && bounds.bottom <= offsetTop + height + 1;
 })`;
 
+const canvasFillsBoard = `(() => {
+  const canvas = document.querySelector('.coloring-board canvas');
+  const board = canvas.parentElement;
+  return canvas.clientWidth === board.clientWidth && canvas.clientHeight === board.clientHeight &&
+    canvas.clientHeight >= document.querySelector('.coloring-dialog').clientHeight - 20 &&
+    canvas.width === canvas.clientWidth && canvas.height === canvas.clientHeight;
+})()`;
+
 const documentFitsWidth = "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1";
+
+function drawingPixel(x, y) {
+  return `const scale = Math.min(canvas.width / 720, canvas.height / 480);
+    const pixelX = (canvas.width - 720 * scale) / 2 + ${x} * scale;
+    const pixelY = (canvas.height - 480 * scale) / 2 + ${y} * scale;`;
+}
 
 async function touch(type, x, y) {
   let touchPoints = [];
@@ -107,19 +121,30 @@ async function touch(type, x, y) {
     const point = await evaluate(`(() => {
       const canvas = document.querySelector('.coloring-board canvas');
       const rect = canvas.getBoundingClientRect();
+      ${drawingPixel(x, y)}
       if (canvas.closest('dialog').dataset.rotated === 'true') {
-        return { x: rect.right - rect.width * ${y} / canvas.height,
-          y: rect.top + rect.height * ${x} / canvas.width };
+        return { x: rect.right - rect.width * pixelY / canvas.height,
+          y: rect.top + rect.height * pixelX / canvas.width };
       }
-      return { x: rect.left + rect.width * ${x} / canvas.width,
-        y: rect.top + rect.height * ${y} / canvas.height };
+      return { x: rect.left + rect.width * pixelX / canvas.width,
+        y: rect.top + rect.height * pixelY / canvas.height };
     })()`);
     touchPoints = [{ ...point, id: 1 }];
   }
   await send("Input.dispatchTouchEvent", { type, touchPoints });
 }
 
-const rgb = (x, y) => evaluate(`Array.from(document.querySelector('.coloring-board canvas').getContext('2d').getImageData(${x}, ${y}, 1, 1).data)`);
+const rgb = (x, y) => evaluate(`(() => {
+  const canvas = document.querySelector('.coloring-board canvas');
+  ${drawingPixel(x, y)}
+  return Array.from(canvas.getContext('2d').getImageData(Math.round(pixelX), Math.round(pixelY), 1, 1).data);
+})()`);
+async function assertPixel(x, y, expected, message) {
+  const actual = await rgb(x, y);
+  assert.ok(actual.every((channel, index) => Math.abs(channel - expected[index]) <= 2),
+    `${message} (actual ${actual}, expected ${expected})`);
+}
+
 const white = [255, 255, 255, 255];
 const red = [232, 66, 82, 255];
 const green = [43, 155, 88, 255];
@@ -171,10 +196,11 @@ try {
     canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0))`);
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
-  assert.equal(await evaluate("document.querySelector('.coloring-heading').textContent.trim()"), "Esci");
+  assert.equal(await evaluate("document.querySelector('.coloring-controls button[aria-label=Esci]').title"), "Esci");
   assert.equal(await evaluate("document.querySelector('.coloring-dialog').getAttribute('aria-label')"), "Colorare");
   await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'true'");
   await wait(gameFitsVisibleViewport);
+  await wait(canvasFillsBoard);
   const palette = await evaluate(`(() => {
     const bounds = document.querySelector('.coloring-colors').getBoundingClientRect();
     return { x: bounds.left + bounds.width / 5, y: bounds.top + bounds.height / 2, width: bounds.width };
@@ -190,17 +216,25 @@ try {
   await touch("touchStart", 130, 110);
   await touch("touchMove", 160, 110);
   await touch("touchEnd");
-  assert.deepEqual(await rgb(145, 110), red, "the brush follows the touch while the game is turned");
+  await assertPixel(145, 110, red, "the brush follows the touch while the game is turned");
+  await touch("touchStart", -65, 130);
+  await touch("touchMove", -65, 165);
+  await touch("touchEnd");
+  await assertPixel(-65, 145, red, "the expanded left margin is paintable");
   await wait("window.testMusic.starts === 1 && window.testMusic.gain?.value > 0");
   await viewport(800, 390);
   await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'false'");
+  await wait(canvasFillsBoard);
+  await assertPixel(-65, 145, red, "resizing preserves marks in the expanded margins");
   assert.equal(await evaluate("document.querySelector('.coloring-colors').scrollHeight > document.querySelector('.coloring-colors').clientHeight"), true);
   await viewport(568, 320);
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
   await wait(gameFitsVisibleViewport);
+  await wait(canvasFillsBoard);
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
   await wait("visualViewport.scale >= 1.99");
   await wait(gameFitsVisibleViewport);
+  await wait(canvasFillsBoard);
   assert.equal(await evaluate(`[...document.querySelectorAll('.coloring-tools button, .coloring-colors button')].every(button =>
     !button.textContent.trim() && button.hasAttribute('aria-label') && button.offsetWidth >= 44 && button.offsetHeight >= 44)`), true);
   assert.equal(await evaluate(`document.querySelector('.coloring-tools').getBoundingClientRect().right <=
@@ -223,9 +257,9 @@ try {
   await wait("window.testMusic.gain?.value === 0");
   await button("Musica di sottofondo");
   await wait("window.testMusic.gain?.value > 0");
-  assert.deepEqual(await rgb(315, 215), red, "brush works within the roof");
-  assert.deepEqual(await rgb(300, 210), red, "the stroke resumes inside its original area");
-  assert.deepEqual(await rgb(315, 272), white, "dragging past the roof leaves the wall untouched");
+  await assertPixel(315, 215, red, "brush works within the roof");
+  await assertPixel(300, 210, red, "the stroke resumes inside its original area");
+  await assertPixel(315, 272, white, "dragging past the roof leaves the wall untouched");
   const pinch = await evaluate(`(() => {
     const bounds = document.querySelector('.coloring-board canvas').getBoundingClientRect();
     return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height * 0.2, span: bounds.width * 0.4 };
@@ -246,8 +280,8 @@ try {
   await touch("touchStart", 115, 140);
   await touch("touchMove", 355, 135);
   await touch("touchEnd");
-  assert.deepEqual(await rgb(140, 140), red, "the paper outside the drawing can be painted");
-  assert.deepEqual(await rgb(355, 135), white, "a stroke on the background stays behind the figure");
+  await assertPixel(140, 140, red, "the paper outside the drawing can be painted");
+  await assertPixel(355, 135, white, "a stroke on the background stays behind the figure");
 
   await button("Pastello");
   await button("Blu");
@@ -255,27 +289,29 @@ try {
   await touch("touchMove", 360, 350);
   await touch("touchEnd");
   assert.notDeepEqual(await rgb(300, 350), white, "new contact paints the wall with the crayon");
-  assert.deepEqual(await rgb(355, 350), white, "crayon leaves the overlapping door untouched");
+  await assertPixel(355, 350, white, "crayon leaves the overlapping door untouched");
 
   await button("Secchio");
   await button("Verde");
   await touch("touchStart", 355, 350);
   await touch("touchEnd");
-  assert.deepEqual(await rgb(340, 330), green, "bucket fills all of the door");
-  assert.deepEqual(await rgb(235, 355), white, "bucket leaves the wall outside the door untouched");
-  assert.deepEqual(await rgb(315, 215), red, "bucket preserves existing strokes in other zones");
+  await assertPixel(340, 330, green, "bucket fills all of the door");
+  await assertPixel(235, 355, white, "bucket leaves the wall outside the door untouched");
+  await assertPixel(315, 215, red, "bucket preserves existing strokes in other zones");
   await button("Giallo");
   await touch("touchStart", 125, 140);
   await touch("touchEnd");
-  assert.deepEqual(await rgb(600, 420), yellow, "bucket fills the full background");
-  assert.deepEqual(await rgb(340, 330), green, "background fill preserves previously colored areas");
-  assert.deepEqual(await rgb(355, 135), white, "background fill leaves the unpainted figure white");
+  await assertPixel(600, 420, yellow, "bucket fills the full background");
+  await assertPixel(340, 330, green, "background fill preserves previously colored areas");
+  await assertPixel(355, 135, white, "background fill leaves the unpainted figure white");
   await viewport(390, 800);
   await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'true'");
+  await wait(canvasFillsBoard);
+  await assertPixel(-60, 160, yellow, "bucket covers the extended margins when they reappear");
   assert.ok(await evaluate("window.testMusic.gain?.value > 0"));
   await viewport(568, 320);
   await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'false'");
-  assert.deepEqual(await rgb(340, 330), green, "rotation preserves the current drawing");
+  await assertPixel(340, 330, green, "rotation preserves the current drawing");
 
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync("/tmp/lg-coloring-landscape.png", Buffer.from(screenshot.data, "base64"));
@@ -290,15 +326,28 @@ try {
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await wait(gameFitsVisibleViewport);
-  assert.deepEqual(await rgb(340, 330), green, "switching drawings preserves work until leaving Games");
+  await assertPixel(340, 330, green, "switching drawings preserves work until leaving Games");
   const exit = await evaluate(`(() => {
-    const bounds = document.querySelector('.coloring-heading button:last-child').getBoundingClientRect();
+    const bounds = document.querySelector('.coloring-controls button[aria-label=Esci]').getBoundingClientRect();
     return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, id: 1 };
   })()`);
   await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [exit] });
   await touch("touchEnd");
   await wait("!document.querySelector('.coloring-dialog[open]')");
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+  await viewport(390, 844);
+  await button("Tazza");
+  await wait("document.querySelector('.coloring-dialog[open]')");
+  await wait(gameFitsVisibleViewport);
+  await wait(canvasFillsBoard);
+  const portrait = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  writeFileSync("/tmp/lg-coloring-portrait.png", Buffer.from(portrait.data, "base64"));
+  const size = await evaluate(`(() => {
+    const canvas = document.querySelector('.coloring-board canvas');
+    return [canvas.clientWidth, canvas.clientHeight];
+  })()`);
+  console.log("PASS Tazza at 390 × 844:", size.join(" × "), "px of paintable surface");
+  await button("Esci");
   await button("Torna ai giochi");
   await wait("document.querySelector('.game-picker')");
   await evaluate("history.back()");

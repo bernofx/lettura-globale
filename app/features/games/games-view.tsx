@@ -7,7 +7,7 @@ import { DEFAULT_GAME_SOUNDTRACK, GAME_SOUNDTRACK_URL } from "../../domain/game-
 import { createRewardMusic, type RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import { feedbackContext } from "../../shared/audio";
 import { PageHeader } from "../../shared/ui/headings";
-import { ColoringCanvas, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
+import { ColoringCanvas, coloringFrame, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import "./games-view.css";
 
 const tools = [
@@ -105,7 +105,6 @@ function DrawingThumbnail({ page }: { page: ColoringPage }) {
   useEffect(() => {
     const context = canvas.current?.getContext("2d");
     if (!context) return;
-    context.setTransform(1 / 3, 0, 0, 1 / 3, 0, 0);
     new ColoringCanvas(page).render(context);
   }, [page]);
 
@@ -124,18 +123,11 @@ type Stroke = {
   color: string;
 };
 
-function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean): ColoringPoint {
+function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean, frame: ReturnType<typeof coloringFrame>): ColoringPoint {
   const { left, top, right, width, height } = event.currentTarget.getBoundingClientRect();
-  if (rotated) {
-    return {
-      x: (event.clientY - top) / height * COLORING_WIDTH,
-      y: (right - event.clientX) / width * COLORING_HEIGHT,
-    };
-  }
-  return {
-    x: (event.clientX - left) / width * COLORING_WIDTH,
-    y: (event.clientY - top) / height * COLORING_HEIGHT,
-  };
+  const x = rotated ? (event.clientY - top) / height : (event.clientX - left) / width;
+  const y = rotated ? (right - event.clientX) / width : (event.clientY - top) / height;
+  return { x: frame.left + x * (frame.right - frame.left), y: frame.top + y * (frame.bottom - frame.top) };
 }
 
 function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic, onClose }: {
@@ -235,24 +227,40 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   }, []);
 
   useEffect(() => {
-    const context = canvas.current?.getContext("2d");
-    if (context) painting.render(context);
+    const surface = canvas.current;
+    const context = surface?.getContext("2d");
+    if (!surface || !context) return;
+
+    function fitCanvas() {
+      if (!surface || !context || !surface.clientWidth || !surface.clientHeight) return;
+      const density = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.round(surface.clientWidth * density);
+      const height = Math.round(surface.clientHeight * density);
+      if (surface.width !== width) surface.width = width;
+      if (surface.height !== height) surface.height = height;
+      painting.render(context);
+    }
+
+    const observer = new ResizeObserver(fitCanvas);
+    observer.observe(surface);
+    fitCanvas();
+    return () => observer.disconnect();
   }, [painting]);
 
   function start(event: PointerEvent<HTMLCanvasElement>) {
     if (event.button !== 0 || stroke.current) return;
     const context = event.currentTarget.getContext("2d");
     if (!context) return;
-    const point = pointOnDrawing(event, rotated.current);
+    const frame = coloringFrame(context.canvas.width, context.canvas.height);
+    const point = pointOnDrawing(event, rotated.current, frame);
     const area = painting.areaAt(context, point);
-    if (area < 0) return;
 
     if (tool === "fill") {
       painting.fill(area, color);
     } else {
       event.currentTarget.setPointerCapture(event.pointerId);
       stroke.current = { pointerId: event.pointerId, area, point, tool, color };
-      painting.stroke(area, point, point, color, tool);
+      painting.stroke(area, point, point, color, tool, frame);
     }
     painting.render(context);
   }
@@ -262,8 +270,9 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     if (!current || current.pointerId !== event.pointerId) return;
     const context = event.currentTarget.getContext("2d");
     if (!context) return;
-    const point = pointOnDrawing(event, rotated.current);
-    painting.stroke(current.area, current.point, point, current.color, current.tool);
+    const frame = coloringFrame(context.canvas.width, context.canvas.height);
+    const point = pointOnDrawing(event, rotated.current, frame);
+    painting.stroke(current.area, current.point, point, current.color, current.tool, frame);
     current.point = point;
     painting.render(context);
   }
@@ -299,22 +308,6 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
       event.preventDefault();
       onClose();
     }}>
-      <header className="coloring-heading">
-        <div className="coloring-header-actions">
-          <button
-            type="button"
-            className="ghost-button coloring-music-button"
-            onClick={onToggleMusic}
-            aria-pressed={musicEnabled && soundVolume > 0}
-            aria-label="Musica di sottofondo"
-            title={soundVolume > 0 ? "Musica di sottofondo" : "Audio generale disattivato"}
-            disabled={soundVolume <= 0}
-          >
-            {musicEnabled && soundVolume > 0 ? <Music2 size={21} aria-hidden="true" /> : <VolumeX size={21} aria-hidden="true" />}
-          </button>
-          <button type="button" className="ghost-button" onClick={onClose}><X size={20} aria-hidden="true" /> Esci</button>
-        </div>
-      </header>
       <div className="coloring-workspace">
         <div className="coloring-board">
           <canvas
@@ -331,6 +324,20 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
           />
         </div>
         <aside className="coloring-controls" aria-label="Materiale per colorare">
+          <div className="coloring-header-actions">
+            <button
+              type="button"
+              className="coloring-music-button"
+              onClick={onToggleMusic}
+              aria-pressed={musicEnabled && soundVolume > 0}
+              aria-label="Musica di sottofondo"
+              title={soundVolume > 0 ? "Musica di sottofondo" : "Audio generale disattivato"}
+              disabled={soundVolume <= 0}
+            >
+              {musicEnabled && soundVolume > 0 ? <Music2 size={21} aria-hidden="true" /> : <VolumeX size={21} aria-hidden="true" />}
+            </button>
+            <button type="button" aria-label="Esci" title="Esci" onClick={onClose}><X size={20} aria-hidden="true" /></button>
+          </div>
           <div role="group" aria-label="Strumenti" className="coloring-tools">
             {tools.map(({ id, label, icon: Icon }) => (
               <button key={id} type="button" aria-label={label} title={label} aria-pressed={tool === id} onClick={() => setTool(id)}>
