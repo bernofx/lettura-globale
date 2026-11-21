@@ -8,6 +8,9 @@
 
 ## Completato
 
+- [x] Colorare ampliato a 24 disegni originali. Strumenti a icone in fila accanto ai colori a pallini in una colonna scorrevole, con etichette accessibili. Musica originale a volume basso con comando dedicato, controllo audio generale e silenzio fuori dalla vista di gioco. Cache PWA v61.
+- [x] Verificati 271 test, build e typecheck. Lint con cinque avvisi preesistenti. In Chromium, controlli interamente visibili a 568 × 320 px, ultimo colore raggiungibile, 24 anteprime disegnate, gesti confinati e avvio, silenziamento e arresto del sottofondo.
+
 - [x] Giochi → Colorare con quattro disegni originali (cane, conchiglia, lumaca, casa), pennello e pastello confinati alla zona iniziale del gesto, secchio e tavolozza verticale. Accessibile anche prima di scegliere un bambino. Il gioco richiede orientamento orizzontale e conserva il lavoro in memoria mentre si passa fra i disegni. Integrato nella nuova struttura `app/features/games`. Cache PWA v60. Vedi ADR 0025.
 - [x] Verifiche del merge di Giochi: 271 test, typecheck e build superati. Lint senza errori, con cinque avvisi preesistenti. Test Chromium con dati sintetici per accesso senza bambino, cronologia, rotazione, pennello, pastello e secchio.
 

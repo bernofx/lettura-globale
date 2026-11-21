@@ -1,3 +1,5 @@
+import { extraColoringPages } from "./coloring-extra-pages";
+
 export const COLORING_WIDTH = 720;
 export const COLORING_HEIGHT = 480;
 
@@ -75,6 +77,7 @@ export const coloringPages = [
     ],
     details: ["M378 362 h.1"],
   },
+  ...extraColoringPages,
 ] as const;
 
 export type ColoringPage = typeof coloringPages[number];

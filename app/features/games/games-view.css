@@ -73,6 +73,12 @@
   font-size: clamp(21px, 4vh, 32px);
 }
 
+.coloring-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .coloring-heading .ghost-button {
   display: inline-flex;
   align-items: center;
@@ -80,9 +86,19 @@
   min-height: 44px;
 }
 
+.coloring-heading .coloring-music-button {
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+
+.coloring-music-button[aria-pressed="true"] {
+  color: var(--violet-dark);
+}
+
 .coloring-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(152px, 30vw, 268px);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: clamp(8px, 2vw, 18px);
   min-height: 0;
 }
@@ -113,9 +129,10 @@
 
 .coloring-controls {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px;
-  padding: clamp(5px, 1vw, 12px);
+  grid-template-columns: auto 50px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 6px;
+  padding: clamp(4px, 1vw, 10px);
   border: 1px solid var(--line);
   border-radius: var(--panel-radius, 22px);
   background: var(--paper, white);
@@ -123,16 +140,14 @@
 }
 
 .coloring-tools {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
 .coloring-controls button {
   color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: var(--control-radius, 14px);
@@ -145,53 +160,61 @@
   color: var(--violet-dark);
 }
 
-.coloring-tools button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px 1px;
-  min-height: 50px;
-  font-size: clamp(12px, 2vw, 13px);
+.coloring-controls button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
 }
 
 .coloring-colors {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  overflow-y: scroll;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden auto;
   overscroll-behavior: contain;
-  padding: 3px 4px;
+  scrollbar-width: thin;
+  padding: 3px 0;
 }
 
-.coloring-colors button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-  padding: 4px 7px;
-  min-height: 44px;
+.coloring-controls .coloring-colors button {
+  flex: 0 0 44px;
+  border: 0;
+  background: transparent;
   touch-action: pan-y;
 }
 
-.coloring-colors button svg {
-  margin-left: auto;
-  flex-shrink: 0;
+.coloring-colors button[aria-pressed="true"] .coloring-swatch {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
 }
 
 .coloring-swatch {
-  width: 25px;
-  height: 25px;
-  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border: 1px solid rgb(0 0 0 / 22%);
   border-radius: 50%;
+}
+
+.coloring-swatch svg {
+  color: #1c1725;
+  background: #fff;
+  border-radius: 50%;
+  padding: 2px;
 }
 
 .coloring-card:focus-visible,
 .coloring-dialog button:focus-visible {
   outline: 2px solid var(--violet);
   outline-offset: 2px;
+}
+
+.coloring-colors button:focus-visible {
+  outline-offset: -2px;
 }
 
 .coloring-rotate {

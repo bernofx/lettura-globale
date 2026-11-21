@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Paintbrush, PaintBucket, Pencil, RotateCw, X } from "lucide-react";
+import { Check, Music2, Paintbrush, PaintBucket, Pencil, RotateCw, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
+import { startBackgroundMusic } from "../../shared/audio";
 import { PageHeader } from "../../shared/ui/headings";
 import { ColoringCanvas, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import "./games-view.css";
@@ -22,8 +23,11 @@ const colors = [
   ["Bianco", "#ffffff"],
 ] as const;
 
-export function GamesView() {
+const COLORING_MUSIC = "/audio/coloring-game.mp3";
+
+export function GamesView({ soundVolume }: { soundVolume: number }) {
   const [game, setGame] = useState<{ page: ColoringPage; painting: ColoringCanvas } | null>(null);
+  const [musicEnabled, setMusicEnabled] = useState(true);
   const artwork = useRef(new Map<string, ColoringCanvas>());
 
   function paintingFor(page: ColoringPage) {
@@ -48,7 +52,16 @@ export function GamesView() {
           ))}
         </div>
       </section>
-      {game && <ColoringGame page={game.page} painting={game.painting} onClose={() => setGame(null)} />}
+      {game && (
+        <ColoringGame
+          page={game.page}
+          painting={game.painting}
+          soundVolume={soundVolume}
+          musicEnabled={musicEnabled}
+          onToggleMusic={() => setMusicEnabled(current => !current)}
+          onClose={() => setGame(null)}
+        />
+      )}
     </div>
   );
 }
@@ -57,12 +70,14 @@ function DrawingThumbnail({ page }: { page: ColoringPage }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const context = canvas.current?.getContext("2d");
-    if (context) new ColoringCanvas(page).render(context);
+    if (!context) return;
+    context.setTransform(1 / 3, 0, 0, 1 / 3, 0, 0);
+    new ColoringCanvas(page).render(context);
   }, [page]);
 
   return (
     <div className="coloring-card-art" style={{ backgroundColor: page.background }}>
-      <canvas ref={canvas} width={COLORING_WIDTH} height={COLORING_HEIGHT} aria-hidden="true" />
+      <canvas ref={canvas} width={COLORING_WIDTH / 3} height={COLORING_HEIGHT / 3} aria-hidden="true" />
     </div>
   );
 }
@@ -83,16 +98,44 @@ function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>): ColoringPoint {
   };
 }
 
-function ColoringGame({ page, painting, onClose }: {
+function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic, onClose }: {
   page: ColoringPage;
   painting: ColoringCanvas;
+  soundVolume: number;
+  musicEnabled: boolean;
+  onToggleMusic: () => void;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stroke = useRef<Stroke | null>(null);
+  const music = useRef<ReturnType<typeof startBackgroundMusic> | null>(null);
   const [tool, setTool] = useState<ColoringTool>("brush");
   const [color, setColor] = useState<string>(colors[0][1]);
+
+  useEffect(() => {
+    const player = startBackgroundMusic(COLORING_MUSIC, 0);
+    music.current = player;
+    return () => {
+      player.stop();
+      music.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const orientation = window.matchMedia("(orientation: landscape)");
+    function updateMusic() {
+      const audible = musicEnabled && orientation.matches && !document.hidden;
+      music.current?.setVolume(audible ? soundVolume * 0.55 : 0);
+    }
+    updateMusic();
+    orientation.addEventListener("change", updateMusic);
+    document.addEventListener("visibilitychange", updateMusic);
+    return () => {
+      orientation.removeEventListener("change", updateMusic);
+      document.removeEventListener("visibilitychange", updateMusic);
+    };
+  }, [musicEnabled, soundVolume]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -156,13 +199,26 @@ function ColoringGame({ page, painting, onClose }: {
   }
 
   return (
-    <dialog ref={dialog} className="coloring-dialog" aria-labelledby="coloring-title" onCancel={event => {
+    <dialog ref={dialog} className="coloring-dialog" aria-labelledby="coloring-title" onClick={() => music.current?.retry()} onCancel={event => {
       event.preventDefault();
       onClose();
     }}>
       <header className="coloring-heading">
         <h2 id="coloring-title">{page.title}</h2>
-        <button type="button" className="ghost-button" onClick={onClose}><X size={20} aria-hidden="true" /> Esci</button>
+        <div className="coloring-header-actions">
+          <button
+            type="button"
+            className="ghost-button coloring-music-button"
+            onClick={onToggleMusic}
+            aria-pressed={musicEnabled && soundVolume > 0}
+            aria-label="Musica di sottofondo"
+            title={soundVolume > 0 ? "Musica di sottofondo" : "Audio generale disattivato"}
+            disabled={soundVolume <= 0}
+          >
+            {musicEnabled && soundVolume > 0 ? <Music2 size={21} aria-hidden="true" /> : <VolumeX size={21} aria-hidden="true" />}
+          </button>
+          <button type="button" className="ghost-button" onClick={onClose}><X size={20} aria-hidden="true" /> Esci</button>
+        </div>
       </header>
       <div className="coloring-rotate">
         <RotateCw size={44} aria-hidden="true" />
@@ -186,18 +242,17 @@ function ColoringGame({ page, painting, onClose }: {
         <aside className="coloring-controls" aria-label="Materiale per colorare">
           <div role="group" aria-label="Strumenti" className="coloring-tools">
             {tools.map(({ id, label, icon: Icon }) => (
-              <button key={id} type="button" aria-pressed={tool === id} onClick={() => setTool(id)}>
+              <button key={id} type="button" aria-label={label} title={label} aria-pressed={tool === id} onClick={() => setTool(id)}>
                 <Icon size={22} aria-hidden="true" />
-                <span>{label}</span>
               </button>
             ))}
           </div>
           <div role="group" aria-label="Colori" className="coloring-colors">
             {colors.map(([label, value]) => (
-              <button key={value} type="button" aria-pressed={color === value} onClick={() => setColor(value)}>
-                <span className="coloring-swatch" style={{ backgroundColor: value }} aria-hidden="true" />
-                <span>{label}</span>
-                {color === value && <Check size={16} aria-hidden="true" />}
+              <button key={value} type="button" aria-label={label} title={label} aria-pressed={color === value} onClick={() => setColor(value)}>
+                <span className="coloring-swatch" style={{ backgroundColor: value }} aria-hidden="true">
+                  {color === value && <Check size={16} aria-hidden="true" />}
+                </span>
               </button>
             ))}
           </div>

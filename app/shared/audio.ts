@@ -98,11 +98,15 @@ function prepareFeedbackSound(url: string) {
   return feedbackSoundPreparation[url];
 }
 
-export function startRewardMusic(volume: number) {
+export function startBackgroundMusic(url: string, volume: number, playbackRange?: typeof rewardMusicRange) {
   return createRewardMusic(feedbackContext(), async () => {
-    await prepareFeedbackSound(REWARD_SOUNDTRACK.url);
-    return preparedFeedbackSounds[REWARD_SOUNDTRACK.url]?.buffer ?? null;
-  }, volume, rewardMusicRange);
+    await prepareFeedbackSound(url);
+    return preparedFeedbackSounds[url]?.buffer ?? null;
+  }, volume, playbackRange);
+}
+
+export function startRewardMusic(volume: number) {
+  return startBackgroundMusic(REWARD_SOUNDTRACK.url, volume, rewardMusicRange);
 }
 
 export function primeFeedbackSounds() {

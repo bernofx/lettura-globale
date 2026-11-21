@@ -1,10 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Colorare e novità per tablet e telefono",
+  title: "Colorare con nuovi disegni e musica",
   items: [
-    "Apri Giochi per colorare un cane, una conchiglia, una lumaca o una casa.",
-    "In orizzontale puoi scegliere tra pennello, pastello e secchio di riempimento.",
-    "Il colore rimane nella zona in cui hai iniziato il tratto, anche se il dito supera il bordo.",
+    "In Giochi trovi 24 disegni da colorare, fra animali, piante, oggetti e veicoli.",
+    "Strumenti a icone e tavolozza a pallini scorrevole lasciano più spazio al disegno.",
+    "La musica leggera di sottofondo si può spegnere dal gioco.",
     "Sui tablet in verticale il menu si apre dal pulsante in alto e le pagine non scorrono più di lato.",
     "Testi più grandi e più contrastati, e pulsanti più comodi da toccare.",
     "La Home mostra la sequenza attiva con i suoi esercizi; Configurazione permette di cercare e filtrare il catalogo.",

@@ -57,7 +57,8 @@ async function wait(expression) {
 }
 
 async function button(label) {
-  await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`);
+  await evaluate(`[...(document.querySelector('dialog[open]') ?? document).querySelectorAll('button')]
+    .find(button => (button.getAttribute('aria-label') ?? button.textContent.trim()) === ${JSON.stringify(label)}).click()`);
 }
 
 async function viewport(width, height) {
@@ -91,6 +92,22 @@ try {
   await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+    window.testMusic = { starts: 0, stops: 0 };
+    const nativeStart = AudioBufferSourceNode.prototype.start;
+    const nativeStop = AudioBufferSourceNode.prototype.stop;
+    const nativeConnect = AudioBufferSourceNode.prototype.connect;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      if (this.loop) window.testMusic.starts++;
+      return nativeStart.apply(this, args);
+    };
+    AudioBufferSourceNode.prototype.connect = function (target, ...args) {
+      if (this.loop && target instanceof GainNode) window.testMusic.gain = target.gain;
+      return nativeConnect.call(this, target, ...args);
+    };
+    AudioBufferSourceNode.prototype.stop = function (...args) {
+      if (this.loop) window.testMusic.stops++;
+      return nativeStop.apply(this, args);
+    };
     localStorage.setItem("lg-therapists", ${JSON.stringify(JSON.stringify([therapist]))});
     localStorage.setItem("lg-children", "[]");
     localStorage.setItem("lg-therapist-session", JSON.stringify({
@@ -101,7 +118,9 @@ try {
   await viewport(390, 800);
   await wait("document.querySelector('.child-choice-page')");
   await button("Apri Giochi");
-  await wait("document.querySelectorAll('.coloring-card').length === 4");
+  await wait("document.querySelectorAll('.coloring-card').length >= 24");
+  await wait(`[...document.querySelectorAll('.coloring-card canvas')].every(canvas =>
+    canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0))`);
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.coloring-workspace')).display"), "none");
@@ -109,11 +128,28 @@ try {
   await viewport(800, 390);
   assert.equal(await evaluate("document.querySelector('.coloring-rotate').checkVisibility()"), false);
   assert.equal(await evaluate("document.querySelector('.coloring-colors').scrollHeight > document.querySelector('.coloring-colors').clientHeight"), true);
+  await viewport(568, 320);
+  assert.equal(await evaluate(`[...document.querySelectorAll('.coloring-heading button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight && bounds.left >= 0;
+  })`), true);
+  assert.equal(await evaluate(`[...document.querySelectorAll('.coloring-tools button, .coloring-colors button')].every(button =>
+    !button.textContent.trim() && button.hasAttribute('aria-label') && button.offsetWidth >= 44 && button.offsetHeight >= 44)`), true);
+  assert.equal(await evaluate(`document.querySelector('.coloring-tools').getBoundingClientRect().right <=
+    document.querySelector('.coloring-colors').getBoundingClientRect().left`), true);
+  await evaluate("document.querySelector('.coloring-colors').scrollTop = document.querySelector('.coloring-colors').scrollHeight");
+  assert.equal(await evaluate(`document.querySelector('button[aria-label="Bianco"]').getBoundingClientRect().bottom <=
+    document.querySelector('.coloring-colors').getBoundingClientRect().bottom`), true);
 
   await touch("touchStart", 315, 183);
   await touch("touchMove", 315, 275);
   await touch("touchMove", 300, 210);
   await touch("touchEnd");
+  await wait("window.testMusic.starts === 1 && window.testMusic.gain?.value > 0");
+  await button("Musica di sottofondo");
+  await wait("window.testMusic.gain?.value === 0");
+  await button("Musica di sottofondo");
+  await wait("window.testMusic.gain?.value > 0");
   assert.deepEqual(await rgb(315, 215), red, "brush works within the roof");
   assert.deepEqual(await rgb(300, 210), red, "the stroke resumes inside its original area");
   assert.deepEqual(await rgb(315, 272), white, "dragging past the roof leaves the wall untouched");
@@ -139,13 +175,16 @@ try {
   assert.deepEqual(await rgb(235, 355), white, "bucket leaves the wall outside the door untouched");
   assert.deepEqual(await rgb(315, 215), red, "bucket preserves existing strokes in other zones");
   await viewport(390, 800);
-  await viewport(800, 390);
+  await wait("window.testMusic.gain?.value === 0");
+  await viewport(568, 320);
+  await wait("window.testMusic.gain?.value > 0");
   assert.deepEqual(await rgb(340, 330), green, "rotation preserves the current drawing");
 
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync("/tmp/lg-coloring-landscape.png", Buffer.from(screenshot.data, "base64"));
   await button("Esci");
   await wait("!document.querySelector('.coloring-dialog')");
+  await wait("window.testMusic.stops === 1");
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await button("Esci");
@@ -157,7 +196,7 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   await evaluate("history.forward()");
   await wait("document.querySelector('.games-page')");
-  console.log("PASS Coloring browser: global entry, portrait/landscape, touch clipping, crayon, bucket, and drawing changes.");
+  console.log("PASS Colorare: catalog, compact phone layout, scrolling palette, touch, rotation, and music lifecycle.");
 } finally {
   socket.close();
 }
