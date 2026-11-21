@@ -1,0 +1,174 @@
+import { Check, Save, Search, Settings, Sparkles, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { hasSameCategoryDistractors } from "../../domain/activity-generation";
+import { categoryImageError, type CategorySymbols } from "../../domain/category-images";
+import { availableForWordCategories, wordCategoryNames } from "../../domain/word-category-content";
+import { articleFor } from "../../domain/article-classification";
+import { NumericField } from "../../components/numeric-field";
+import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
+import { availableForRecognition, hasArtwork } from "../../domain/library-availability";
+import { type SessionActivity } from "../../domain/session-compilation";
+import { type QuantityObjectSet } from "../../domain/quantity-exercise";
+import { isSimpleSentenceScene, type SentenceDifficulty, sentenceMatchingAvailability, type SentenceOptionCount } from "../../domain/sentence-matching";
+import { CategoryExerciseOptions, CorrectMatchPronunciation, QuantityLearningOptions, RecognitionPresentationFields, RecognitionRandomParameterFields } from "./exercise-fields";
+import { FullTextItemPicker } from "../library/full-text-item-picker";
+import { Artwork } from "../../shared/artwork";
+import { type DistractorSource, type Exercise, type LibraryItem, type Presentation } from "../../shared/types";
+
+export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onClose, onSave }: { categorySymbols: CategorySymbols; kind: SessionActivity; exercise?: Exercise; library: LibraryItem[]; onClose: () => void; onSave: (exercise: Exercise) => void }) {
+  const initialPresentation = exercise?.presentation ?? "images";
+  const initialRecognitionLibrary = availableForRecognition(library, initialPresentation);
+  const initialPromptId = exercise?.promptId ?? initialRecognitionLibrary[0]?.id ?? "";
+  const [title, setTitle] = useState(exercise?.title ?? "");
+  const [promptId, setPromptId] = useState(initialPromptId);
+  const [options, setOptions] = useState<string[]>(exercise?.optionIds ?? initialRecognitionLibrary.slice(0, 3).map((item) => item.id));
+  const [recognitionMode, setRecognitionMode] = useState<"fixed" | "random">(exercise?.recognitionMode ?? (exercise ? "fixed" : "random"));
+  const [randomPromptMode, setRandomPromptMode] = useState<"random" | "fixed">(exercise?.recognitionMode === "random" && exercise.promptId ? "fixed" : "random");
+  const [recognitionItemIds, setRecognitionItemIds] = useState<string[]>(exercise?.recognitionItemIds ?? []);
+  const [recognitionCategories, setRecognitionCategories] = useState<string[]>(exercise?.recognitionCategories ?? []);
+  const [recognitionSyllables, setRecognitionSyllables] = useState<SyllableFilter>(exercise?.recognitionSyllables ?? "all");
+  const [namingItemIds, setNamingItemIds] = useState<string[]>(exercise?.namingItemIds ?? []);
+  const [namingCategories, setNamingCategories] = useState<string[]>(exercise?.namingCategories ?? []);
+  const [distractorCount, setDistractorCount] = useState<1 | 2 | 3 | 4>(exercise?.distractorCount ?? 3);
+  const [distractorSource, setDistractorSource] = useState<DistractorSource>(exercise?.distractorSource ?? "mixed");
+  const [exercisePresentation, setExercisePresentation] = useState<Presentation>(initialPresentation);
+  const [autoPronounce, setAutoPronounce] = useState(exercise?.autoPronounce ?? exercise?.presentation === "words");
+  const [itemSearch, setItemSearch] = useState("");
+  const articleCandidates = useMemo(() => library.filter((item) => hasArtwork(item) && articleFor(item)), [library]);
+  const [articleItemIds, setArticleItemIds] = useState<string[]>(exercise?.articleItemIds ?? articleCandidates.slice(0, 6).map((item) => item.id));
+  const availableCategories = useMemo(() => kind === "word-categories" ? wordCategoryNames(library) : Array.from(new Set(library.filter((item) => !item.categorySymbolOnly).map((item) => item.category))).sort((a, b) => a.localeCompare(b, "it")), [kind, library]);
+  const defaultCategoryNames = ["Cibi", "Animali", "Trasporti"].filter((category) => availableCategories.includes(category));
+  const [categorySpeakWord, setCategorySpeakWord] = useState(exercise?.categorySpeakWord ?? false);
+  const [categoryShowTargetImage, setCategoryShowTargetImage] = useState(exercise?.categoryShowTargetImage ?? false);
+  const [categoryShowSymbols, setCategoryShowSymbols] = useState(exercise?.categoryShowSymbols ?? false);
+  const [categoryNames, setCategoryNames] = useState<string[]>(() => wordCategoryNames(library, exercise?.categoryNames ?? defaultCategoryNames));
+  const [categoryItemIds, setCategoryItemIds] = useState<string[]>(exercise?.categoryItemIds ?? defaultCategoryNames.flatMap((category) => library.filter((item) => item.category === category).slice(0, 3).map((item) => item.id)));
+  const [rounds, setRounds] = useState(exercise?.rounds ?? 6);
+  const [quantityMin, setQuantityMin] = useState(exercise?.quantityMin ?? 1);
+  const [quantityMax, setQuantityMax] = useState(exercise?.quantityMax ?? 10);
+  const [quantityObjectSet, setQuantityObjectSet] = useState<QuantityObjectSet>(exercise?.quantityObjectSet ?? "mixed");
+  const [quantityAutoComplete, setQuantityAutoComplete] = useState(exercise?.quantityAutoComplete ?? true);
+  const [quantitySpeakNumbers, setQuantitySpeakNumbers] = useState(exercise?.quantitySpeakNumbers ?? false);
+  const [quantityErrorless, setQuantityErrorless] = useState(exercise?.quantityErrorless ?? false);
+  const [quantityIdleSeconds, setQuantityIdleSeconds] = useState(exercise?.quantityIdleSeconds ?? 5);
+  const sentenceCandidates = useMemo(() => library.filter(isSimpleSentenceScene), [library]);
+  const [sentenceItemIds, setSentenceItemIds] = useState<string[]>(exercise?.sentenceItemIds ?? sentenceCandidates.map((item) => item.id));
+  const [sentenceOptionCount, setSentenceOptionCount] = useState<SentenceOptionCount>(exercise?.sentenceOptionCount ?? 2);
+  const [sentenceDifficulty, setSentenceDifficulty] = useState<SentenceDifficulty>(exercise?.sentenceDifficulty ?? 1);
+  const recognitionCandidates = availableForRecognition(library, exercisePresentation);
+  const effectivePromptId = recognitionCandidates.some((item) => item.id === promptId) ? promptId : recognitionCandidates[0]?.id ?? "";
+  const compatibleRandomCandidates = recognitionCandidates.filter((item) => (!recognitionCategories.length || recognitionCategories.includes(item.category)) && matchesSyllableFilter(item, recognitionSyllables));
+  const randomCandidates = randomPromptMode === "fixed" ? compatibleRandomCandidates : compatibleRandomCandidates.filter((item) => !recognitionItemIds.length || recognitionItemIds.includes(item.id));
+  const prompt = recognitionCandidates.find((item) => item.id === effectivePromptId);
+  const randomDistractors = randomCandidates.filter((item) => item.id !== effectivePromptId && (distractorSource !== "same-category" || item.category === prompt?.category));
+  const randomConfigValid = randomPromptMode === "fixed"
+    ? Boolean(prompt) && randomDistractors.length >= distractorCount
+    : randomCandidates.length >= distractorCount + 1 && (distractorSource === "mixed" || hasSameCategoryDistractors(randomCandidates, distractorCount));
+  const randomConfigError = randomConfigValid ? "" : randomPromptMode === "fixed" && !prompt
+    ? "Scegli la parola da trovare."
+    : randomPromptMode === "fixed"
+      ? `Servono almeno ${distractorCount} distrattori compatibili; con i filtri attuali ce ne sono ${randomDistractors.length}.`
+      : distractorSource === "same-category"
+        ? `Serve almeno una categoria con ${distractorCount + 1} parole compatibili con i filtri.`
+        : `Servono almeno ${distractorCount + 1} parole compatibili con i filtri; al momento ce ne sono ${randomCandidates.length}.`;
+  const normalizedItemSearch = itemSearch.trim().toLocaleLowerCase("it-IT");
+  const matchesItemSearch = (item: LibraryItem) => !normalizedItemSearch || `${item.word} ${item.category}`.toLocaleLowerCase("it-IT").includes(normalizedItemSearch);
+  const itemSearchField = <label className="search-box builder-search"><Search /><input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Cerca per parola o categoria…" /></label>;
+  const finalOptions = Array.from(new Set([effectivePromptId, ...options])).filter((id) => recognitionCandidates.some((item) => item.id === id)).slice(0, 4);
+  const saveFixed = () => onSave({
+    id: exercise?.id ?? crypto.randomUUID(),
+    title: title.trim() || `Trova ${prompt?.word.toLowerCase() ?? "la parola"}`,
+    kind: "recognition",
+    recognitionMode: "fixed",
+    presentation: exercisePresentation,
+    autoPronounce,
+    promptId: effectivePromptId,
+    optionIds: finalOptions,
+    updatedAt: new Date().toISOString(),
+    deleted: false,
+  });
+  const saveRandom = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || (randomPromptMode === "fixed" ? `Trova ${prompt?.word.toLowerCase() ?? "la parola"}` : "Trova la parola · casuale"), kind: "recognition", recognitionMode: "random", presentation: exercisePresentation, autoPronounce, promptId: randomPromptMode === "fixed" ? effectivePromptId : "", optionIds: [], recognitionItemIds, recognitionCategories, recognitionSyllables, distractorCount, distractorSource, rounds: Math.max(1, rounds), updatedAt: new Date().toISOString(), deleted: false });
+  if (kind === "sentence-matching") {
+    const selectedIds = sentenceItemIds.filter((id) => sentenceCandidates.some((item) => item.id === id));
+    const availability = sentenceMatchingAvailability(sentenceCandidates, { rounds: Math.max(1, rounds), optionCount: sentenceOptionCount, difficulty: sentenceDifficulty, allowedIds: selectedIds });
+    const toggleSentenceItem = (id: string) => setSentenceItemIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+    const saveSentenceExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Abbina la frase", kind: "sentence-matching", promptId: "", optionIds: [], sentenceItemIds: selectedIds, sentenceOptionCount, sentenceDifficulty, rounds: Math.min(50, Math.max(1, Math.trunc(rounds))), presentation: "images", autoPronounce: true, updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Abbina la frase</h2><p>La frase soggetto + verbo viene letta ad alta voce. Il bambino sceglie l’immagine corrispondente.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Abbina la frase" /></label><div className="builder-inline-fields"><label>Numero di turni<NumericField min={1} max={50} value={rounds} onValueChange={(nextValue) => setRounds(nextValue)} /></label><label>Immagini per turno<select value={sentenceOptionCount} onChange={(event) => { const count = Number(event.target.value) as SentenceOptionCount; setSentenceOptionCount(count); if (count === 2) setSentenceDifficulty(1); }}><option value={2}>2 immagini</option><option value={4}>4 immagini</option></select></label><label>Gradi di libertà<select value={sentenceDifficulty} onChange={(event) => setSentenceDifficulty(Number(event.target.value) as SentenceDifficulty)}><option value={1}>1 · cambia l’azione</option><option value={2} disabled={sentenceOptionCount !== 4}>2 · cambiano soggetto e azione</option></select></label></div><p className="field-note">Con 1 grado il soggetto resta uguale e cambia l’azione. Con 2 gradi vengono mostrate quattro combinazioni soggetto × azione.</p><div className="builder-label">Scene disponibili <span>{selectedIds.length} scelte</span></div>{itemSearchField}<div className="builder-grid">{sentenceCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => toggleSentenceItem(item.id)} aria-pressed={selectedIds.includes(item.id)}><Artwork item={item} compact /><span>{item.word}</span>{selectedIds.includes(item.id) && <i><Check /></i>}</button>)}</div>{!availability.valid && <p className="wizard-error" role="alert">La selezione non contiene abbastanza combinazioni compatibili. {sentenceDifficulty === 2 ? "Servono almeno due soggetti e due azioni presenti in tutte e quattro le combinazioni." : `Per ogni frase servono almeno ${sentenceOptionCount - 1} azioni alternative dello stesso soggetto.`}</p>}<div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!availability.valid} onClick={saveSentenceExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
+  if (kind === "number-quantity") {
+    const safeMin = Math.min(10, Math.max(1, Math.trunc(quantityMin)));
+    const safeMax = Math.min(10, Math.max(safeMin, Math.trunc(quantityMax)));
+    const saveQuantityExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Numero quantità", kind: "number-quantity", promptId: "", optionIds: [], rounds: Math.min(50, Math.max(1, Math.trunc(rounds))), quantityMin: safeMin, quantityMax: safeMax, quantityObjectSet, quantityAutoComplete, quantitySpeakNumbers, quantityErrorless, quantityIdleSeconds: Math.min(10, Math.max(1, Math.trunc(quantityIdleSeconds))), updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Numero quantità</h2><p>Il bambino tocca il numero richiesto di oggetti. In valutazione l’adulto conferma l’esito, salvo la modalità senza errori che riconosce subito la quantità corretta.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Numero quantità" /></label><div className="builder-inline-fields"><label>Numero di turni<NumericField min={1} max={50} value={rounds} onValueChange={(nextValue) => setRounds(nextValue)} /></label><label>Quantità minima<NumericField min={1} max={10} value={quantityMin} onValueChange={(nextValue) => setQuantityMin(nextValue)} /></label><label>Quantità massima<NumericField min={safeMin} max={10} value={quantityMax} onValueChange={(nextValue) => setQuantityMax(nextValue)} /></label><label>Oggetti<select value={quantityObjectSet} onChange={(event) => setQuantityObjectSet(event.target.value as QuantityObjectSet)}><option value="mixed">Casuali a ogni turno</option><option value="candy">Caramelle</option><option value="ladybug">Coccinelle</option><option value="stone">Sassolini</option></select></label><label>Secondi di inattività<NumericField min={1} max={10} value={quantityIdleSeconds} onValueChange={(nextValue) => setQuantityIdleSeconds(nextValue)} /></label></div><QuantityLearningOptions speakNumbers={quantitySpeakNumbers} errorless={quantityErrorless} onSpeakNumbersChange={setQuantitySpeakNumbers} onErrorlessChange={setQuantityErrorless} /><label className="check-line pronunciation-option"><input type="checkbox" disabled={quantityErrorless} checked={quantityAutoComplete} onChange={(event) => setQuantityAutoComplete(event.target.checked)} /><span><strong>Rileva automaticamente il numero corretto in insegnamento</strong><small>La barra mostra lo stesso tempo per risposte giuste ed errate. Dopo l’esito il terapista può proseguire; dopo un errore può anche far riprovare. Se disattivato, la risposta corretta richiede conferma adulta. Il link condiviso usa sempre il timer.</small></span></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" onClick={saveQuantityExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
+  if (kind === "naming") {
+    const categoryCandidates = library.filter((item) => !item.categorySymbolOnly && hasArtwork(item) && (!namingCategories.length || namingCategories.includes(item.category)));
+    const selectedCandidates = namingItemIds.length ? categoryCandidates.filter((item) => namingItemIds.includes(item.id)) : categoryCandidates;
+    const toggleNamingCategory = (category: string) => setNamingCategories((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category]);
+    const toggleNamingItem = (id: string) => setNamingItemIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    const saveNamingExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Mix and vary", kind: "naming", promptId: "", optionIds: [], namingItemIds, namingCategories, rounds: Math.min(Math.max(1, rounds), selectedCandidates.length), updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Mix and vary</h2><p>Mostra una foto senza testo. L’adulto indica se la risposta è corretta o errata e se il bambino è stato aiutato.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Mix and vary" /></label><label>Numero di turni<NumericField min={1} max={Math.max(1, selectedCandidates.length)} value={Math.min(Math.max(1, rounds), selectedCandidates.length || 1)} onValueChange={(nextValue) => setRounds(nextValue)} /></label><div className="builder-label">Filtra per categorie <span>{namingCategories.length ? `${namingCategories.length} scelte` : "Tutte"}</span></div><div className="filter-chips">{availableCategories.map((category) => <button type="button" key={category} className={namingCategories.includes(category) ? "selected" : ""} onClick={() => toggleNamingCategory(category)} aria-pressed={namingCategories.includes(category)}>{category}</button>)}</div><div className="builder-label">Immagini specifiche <span>{namingItemIds.length ? `${namingItemIds.length} scelte` : "Casuali dal filtro"}</span></div>{itemSearchField}<div className="builder-grid">{categoryCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={namingItemIds.includes(item.id) ? "selected" : ""} onClick={() => toggleNamingItem(item.id)} aria-pressed={namingItemIds.includes(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")}</span>{namingItemIds.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!selectedCandidates.length} onClick={saveNamingExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
+  if (kind === "articles") {
+    const selectedIds = articleItemIds.filter((id) => articleCandidates.some((item) => item.id === id));
+    const finalRounds = Math.min(Math.max(1, rounds), selectedIds.length || 1);
+    const toggleArticleItem = (id: string) => setArticleItemIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+    const saveArticleExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Classifica IL o LA", kind: "articles", promptId: "", optionIds: [], autoPronounce, articleItemIds: selectedIds, rounds: finalRounds, updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Categorie IL / LA</h2><p>Scegli le immagini disponibili e quante mostrarne, una alla volta, durante ogni esecuzione.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Classifica IL o LA" /></label><CorrectMatchPronunciation kind="articles" checked={autoPronounce} onChange={setAutoPronounce} /><label>Numero di turni<NumericField min={1} max={Math.max(1, selectedIds.length)} value={finalRounds} onValueChange={(nextValue) => setRounds(nextValue)} /></label><div className="builder-label">Immagini da classificare <span>{selectedIds.length} scelte</span></div>{itemSearchField}<div className="builder-grid">{articleCandidates.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => toggleArticleItem(item.id)} aria-pressed={selectedIds.includes(item.id)}><Artwork item={item} compact /><span>{item.word.toLocaleUpperCase("it-IT")} · {articleFor(item)}</span>{selectedIds.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={!selectedIds.length} onClick={saveArticleExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
+  if (kind === "word-categories") {
+    const eligibleItems = availableForWordCategories(library).filter((item) => categoryNames.includes(item.category));
+    const selectedIds = categoryItemIds.filter((id) => eligibleItems.some((item) => item.id === id));
+    const toggleCategory = (category: string) => setCategoryNames((current) => current.includes(category) ? current.filter((value) => value !== category) : current.length < 4 ? [...current, category] : current);
+    const toggleCategoryItem = (id: string) => setCategoryItemIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    const categoryError = categoryImageError({ kind, categoryNames, categoryItemIds: selectedIds, categoryShowSymbols, categoryShowTargetImage }, library, categorySymbols);
+    const saveCategoryExercise = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || "Metti la parola nella categoria", kind: "word-categories", promptId: "", optionIds: [], autoPronounce, categorySpeakWord, categoryShowTargetImage, categoryShowSymbols, categoryNames, categoryItemIds: selectedIds, rounds: Math.min(Math.max(1, rounds), selectedIds.length), updatedAt: new Date().toISOString(), deleted: false });
+    return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title"><div className="modal wide"><button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button><span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span><h2 id="exercise-builder-title">Parola nella categoria</h2><p>Mostra una parola alla volta e scegli in quale categoria inserirla.</p><label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Metti la parola nella categoria" /></label><CorrectMatchPronunciation kind="word-categories" checked={autoPronounce} onChange={setAutoPronounce} /><CategoryExerciseOptions value={{ categorySpeakWord, categoryShowTargetImage, categoryShowSymbols }} onChange={(next) => { setCategorySpeakWord(Boolean(next.categorySpeakWord)); setCategoryShowTargetImage(Boolean(next.categoryShowTargetImage)); setCategoryShowSymbols(Boolean(next.categoryShowSymbols)); }} />{categoryError && <p className="feedback wrong" role="alert">{categoryError}</p>}<label>Numero di turni<NumericField min={1} max={Math.max(1, selectedIds.length)} value={Math.min(Math.max(1, rounds), selectedIds.length || 1)} onValueChange={(nextValue) => setRounds(nextValue)} /></label><div className="builder-label">Categorie <span>{categoryNames.length} scelte · massimo 4</span></div><div className="filter-chips">{availableCategories.map((category) => <button type="button" key={category} className={categoryNames.includes(category) ? "selected" : ""} onClick={() => toggleCategory(category)} aria-pressed={categoryNames.includes(category)}>{category}</button>)}</div><div className="builder-label">Parole da classificare <span>{selectedIds.length} scelte</span></div>{itemSearchField}<div className="builder-grid">{eligibleItems.filter(matchesItemSearch).map((item) => <button type="button" key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => toggleCategoryItem(item.id)} aria-pressed={selectedIds.includes(item.id)}><strong className="builder-word">{item.word.toLocaleUpperCase("it-IT")}</strong><span>{item.category}</span>{selectedIds.includes(item.id) && <i><Check /></i>}</button>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={onClose}>Annulla</button><button className="primary-button" type="button" disabled={Boolean(categoryError) || categoryNames.length < 2 || categoryNames.length > 4 || !selectedIds.length} onClick={saveCategoryExercise}><Save />Salva esercizio</button></div></div></div>;
+  }
+  return (
+    <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="exercise-builder-title">
+      <div className="modal wide">
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Chiudi"><X /></button>
+        <span className="eyebrow">{exercise ? "MODIFICA ESERCIZIO" : "NUOVO ESERCIZIO"}</span>
+        <h2 id="exercise-builder-title">Trova la parola</h2>
+        <p>Puoi scegliere una parola precisa con distrattori casuali, rendere casuale anche il bersaglio oppure configurare tutte le opzioni a mano.</p>
+        <label>Titolo<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={recognitionMode === "random" ? randomPromptMode === "fixed" && prompt ? `Trova ${prompt.word.toLowerCase()}` : "Trova la parola · casuale" : prompt ? `Trova ${prompt.word.toLowerCase()}` : "Titolo esercizio"} /></label>
+        <RecognitionPresentationFields presentation={exercisePresentation} autoPronounce={autoPronounce} onPresentationChange={setExercisePresentation} onAutoPronounceChange={setAutoPronounce} />
+        <div className="builder-mode">
+          <button type="button" className={recognitionMode === "random" ? "selected" : ""} onClick={() => setRecognitionMode("random")}><Sparkles /><strong>Distrattori casuali</strong><small>Scegli se mantenere fisso o variare il bersaglio</small></button>
+          <button type="button" className={recognitionMode === "fixed" ? "selected" : ""} onClick={() => setRecognitionMode("fixed")}><Settings /><strong>Tutto fisso</strong><small>Configura manualmente ogni opzione</small></button>
+        </div>
+        {recognitionMode === "random" ? <>
+          <div className="builder-label">Parola da trovare</div>
+          <div className="selection-tabs">
+            <button type="button" className={randomPromptMode === "fixed" ? "selected" : ""} onClick={() => setRandomPromptMode("fixed")}>Una parola precisa</button>
+            <button type="button" className={randomPromptMode === "random" ? "selected" : ""} onClick={() => setRandomPromptMode("random")}>Casuale a ogni turno</button>
+          </div>
+          {randomPromptMode === "fixed" && <>
+            <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>
+            <FullTextItemPicker items={recognitionCandidates} selectedIds={effectivePromptId ? [effectivePromptId] : []} onChange={(ids) => setPromptId(ids[0] ?? "")} multiple={false} presentation={exercisePresentation} placeholder="Cerca la parola da riconoscere…" />
+          </>}
+          <div className="builder-inline-fields">
+            <label>Numero di turni<NumericField min={1} max={50} value={Math.max(1, rounds)} onValueChange={(nextValue) => setRounds(nextValue)} /></label>
+            <RecognitionRandomParameterFields distractorCount={distractorCount} distractorSource={distractorSource} syllables={recognitionSyllables} onDistractorCountChange={setDistractorCount} onDistractorSourceChange={setDistractorSource} onSyllablesChange={setRecognitionSyllables} />
+          </div>
+          <div className="builder-label">Filtra i {randomPromptMode === "fixed" ? "distrattori" : "bersagli e distrattori"} per categorie <span>{recognitionCategories.length ? `${recognitionCategories.length} scelte` : "Tutte"}</span></div>
+          <div className="filter-chips">{availableCategories.map((category) => <button type="button" key={category} className={recognitionCategories.includes(category) ? "selected" : ""} onClick={() => setRecognitionCategories((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category])} aria-pressed={recognitionCategories.includes(category)}>{category}</button>)}</div>
+          <div className="builder-label">{randomPromptMode === "fixed" ? "Distrattori preferiti (facoltativo)" : "Limita a parole specifiche"} <span>{recognitionItemIds.length ? `${recognitionItemIds.length} scelte` : randomPromptMode === "fixed" ? "Scelta automatica" : "Tutte"}</span></div>
+          {randomPromptMode === "fixed" && <p className="field-note">Se non ne scegli abbastanza, l’app completa automaticamente le opzioni con elementi compatibili della libreria.</p>}
+          <FullTextItemPicker items={compatibleRandomCandidates.filter((item) => randomPromptMode !== "fixed" || item.id !== effectivePromptId)} selectedIds={recognitionItemIds} onChange={setRecognitionItemIds} multiple presentation={exercisePresentation} placeholder={randomPromptMode === "fixed" ? "Cerca uno o più distrattori preferiti…" : "Cerca e aggiungi più parole…"} />
+          {randomConfigError && <p className="wizard-error" role="alert">{randomConfigError}</p>}
+        </> : <>
+          <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>
+          <FullTextItemPicker items={recognitionCandidates} selectedIds={effectivePromptId ? [effectivePromptId] : []} onChange={(ids) => { const nextId = ids[0] ?? ""; setPromptId(nextId); setOptions((current) => current.filter((id) => id !== nextId)); }} multiple={false} presentation={exercisePresentation} placeholder="Cerca la parola da riconoscere…" />
+          <div className="builder-label">{exercisePresentation === "words" ? "Parole da mostrare" : "Immagini da mostrare"} <span>{finalOptions.length}/4</span></div>
+          <FullTextItemPicker items={recognitionCandidates.filter((item) => item.id !== effectivePromptId)} selectedIds={options.filter((id) => id !== effectivePromptId)} onChange={(ids) => setOptions(ids.slice(0, 3))} multiple presentation={exercisePresentation} placeholder="Cerca e aggiungi fino a 3 alternative…" max={3} />
+        </>}
+        <div className="modal-actions">
+          <button className="ghost-button" type="button" onClick={onClose}>Annulla</button>
+          <button className="primary-button" type="button" disabled={recognitionMode === "fixed" ? !effectivePromptId || finalOptions.length < 2 : !randomConfigValid} onClick={recognitionMode === "random" ? saveRandom : saveFixed}><Save />Salva esercizio</button>
+        </div>
+      </div>
+    </div>
+  );
+}
