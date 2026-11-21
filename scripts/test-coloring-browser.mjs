@@ -66,6 +66,14 @@ async function viewport(width, height) {
   await wait(`innerWidth === ${width} && innerHeight === ${height}`);
 }
 
+const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-heading button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
+  const bounds = element.getBoundingClientRect();
+  const { offsetLeft, offsetTop, width, height } = visualViewport;
+  return bounds.width > 0 && bounds.height > 0 &&
+    bounds.left >= offsetLeft - 1 && bounds.top >= offsetTop - 1 &&
+    bounds.right <= offsetLeft + width + 1 && bounds.bottom <= offsetTop + height + 1;
+})`;
+
 async function touch(type, x, y) {
   let touchPoints = [];
   if (type === "touchStart" || type === "touchMove") {
@@ -131,10 +139,11 @@ try {
   assert.equal(await evaluate("document.querySelector('.coloring-rotate').checkVisibility()"), false);
   assert.equal(await evaluate("document.querySelector('.coloring-colors').scrollHeight > document.querySelector('.coloring-colors').clientHeight"), true);
   await viewport(568, 320);
-  assert.equal(await evaluate(`[...document.querySelectorAll('.coloring-heading button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
-    const bounds = element.getBoundingClientRect();
-    return bounds.top >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight && bounds.left >= 0;
-  })`), true);
+  await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+  await wait(gameFitsVisibleViewport);
+  await send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+  await wait("visualViewport.scale >= 1.99");
+  await wait(gameFitsVisibleViewport);
   assert.equal(await evaluate(`[...document.querySelectorAll('.coloring-tools button, .coloring-colors button')].every(button =>
     !button.textContent.trim() && button.hasAttribute('aria-label') && button.offsetWidth >= 44 && button.offsetHeight >= 44)`), true);
   assert.equal(await evaluate(`document.querySelector('.coloring-tools').getBoundingClientRect().right <=
@@ -155,6 +164,22 @@ try {
   assert.deepEqual(await rgb(315, 215), red, "brush works within the roof");
   assert.deepEqual(await rgb(300, 210), red, "the stroke resumes inside its original area");
   assert.deepEqual(await rgb(315, 272), white, "dragging past the roof leaves the wall untouched");
+  const pinch = await evaluate(`(() => {
+    const bounds = document.querySelector('.coloring-board canvas').getBoundingClientRect();
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height * 0.2, span: bounds.width * 0.4 };
+  })()`);
+  for (let step = 0; step <= 10; step++) {
+    const span = pinch.span * (1 - step * 0.08);
+    await send("Input.dispatchTouchEvent", {
+      type: step === 0 ? "touchStart" : "touchMove",
+      touchPoints: [{ x: pinch.x - span, y: pinch.y, id: 1 }, { x: pinch.x + span, y: pinch.y, id: 2 }],
+    });
+  }
+  await touch("touchEnd");
+  await wait("visualViewport.scale < 1.2");
+  await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+  await wait("visualViewport.scale === 1 && document.querySelector('.coloring-dialog').style.transform.endsWith('scale(1)')");
+  await wait(gameFitsVisibleViewport);
 
   await touch("touchStart", 115, 140);
   await touch("touchMove", 355, 135);
@@ -190,15 +215,25 @@ try {
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await button("Esci");
+  await send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+  await wait("visualViewport.scale >= 1.99");
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
+  await wait(gameFitsVisibleViewport);
   assert.deepEqual(await rgb(340, 330), green, "switching drawings preserves work until leaving Games");
-  await button("Esci");
+  const exit = await evaluate(`(() => {
+    const bounds = document.querySelector('.coloring-heading button:last-child').getBoundingClientRect();
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, id: 1 };
+  })()`);
+  await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [exit] });
+  await touch("touchEnd");
+  await wait("!document.querySelector('.coloring-dialog[open]')");
+  await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
   await evaluate("history.back()");
   await wait("document.querySelector('.child-choice-page')");
   await evaluate("history.forward()");
   await wait("document.querySelector('.games-page')");
-  console.log("PASS Colorare: catalog, compact phone layout, scrolling palette, touch, rotation, and music lifecycle.");
+  console.log("PASS Colorare: mobile zoom, pinch, exit, scrolling palette, touch, rotation, and music lifecycle.");
 } finally {
   socket.close();
 }

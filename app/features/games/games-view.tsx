@@ -141,8 +141,10 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     const element = dialog.current;
     const surface = canvas.current;
     if (!element) return;
-    element.showModal();
     const orientation = window.matchMedia("(orientation: landscape)");
+    const viewport = window.visualViewport;
+    let viewportFrame = 0;
+
     function stopStroke() {
       const current = stroke.current;
       stroke.current = null;
@@ -150,11 +152,38 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
         surface.releasePointerCapture(current.pointerId);
       }
     }
+
+    function fitViewport() {
+      if (!element || !viewport || viewport.width <= 0 || viewport.height <= 0) return;
+      const { width, height, offsetLeft, offsetTop, scale } = viewport;
+      // Fixed dialogs use the layout viewport. Follow the visible rectangle
+      // and compensate for pinch zoom to keep the full-size game usable in it.
+      element.style.setProperty("--coloring-viewport-width", `${width * scale}px`);
+      element.style.setProperty("--coloring-viewport-height", `${height * scale}px`);
+      element.style.transform = `translate(${offsetLeft}px, ${offsetTop}px) scale(${1 / scale})`;
+    }
+
+    function scheduleFit() {
+      if (viewportFrame) return;
+      viewportFrame = requestAnimationFrame(() => {
+        viewportFrame = 0;
+        stopStroke();
+        fitViewport();
+      });
+    }
+
+    fitViewport();
+    element.showModal();
+    viewport?.addEventListener("resize", scheduleFit);
+    viewport?.addEventListener("scroll", scheduleFit);
     orientation.addEventListener("change", stopStroke);
     window.addEventListener("blur", stopStroke);
     return () => {
       element.close();
       stopStroke();
+      cancelAnimationFrame(viewportFrame);
+      viewport?.removeEventListener("resize", scheduleFit);
+      viewport?.removeEventListener("scroll", scheduleFit);
       orientation.removeEventListener("change", stopStroke);
       window.removeEventListener("blur", stopStroke);
     };

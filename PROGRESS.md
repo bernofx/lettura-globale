@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Colorare segue la porzione di schermo visibile anche con lo zoom del browser. I comandi restano raggiungibili, il gesto a due dita è disponibile e il tratto a un dito resta confinato. Cache PWA v63.
+
 - [x] Colorare mostra il nome del disegno nella galleria e come etichetta accessibile del canvas. La barra del gioco contiene i comandi Musica ed Esci. Cache PWA v62.
 
 - [x] Colorare ampliato a 24 disegni originali. Strumenti a icone in fila accanto ai colori a pallini in una colonna scorrevole, con etichette accessibili. Musica originale a volume basso con comando dedicato, controllo audio generale e silenzio fuori dalla vista di gioco. Cache PWA v61.
