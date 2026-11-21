@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BALLOON_COUNT, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, popCelebrationBalloon } from "../app/domain/celebration.ts";
+import { BALLOON_COUNT, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, pointsAlongDrag, popCelebrationBalloon } from "../app/domain/celebration.ts";
 
 test("ogni palloncino scoppia una volta sola senza modificare lo stato precedente", () => {
   const initial = new Set<number>();
@@ -45,4 +45,13 @@ test("premio continuo: altre ondate oltre venti secondi, senza accumulare pallon
     assert.equal(popCelebrationBalloon(popped, last.id, true), popped);
     assert.equal(popCelebrationBalloon(new Set(), last.id).size, 0, "il gioco finale mantiene il limite di 20 secondi");
   }
+});
+
+test("il trascinamento campiona il tratto senza salti fra due eventi del dito", () => {
+  const points = pointsAlongDrag({ x: 0, y: 0 }, { x: 100, y: 0 }, 10);
+  assert.equal(points.length, 11);
+  assert.deepEqual(points[0], { x: 0, y: 0 });
+  assert.deepEqual(points.at(-1), { x: 100, y: 0 });
+  assert.ok(points.every((point, index) => index === 0 || point.x - points[index - 1].x <= 10));
+  assert.deepEqual(pointsAlongDrag({ x: 5, y: 5 }, { x: 5, y: 5 }), [{ x: 5, y: 5 }, { x: 5, y: 5 }], "un tocco fermo controlla il punto toccato");
 });

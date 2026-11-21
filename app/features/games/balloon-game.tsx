@@ -6,6 +6,7 @@ import { playBalloonPop } from "../../domain/balloon-audio";
 import { BALLOON_COLORS } from "../../domain/celebration";
 import { feedbackContext } from "../../shared/audio";
 import { startGameMusic } from "./game-music";
+import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
 export function BalloonThumbnail() {
   return (
@@ -21,6 +22,7 @@ export function BalloonThumbnail() {
 
 export function BalloonGame({ soundVolume, onClose }: { soundVolume: number; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  useKeepDialogOpen(dialog);
   useLayoutEffect(() => {
     const element = dialog.current;
     element?.showModal();

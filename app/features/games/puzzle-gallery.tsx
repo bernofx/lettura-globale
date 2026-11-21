@@ -6,6 +6,7 @@ import { prepareUploadedImage } from "../../shared/media-storage";
 import type { LibraryItem } from "../../shared/types";
 import { demoPuzzleImage, puzzleGrids, type PuzzleSize } from "./puzzle-art";
 import type { PuzzleSelection } from "./puzzle-game";
+import { supportsMultipleFiles } from "../../domain/android-bridge";
 
 type PuzzleSource = { id: string; title: string; image: string };
 const examples: PuzzleSource[] = [{ id: "demo:casa", title: "Casa", image: demoPuzzleImage }];
@@ -18,6 +19,8 @@ export function PuzzleGallery({ library, puzzleImages, onStart }: { library: Lib
   const [libraryIds, setLibraryIds] = useState<string[]>([]);
   const [localImages, setLocalImages] = useState<PuzzleSource[]>([]);
   const [busy, setBusy] = useState(false);
+  // Older Android APKs return no file at all for multi-file pickers: ask for one there.
+  const [allowMultiple] = useState(() => supportsMultipleFiles());
   const [error, setError] = useState("");
   const active = useRef(false);
   useEffect(() => {
@@ -108,7 +111,7 @@ export function PuzzleGallery({ library, puzzleImages, onStart }: { library: Lib
           </select>
         </label>}
         <label>Dal dispositivo
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy} onChange={event => {
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple={allowMultiple} disabled={busy} onChange={event => {
             void upload(Array.from(event.target.files ?? []));
             event.target.value = "";
           }} />

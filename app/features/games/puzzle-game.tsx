@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
+import { useKeepDialogOpen } from "./use-keep-dialog-open";
 import { buildPuzzleArt, drawPuzzleBoard, PUZZLE_ART_SCALE, puzzleGrids, type PuzzleSize } from "./puzzle-art";
 import "./puzzle-game.css";
 
@@ -46,6 +47,7 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
   const [drag, setDrag] = useState<(Point & { id: number }) | null>(null);
   const [geometry, setGeometry] = useState({ cell: 0, width: 0, height: 0 });
   const dialog = useRef<HTMLDialogElement>(null);
+  useKeepDialogOpen(dialog);
   const boardSpace = useRef<HTMLDivElement>(null);
   const board = useRef<HTMLDivElement>(null);
   const tray = useRef<HTMLDivElement>(null);

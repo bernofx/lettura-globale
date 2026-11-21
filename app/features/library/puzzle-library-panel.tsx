@@ -6,6 +6,7 @@ import type { PuzzleImage } from "../../domain/puzzle-library";
 import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 import type { PuzzleLibrary } from "../games/use-puzzle-library";
 import "./puzzle-library-panel.css";
+import { supportsMultipleFiles } from "../../domain/android-bridge";
 
 export function PuzzleLibraryPanel({ catalog, search, onAdd }: { catalog: PuzzleLibrary; search: string; onAdd: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -82,6 +83,7 @@ export function PuzzleUploadDialog({ catalog, onClose, onSaved }: { catalog: Puz
   const [error, setError] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const mounted = useRef(false);
+  const [multiple] = useState(() => supportsMultipleFiles());
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -120,10 +122,10 @@ export function PuzzleUploadDialog({ catalog, onClose, onSaved }: { catalog: Puz
       <ModalTitle id="puzzle-upload-title" eyebrow="PUZZLE">Aggiungi immagini ai puzzle</ModalTitle>
       <button className="drop-zone" type="button" disabled={busy} onClick={() => input.current?.click()}>
         <Upload aria-hidden="true" />
-        <strong>{files.length === 0 ? "Scegli una o più immagini" : files.length === 1 ? "1 immagine selezionata" : files.length + " immagini selezionate"}</strong>
+        <strong>{files.length === 0 ? (multiple ? "Scegli una o più immagini" : "Scegli un’immagine") : files.length === 1 ? "1 immagine selezionata" : files.length + " immagini selezionate"}</strong>
         <small>{files.length ? "Cambia selezione" : "JPG, PNG o WebP"}</small>
       </button>
-      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden disabled={busy}
+      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple={multiple} hidden disabled={busy}
         onChange={event => {
           setFiles(Array.from(event.target.files ?? []));
           setRights(false);

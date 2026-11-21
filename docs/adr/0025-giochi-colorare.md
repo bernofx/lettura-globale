@@ -1,6 +1,6 @@
 # ADR 0025 — Colorare nella sezione Giochi
 
-**Stato:** implementato.
+**Stato:** implementato, in attesa di approvazione esplicita per le parti su privacy e licenze (conservazione in R2 di audio caricati dagli adulti, adozione della traccia CC0 di terzi), come richiesto da `AGENTS.md` regola 4.
 
 ## Decisione
 
@@ -8,13 +8,13 @@ Il catalogo Giochi del pannello adulto mostra una tessera con immagine e nome pe
 
 Il disegno è costituito da contorni chiusi in ordine di sovrapposizione. L’area visibile sotto il primo contatto possiede il gesto fino al rilascio o annullamento. I segni vengono ritagliati al relativo contorno e le aree sovrapposte coprono i segni sottostanti. Il secchio colora direttamente l’area toccata.
 
-I segni rimangono in memoria durante la visita alla sezione. Questa sezione di giochi è autonoma rispetto ai premi durante o al termine degli esercizi.
+I segni rimangono in memoria durante la visita alla sezione come dati vettoriali (strumento, colore, punti). Per il disegno aperto ogni area dipinta ha una cache grande quanto l’area e alla risoluzione del dispositivo, ricostruita dai vettori quando cambia la scala e liberata all’uscita; se la memoria per il canvas non è disponibile i segni vengono ridisegnati dai vettori, senza andare persi. I dettagli puntiformi (occhi) sono tracciati spessi e le linee sottili, indipendentemente dall’ordine. Questa sezione di giochi è autonoma rispetto ai premi durante o al termine degli esercizi.
 
 Il catalogo comprende 24 disegni originali creati per Lettura Globale. Il riproduttore rispetta l’audio generale, si ferma all’uscita e silenzia la musica quando la scheda va in background.
 
 Il dialogo segue dimensioni e posizione di `VisualViewport` e compensa localmente la scala, così pannelli e tasto Esci sono accessibili anche se la pagina è ingrandita. Se il viewport è più alto che largo, l’interfaccia ruota di 90 gradi e il canvas trasforma le coordinate dei tocchi. Il browser gestisce il gesto a due dita sul disegno. Una variazione del viewport conclude l’eventuale tratto in corso prima di adattare la superficie.
 
-Durante Colorare e i palloncini, l’app usa un passo di cronologia nello stesso documento per assorbire Indietro in silenzio. Esc lascia il gioco aperto. L’uscita dalla X rimuove il passo attivo. I palloncini mantengono il timer della festa finale e il comando remoto del premio.
+Durante Colorare e i palloncini, l’app usa un passo di cronologia nello stesso documento per assorbire Indietro in silenzio. Esc lascia il gioco aperto; se il browser chiude comunque il dialogo (Esc ripetuto senza attivazione utente) l’app lo riapre subito. L’uscita dalla X rimuove il passo attivo. I palloncini mantengono il timer della festa finale e il comando remoto del premio.
 
 Pennello, pastello e secchio sono disposti in una colonna verticale compatta, a fianco della colonna scorrevole dei colori. Musica ed Esci sono sopra le due colonne, così il foglio può occupare tutta l’altezza disponibile.
 
@@ -22,9 +22,9 @@ Il canvas riempie il pannello. Il disegno scala uniformemente e i margini del fo
 
 Il sottofondo predefinito è «Tummy-Rumble Calypso» di DURU-AI, [pubblicato dall’autore](https://github.com/uncle-sheepsky/duru-ai-cc0-bgm/tree/21f08fd3e3e63454e6993666ae48a45ab7db60cc) con licenza [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Il file locale `public/audio/coloring-calypso.mp3` è un estratto mono dei primi 64 secondi, con brevi dissolvenze. È distribuito insieme all’app.
 
-La Libreria permette a un adulto di sostituire il sottofondo di Giochi con un MP3 di massimo 6 MB e 5 minuti. Il Worker convalida il formato e salva un singolo oggetto privato in R2 per account. La traccia può essere ascoltata in anteprima e rimossa dalla Libreria. I giochi del catalogo riproducono Calypso quando la traccia personalizzata è assente o indisponibile.
+La Libreria permette a un adulto di sostituire il sottofondo di Giochi con un MP3 di massimo 6 MB e 5 minuti. Il Worker convalida il formato e salva un singolo oggetto privato in R2 per account. Il caricamento richiede fonte o autore, licenza e conferma dei diritti, salvati nei metadati dell’oggetto insieme alla data della conferma. La traccia può essere ascoltata in anteprima, anche con richieste parziali (Range aperti, finali, 416 se non soddisfacibili), e rimossa dalla Libreria. Il controllo MP3 accetta tag e riempimenti finali comuni (ID3v1/v2, APEv2, Lyrics3, zeri) e un ultimo frame troncato, e rifiuta altri dati. Il service worker risponde alle richieste Range con un 206 ricavato dalla cache e non memorizza risposte parziali. I giochi del catalogo riproducono Calypso quando la traccia personalizzata è assente o indisponibile.
 
-Palloncini riusa le ondate, gli scoppi e l’animazione del premio in una partita libera. La partita avviata dal catalogo usa la colonna sonora di Giochi e termina con la X. Il premio e la festa di fine attività usano la propria colonna sonora.
+Palloncini riusa le ondate, gli scoppi e l’animazione del premio in una partita libera. Nel gioco, e non nel premio di fine attività, trascinare il dito o il mouse premuto fa scoppiare ogni palloncino attraversato (campionamento del tratto ogni 10 px, così un gesto veloce non salta palloncini) e lascia una scia leggera su un canvas sovrapposto, che sbiadisce in 420 ms (160 ms con movimento ridotto). La partita avviata dal catalogo usa la colonna sonora di Giochi e termina con la X. Il premio e la festa di fine attività usano la propria colonna sonora.
 
 Puzzle a incastro riusa la vista orizzontale e la protezione Indietro dei giochi. La galleria mostra un’anteprima per immagine, con avvio diretto nei formati 4 × 4, 4 × 5 e 5 × 5, indicati come righe × colonne. I pezzi si possono riordinare sul vassoio e quello afferrato passa davanti agli altri. L’immagine intera conserva le proporzioni. Dove serve, lo sfondo sfumato riempie lo spazio attorno alla foto. Casa viene dal catalogo demo esistente. La Libreria dell’account e i file del dispositivo possono aggiungere anteprime per la visita al gioco.
 

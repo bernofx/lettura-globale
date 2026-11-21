@@ -77,7 +77,13 @@ socket.addEventListener("message", event => {
       return;
     }
     if (url.pathname === gameSoundtrackPath) {
-      if (request.method === "PUT") hasCustomSoundtrack = true;
+      if (request.method === "PUT") {
+        const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
+        assert.equal(headers["x-soundtrack-rights"], "confirmed", "the rights confirmation is sent with the upload");
+        assert.equal(decodeURIComponent(headers["x-soundtrack-source"]), "Registrazione di prova", "the source is sent with the upload");
+        assert.equal(decodeURIComponent(headers["x-soundtrack-license"]), "CC0", "the licence is sent with the upload");
+        hasCustomSoundtrack = true;
+      }
       if (request.method === "DELETE") hasCustomSoundtrack = false;
       const info = url.searchParams.has("info") || request.method !== "GET";
       const audio = !info && hasCustomSoundtrack;
@@ -131,9 +137,14 @@ async function assertGameIgnoresBack(selector) {
     assert.equal((await send("Page.getNavigationHistory")).currentIndex, currentIndex, "Back does not accumulate entries");
     assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Back leaves the game open");
   }
-  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
-  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
-  assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Escape leaves the game open");
+  // Twice: Chromium's close watcher lets a repeated Esc without user activation
+  // close a modal dialog natively even when the first cancel was prevented.
+  for (let press = 0; press < 2; press++) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await delay(50);
+  }
+  assert.ok(await evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); return Boolean(element?.isConnected && (element.tagName !== "DIALOG" || element.open)); })()`), "Escape leaves the game open and visible");
 }
 
 async function viewport(width, height) {
@@ -452,6 +463,11 @@ try {
   const { root } = await send("DOM.getDocument");
   const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: ".game-soundtrack-file input" });
   await send("DOM.setFileInputFiles", { nodeId, files: [new URL("../public/audio/coloring-game.mp3", import.meta.url).pathname] });
+  for (const [index, value] of ["Registrazione di prova", "CC0"].entries()) {
+    await evaluate(`document.querySelectorAll('.game-soundtrack-file input:not([type=file])')[${index}].focus()`);
+    await send("Input.insertText", { text: value });
+  }
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(item => item.textContent.includes('Carica MP3')).disabled"), true, "rights are still required");
   await evaluate("document.querySelector('.game-soundtrack-panel input[type=checkbox]').click()");
   await button("Carica MP3");
   await wait("document.querySelector('.game-soundtrack-panel [role=status]')?.textContent.includes('salvata nel cloud')");
@@ -485,6 +501,30 @@ try {
   await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [balloon] });
   await touch("touchEnd");
   await wait("document.querySelector('.balloon-game-dialog .celebration-status')?.textContent === '1 palloncini scoppiati'");
+  // Dragging a finger across balloons pops each one it crosses and draws a trail.
+  const dragPath = await evaluate(`(() => {
+    const centres = [...document.querySelectorAll('.balloon-game-dialog [data-current-wave=true] button:not(:disabled)')]
+      .map(button => button.getBoundingClientRect()).map(rect => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }));
+    return centres.length >= 2 ? [centres[0], centres[1]] : null;
+  })()`);
+  assert.ok(dragPath, "at least two balloons are available to drag across");
+  const [dragFrom, dragTo] = dragPath;
+  await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...dragFrom, id: 2 }] });
+  for (let step = 1; step <= 12; step++) {
+    const point = { x: dragFrom.x + (dragTo.x - dragFrom.x) * step / 12, y: dragFrom.y + (dragTo.y - dragFrom.y) * step / 12, id: 2 };
+    await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+  }
+  // The helper does not await promises: read the next drawn frame into a page variable.
+  await evaluate(`delete window.testTrailInk; requestAnimationFrame(() => {
+    const canvas = document.querySelector('.balloon-game-dialog .celebration-trail');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let ink = 0; for (let index = 3; index < data.length; index += 4) if (data[index]) ink++;
+    window.testTrailInk = ink;
+  })`);
+  await wait("window.testTrailInk !== undefined");
+  assert.ok(await evaluate("window.testTrailInk") > 0, "the drag leaves a visible trail");
+  await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await wait("Number(document.querySelector('.balloon-game-dialog .celebration-status')?.textContent.split(' ')[0]) >= 3");
   await wait("document.querySelector('.balloon-game-dialog button[aria-label=\"Scoppia il palloncino 9\"]')");
   await assertGameIgnoresBack(".balloon-game-dialog[open]");
   await button("Chiudi il gioco dei palloncini");

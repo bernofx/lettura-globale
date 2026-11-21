@@ -14,6 +14,7 @@ import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
 import { PuzzleGame, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
 import { PuzzleGallery } from "./puzzle-gallery";
 import "./games-view.css";
+import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
 const tools = [
   { id: "brush", label: "Pennello", icon: Paintbrush },
@@ -151,6 +152,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  useKeepDialogOpen(dialog);
   const stroke = useRef<Stroke | null>(null);
   const paletteDrag = useRef<{ pointerId: number; startX: number; scrollTop: number } | null>(null);
   const music = useRef<RewardMusicPlayer | null>(null);
@@ -206,7 +208,11 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     const observer = new ResizeObserver(fitCanvas);
     observer.observe(surface);
     fitCanvas();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      // Keep the vectors for the next visit but free the device-resolution caches.
+      painting.releaseCaches();
+    };
   }, [painting]);
 
   function start(event: PointerEvent<HTMLCanvasElement>) {
