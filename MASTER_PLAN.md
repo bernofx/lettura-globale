@@ -19,6 +19,10 @@ Realizzare una PWA per un solo bambino nell'MVP, usata sempre in presenza di un 
 - PC/mouse come riferimento, touch responsive su tablet e smartphone;
 - nessuna diagnosi o raccomandazione clinica automatica.
 
+## Giochi
+
+La sezione Giochi è accessibile dal pannello adulto anche senza scegliere un bambino. Il primo gioco, Colorare, si gioca in orizzontale e offre disegni originali con zone chiuse, pennello, pastello, secchio e tavolozza verticale. Un gesto di disegno resta ancorato alla zona iniziale fino al rilascio. I colori restano disponibili mentre si passa fra disegni nella stessa visita alla sezione. Il gioco non richiede dati clinici o collegamenti alle sessioni.
+
 ## Contenuti e immagini
 
 - libreria privata di parole e immagini;

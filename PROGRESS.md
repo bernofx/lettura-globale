@@ -1,12 +1,15 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 2 novembre 2026
+**Aggiornato:** 21 novembre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
 **Target:** Cloudflare Workers + D1 + R2, distribuito automaticamente da GitHub
 
 ## Completato
+
+- [x] Giochi → Colorare con quattro disegni originali (cane, conchiglia, lumaca, casa), pennello e pastello confinati alla zona iniziale del gesto, secchio e tavolozza verticale. Accessibile anche prima di scegliere un bambino. Il gioco richiede orientamento orizzontale e conserva il lavoro in memoria mentre si passa fra i disegni. Nessuna migrazione. Vedi ADR 0022.
+- [x] Verificati typecheck, build, 269 test e flusso touch in Chromium con profilo dimostrativo. Lint con i cinque avvisi sulle immagini già presenti.
 
 - [x] Apertura delle storie CAA ricevute corretta: navigazione documento tra shell privata e lettore `/caa?share=…`, anche per “Home / Accedi”, senza cambiare autenticazione, autorizzazioni, scadenza o contenuti. Test browser esteso al clic reale sul titolo (falliva prima della correzione), lettura non modificabile, ritorno alla home e riapertura dopo ricaricamento. Cache PWA v58.
 - [x] Correzione ricevute CAA: regressione browser completa superata dopo la modifica, insieme a typecheck, build e 269 test; lint senza errori, con i cinque avvisi preesistenti sulle immagini dinamiche. Nessuna migrazione o nuova APK.

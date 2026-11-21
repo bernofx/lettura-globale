@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, BookOpenCheck, Bug, Candy, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleHelp, Cloud, Copy, FolderHeart, Gamepad2, Home, ImagePlus, KeyRound, Library, LockKeyhole, LogOut, Menu, MousePointer2, Palette, Pause, Pencil, Play, Plus, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Shuffle, Sparkles, Square, Trash2, Upload, UserCog, UserRound, Users, Volume2, VolumeX, Wifi, X } from "lucide-react";
 import { ChangeEvent, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasSameCategoryDistractors, normalizeLearningCategory, pickCategoryRoundIds, recognitionModeFor } from "./domain/activity-generation";
 import { categoryImageError, type CategorySymbols } from "./domain/category-images";
@@ -25,6 +25,7 @@ import { RewardSoundtrackLibraryItem } from "./components/reward-soundtrack-libr
 import { createRewardMusic, REWARD_SOUNDTRACK, rewardMusicRange } from "./domain/reward-soundtrack";
 import { listenForAudioGestures, unlockAudioContext } from "./domain/audio-activation";
 import { CaaStoriesView } from "./components/caa-stories-view";
+import { GamesView } from "./components/games-view";
 import { useCaaStories } from "./use-caa-stories";
 import { androidBridge, startAndroidSpeech, stopAndroidSpeech } from "./domain/android-bridge";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents, type AttemptEvent, type HelpEventRecord, type SessionMode } from "./domain/session-events";
@@ -59,7 +60,7 @@ import { hashPinForStorage, pinRequiresCloudReset, verifyStoredPin } from "./dom
 import { cloudLoginErrorMessage, loginToCloud, logoutFromCloud } from "./domain/cloud-auth-client";
 import { LearningProgressChart, ProgressScore, type MonthlyProgress, type ProgressCell, type ProgressKind } from "./components/progress-visuals";
 
-type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance" | "caa";
+type View = "home" | "library" | "exercises" | "session" | "stats" | "profiles" | "appearance" | "caa" | "games";
 type Mode = SessionMode;
 type Presentation = "images" | "words";
 type Article = "IL" | "LA";
@@ -966,7 +967,7 @@ function HomePageContent() {
         setRecoveryCandidate(null);
         return;
       }
-      const nextView = (["home", "library", "exercises", "session", "stats", "profiles", "appearance", "caa"] as View[]).includes(event.state?.lgView) ? event.state.lgView as View : "home";
+      const nextView = navItems.find(item => item.id === event.state?.lgView)?.id ?? "home";
       if (sessionActive) {
         window.history.pushState({ lgView: "session", lgActivity: true }, "", window.location.pathname);
         notify("Per uscire tieni premuto Termina per 4 secondi", 3200);
@@ -2115,7 +2116,20 @@ function HomePageContent() {
   if (!therapist) return <>{showTherapistLogin ? <TherapistLogin defaultEmail={therapists[0]?.email ?? ""} onBack={() => setShowTherapistLogin(false)} /> : <PublicLanding onLogin={() => setShowTherapistLogin(true)} />}{celebratingSequence && <SequenceCelebration startMusic={startRewardMusic} musicVolume={effectiveSoundVolume / 100} onPop={playBalloonPopSound} onClose={() => setCelebratingSequence(false)} />}</>;
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild && view === "caa") return <div className="app-shell"><Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} /><main className="main-content"><header className="topbar"><button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Apri menu"><Menu /></button><button className="ghost-button" onClick={() => navigate("home")}>Torna alla scelta del profilo</button><AppVersionBadge /></header><CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} /></main></div>;
-  if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} onCaa={() => navigate("caa")} />;
+  if (!activeChild && view === "games") return (
+    <div className="app-shell">
+      <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
+      <main className="main-content">
+        <header className="topbar">
+          <button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Apri menu"><Menu /></button>
+          <button className="ghost-button" onClick={() => navigate("home")}>Torna alla scelta del profilo</button>
+          <AppVersionBadge />
+        </header>
+        <GamesView />
+      </main>
+    </div>
+  );
+  if (!activeChild) return <ChildChooser therapist={therapist} childProfiles={children} onChoose={setActiveChildId} onLogout={logout} onCaa={() => navigate("caa")} onGames={() => navigate("games")} />;
 
   return (
     <RewardActiveContext.Provider value={rewardActive || appUpdating}>
@@ -2137,6 +2151,7 @@ function HomePageContent() {
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "caa" && <CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} />}
+        {view === "games" && <GamesView />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>
@@ -2453,13 +2468,21 @@ function TherapistLogin({ defaultEmail, onBack }: { defaultEmail: string; onBack
   return <main className="auth-page"><section className="auth-brand"><span className="brand-mark brand-logo large" aria-hidden="true" /><span>Lettura <strong>Globale</strong></span><p>Uno spazio semplice per preparare e guidare le attività di lettura.</p></section><section className="login-card"><button className="text-button login-back" type="button" onClick={onBack}>← Torna alla pagina iniziale</button><div className="auth-icon"><ShieldCheck /></div><span className="eyebrow">ACCESSO ADULTO</span><h1>Accedi al pannello</h1><p>Scegli il bambino associato dopo l’accesso.</p><form onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} autoComplete="username" required /></label><label>PIN<input type="password" inputMode="numeric" maxLength={8} value={pin} onChange={(event) => { setPin(event.target.value.replace(/\D/g, "")); setError(""); }} autoComplete="current-password" placeholder="••••" required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button className="primary-button large" type="submit" disabled={submitting}><KeyRound />{submitting ? "Accesso…" : "Accedi"}</button></form><small className="auth-disclaimer">L’accesso collega questo dispositivo ai dati salvati nel cloud.</small></section></main>;
 }
 
-function ChildChooser({ therapist, childProfiles, onChoose, onLogout, onCaa }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void; onCaa: () => void }) {
+function ChildChooser({ therapist, childProfiles, onChoose, onLogout, onCaa, onGames }: { therapist: Therapist; childProfiles: ChildProfile[]; onChoose: (id: string) => void; onLogout: () => void; onCaa: () => void; onGames: () => void }) {
   const available = childProfiles.filter((child) => therapist.childIds.includes(child.id));
-  return <main className="auth-page child-choice-page"><section className="login-card wide-choice"><span className="eyebrow">PROFILO ATTIVO</span><h1>Con chi lavori oggi?</h1><p>Sono mostrati soltanto i bambini associati a {therapist.firstName}.</p><div className="child-choice-grid">{available.map((child) => <button key={child.id} onClick={() => onChoose(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName.slice(0, 1)}</span><strong>{child.firstName} {child.lastName}</strong><small>Anno {child.birthYear}</small><ChevronRight /></button>)}</div>{!available.length && <div className="empty-mini"><Users /><p>Nessun bambino associato.</p><small>Il profilo dovrà essere collegato dall’amministratore.</small></div>}<button className="primary-button" onClick={onCaa}>Apri Storie in CAA senza scegliere un bambino</button><button className="text-button" onClick={onLogout}><LogOut />Esci</button></section></main>;
+  return <main className="auth-page child-choice-page"><section className="login-card wide-choice"><span className="eyebrow">PROFILO ATTIVO</span><h1>Con chi lavori oggi?</h1><p>Sono mostrati soltanto i bambini associati a {therapist.firstName}.</p><div className="child-choice-grid">{available.map((child) => <button key={child.id} onClick={() => onChoose(child.id)}><span className="profile-avatar" style={{ background: child.avatarColor }}>{child.firstName.slice(0, 1)}</span><strong>{child.firstName} {child.lastName}</strong><small>Anno {child.birthYear}</small><ChevronRight /></button>)}</div>{!available.length && <div className="empty-mini"><Users /><p>Nessun bambino associato.</p><small>Il profilo dovrà essere collegato dall’amministratore.</small></div>}<button className="primary-button" onClick={onCaa}>Apri Storie in CAA senza scegliere un bambino</button><button className="ghost-button" onClick={onGames}>Apri Giochi</button><button className="text-button" onClick={onLogout}><LogOut />Esci</button></section></main>;
 }
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
-  { id: "home", label: "Oggi", icon: Home }, { id: "library", label: "Libreria", icon: Library }, { id: "exercises", label: "Configurazione", icon: BookOpenCheck }, { id: "session", label: "Sessione", icon: Play }, { id: "caa", label: "Storie in CAA", icon: BookOpenCheck }, { id: "stats", label: "Progressi", icon: BarChart3 }, { id: "appearance", label: "Aspetto", icon: Palette }, { id: "profiles", label: "Profili", icon: UserCog },
+  { id: "home", label: "Oggi", icon: Home },
+  { id: "library", label: "Libreria", icon: Library },
+  { id: "exercises", label: "Configurazione", icon: BookOpenCheck },
+  { id: "session", label: "Sessione", icon: Play },
+  { id: "games", label: "Giochi", icon: Gamepad2 },
+  { id: "caa", label: "Storie in CAA", icon: BookOpenCheck },
+  { id: "stats", label: "Progressi", icon: BarChart3 },
+  { id: "appearance", label: "Aspetto", icon: Palette },
+  { id: "profiles", label: "Profili", icon: UserCog },
 ];
 
 function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus }) {
