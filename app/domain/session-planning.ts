@@ -23,7 +23,10 @@ export type QuickFilterConfig = {
 export function filterQuickCandidates<T extends QuickCandidate>(candidates: T[], config: QuickFilterConfig) {
   const allowedIds = config.selection === "items" ? new Set(config.itemIds) : null;
   const allowedCategories = config.selection === "categories" || config.activity === "word-categories" ? new Set(config.categoryNames) : null;
-  return candidates.filter((item) => !item.categorySymbolOnly && (config.activity !== "word-categories" || isWordCategoryContent(item)) && (!allowedIds || allowedIds.has(item.id)) && (!allowedCategories || allowedCategories.has(item.category)) && (config.activity !== "recognition" || matchesSyllableFilter(item, config.recognitionSyllables)));
+  // Sentence scenes belong to “Abbina la frase”: in “Trova la parola” they are
+  // used only when the adult picks them explicitly.
+  const excludeSentences = config.activity === "recognition" && config.selection !== "items";
+  return candidates.filter((item) => !item.categorySymbolOnly && (!excludeSentences || item.contentKind !== "sentence") && (config.activity !== "word-categories" || isWordCategoryContent(item)) && (!allowedIds || allowedIds.has(item.id)) && (!allowedCategories || allowedCategories.has(item.category)) && (config.activity !== "recognition" || matchesSyllableFilter(item, config.recognitionSyllables)));
 }
 
 export function quickStartIsValid(config: QuickFilterConfig, candidateCount: number) {

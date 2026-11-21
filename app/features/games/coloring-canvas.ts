@@ -1,4 +1,4 @@
-import { COLORING_HEIGHT, COLORING_WIDTH, type ColoringPage } from "../domain/coloring-pages";
+import { COLORING_HEIGHT, COLORING_WIDTH, type ColoringPage } from "../../domain/coloring-pages";
 
 export type ColoringTool = "brush" | "crayon" | "fill";
 export type ColoringPoint = { x: number; y: number };

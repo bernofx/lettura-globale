@@ -5,7 +5,7 @@ import { remapExerciseReferences } from "../app/domain/exercise-library-referenc
 import { deduplicateLibraryPlaceholders, type DeduplicableLibraryItem } from "../app/domain/library-deduplication.ts";
 import { cloudSaveCanSettle, prepareCloudShare } from "../app/domain/share-preparation.ts";
 import type { SessionExercise } from "../app/domain/session-compilation.ts";
-import { readFileSync } from "node:fs";
+import { allUiSources, appSource } from "./helpers/app-source.ts";
 
 const library = [
   { id: "dog-new", word: "Cane", category: "Animali", image: "/dog.webp", article: "IL" as const, privateUpload: true },
@@ -74,9 +74,9 @@ test("yellow can settle only with no dirty data, serial writes or debounce timer
   assert.equal(cloudSaveCanSettle(1, false, false), false);
   assert.equal(cloudSaveCanSettle(0, true, false), false);
   assert.equal(cloudSaveCanSettle(0, false, true), false);
-  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /clearTimeout\(statusTimer\)/);
-  assert.doesNotMatch(source, /if \(!exercise \|\| !prompt\) return null/);
+  const source = appSource("page.tsx");
+  assert.match(appSource("features/app-state/use-cloud-sync.ts"), /clearTimeout\(statusTimer\)/);
+  assert.doesNotMatch(allUiSources(), /if \(!exercise \|\| !prompt\) return null/);
   assert.match(source, /fetchWithTimeout\(`\/api\/shared-launch/);
   assert.match(source, /validateSharedExercises\(payload.exercises, payload.library\)/);
   const share = source.slice(source.indexOf("const shareLaunch = async"), source.indexOf("const navigate = ", source.indexOf("const shareLaunch = async")));

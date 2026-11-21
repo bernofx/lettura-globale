@@ -114,3 +114,12 @@ test("normalizza i nomi storici delle categorie senza cambiare quelli nuovi", ()
   assert.equal(normalizeLearningCategory("Natura"), "Oggetti della natura");
   assert.equal(normalizeLearningCategory("Animali"), "Animali");
 });
+
+test("le scene-frase entrano nei turni casuali solo se scelte esplicitamente", () => {
+  const withScene = [...candidates, { id: "coniglio-gioca", word: "IL CONIGLIO GIOCA", category: "Azioni", contentKind: "sentence" as const }];
+  const rounds = createRandomRecognitionRounds(withScene, { rounds: 30, distractorCount: 3 }, deterministic);
+  assert.ok(rounds.length > 0);
+  assert.ok(rounds.every((round) => !round.optionIds.includes("coniglio-gioca")));
+  const explicit = createRandomRecognitionRounds(withScene, { rounds: 2, distractorCount: 2, fixedPromptId: "coniglio-gioca" }, deterministic);
+  assert.ok(explicit.every((round) => round.promptId === "coniglio-gioca"));
+});

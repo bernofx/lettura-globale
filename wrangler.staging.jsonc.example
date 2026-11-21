@@ -1,0 +1,28 @@
+// Template for the staging Worker proposed in docs/adr/0022-ambiente-staging.md.
+// Not used by any script until the ADR is approved and the resources exist:
+// copy to wrangler.staging.jsonc and replace the placeholder D1 id.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lettura-globale-staging",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "no_bundle": true,
+  "keep_vars": true,
+  "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "RealtimeSession" }] },
+  "migrations": [{ "tag": "realtime-v1", "new_sqlite_classes": ["RealtimeSession"] }],
+  "rules": [{ "type": "ESModule", "globs": ["**/*.js", "**/*.mjs"] }],
+  "assets": { "directory": "dist/client" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lettura-globale-staging",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "lettura-globale-staging" }],
+  "observability": { "enabled": true }
+}

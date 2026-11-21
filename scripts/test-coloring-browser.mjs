@@ -152,6 +152,11 @@ try {
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
   assert.deepEqual(await rgb(340, 330), green, "switching drawings preserves work until leaving Games");
+  await button("Esci");
+  await evaluate("history.back()");
+  await wait("document.querySelector('.child-choice-page')");
+  await evaluate("history.forward()");
+  await wait("document.querySelector('.games-page')");
   console.log("PASS Coloring browser: global entry, portrait/landscape, touch clipping, crayon, bucket, and drawing changes.");
 } finally {
   socket.close();

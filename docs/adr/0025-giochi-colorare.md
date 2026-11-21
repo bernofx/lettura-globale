@@ -1,6 +1,6 @@
-# ADR 0022 — Colorare nella sezione Giochi
+# ADR 0025 — Colorare nella sezione Giochi
 
-**Stato:** implementato sul branch della funzionalità.
+**Stato:** implementato.
 
 ## Decisione
 

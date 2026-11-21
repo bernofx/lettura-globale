@@ -62,3 +62,11 @@ test("abbina la frase richiede almeno il numero di scene mostrate", () => {
   assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 4 }, 3), false);
   assert.equal(quickStartIsValid({ ...base, sentenceOptionCount: 4 }, 4), true);
 });
+
+test("Trova la parola esclude le scene-frase salvo scelta manuale", () => {
+  const library = [...candidates, { id: "coniglio-gioca", category: "Azioni", contentKind: "sentence" as const }];
+  const automatic = filterQuickCandidates(library, { activity: "recognition", selection: "all", categoryNames: [], itemIds: [] });
+  assert.ok(!automatic.some((item) => item.id === "coniglio-gioca"));
+  const manual = filterQuickCandidates(library, { activity: "recognition", selection: "items", categoryNames: [], itemIds: ["coniglio-gioca", "gatto"] });
+  assert.deepEqual(manual.map((item) => item.id), ["gatto", "coniglio-gioca"]);
+});

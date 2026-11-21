@@ -55,7 +55,8 @@ test("logout resolves only after the server confirms revocation", async () => {
 
 test("UI has no backend-status dependent or local-PIN login path", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const form = page.slice(page.indexOf("function TherapistLogin("), page.indexOf("function ChildChooser("));
+  const authScreens = readFileSync(new URL("../app/features/shell/auth-screens.tsx", import.meta.url), "utf8");
+  const form = authScreens.slice(authScreens.indexOf("function TherapistLogin("), authScreens.indexOf("function ChildChooser("));
   assert.match(form, /await loginToCloud/);
   assert.doesNotMatch(form, /verifyStoredPin|backendStatus|onLogin\(|therapists\.filter/);
   assert.ok(form.indexOf("await loginToCloud") < form.indexOf("createPersistentTherapistSession"));

@@ -1,8 +1,8 @@
-# AGENTS.md — Istruzioni per Codex
+# AGENTS.md — Istruzioni per gli agenti di sviluppo
 
 1. Leggi `MASTER_PLAN.md`, questo file e `PROGRESS.md` prima di modificare il progetto.
 2. Controlla branch e working tree; non sovrascrivere lavoro non tuo.
-3. Lavora su una issue GitLab e su un branch breve. Mai push diretto a `main` dopo il bootstrap.
+3. Lavora su una issue e su un branch breve del repository autorevole GitHub (`bernofx/lettura-globale`, ADR 0011); integra tramite Pull Request. Mai push diretto a `main` dopo il bootstrap.
 4. Non decidere implicitamente autenticazione, licenze, privacy, retention, provider o deploy: crea un ADR e chiedi approvazione.
 5. Quando aggiungi una tipologia di esercizio o un nuovo valore enumerato persistito, controlla tutti i `CHECK` D1 già distribuiti (non solo lo schema corrente), inclusi esercizi, item di sessione e storico. Prevedi una migrazione forward-only oppure una codifica retrocompatibile; aggiungi test di round-trip e di scrittura con lo schema storico. Vedi `docs/MIGRAZIONE_DATI_RELAZIONALE.md`.
 
@@ -20,9 +20,16 @@
 ## Definition of Done
 
 - acceptance criteria soddisfatti;
-- `pnpm lint`, `pnpm typecheck` e `pnpm build` verdi;
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` e `pnpm build` verdi (gli stessi controlli della CI GitHub `.github/workflows/ci.yml`);
 - test pertinenti aggiunti;
 - responsive, accessibilità, privacy e sicurezza valutate;
 - migrazioni e compatibilità documentate;
 - `PROGRESS.md` e ADR aggiornati;
-- Merge Request piccola e priva di modifiche estranee.
+- Pull Request piccola e priva di modifiche estranee.
+
+## Struttura del codice UI
+
+- `app/page.tsx`: solo composizione dell'app (stato di sessione, navigazione, dialoghi).
+- `app/features/<area>/`: componenti e hook per area (`app-state`, `shell`, `home`, `library`, `exercises`, `session`, `stats`, `profiles`, `settings`, `remote`).
+- `app/shared/`: tipi, costanti, dati iniziali, client cloud, audio, hook comuni e `shared/ui` (modali, intestazioni, controlli di form). Prima di creare markup ripetuto (modali, conferme, intestazioni, PIN, caselle con descrizione) usa questi componenti.
+- `app/domain/`: logica pura e testata, senza React.

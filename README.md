@@ -31,13 +31,16 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Controlli prima di una Merge Request:
+Controlli prima di una Pull Request (gli stessi della CI GitHub):
 
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 ```
+
+Struttura del codice UI: `app/page.tsx` compone l'app; `app/features/<area>/` contiene viste, dialoghi e hook di ciascuna area; `app/shared/` contiene tipi, dati iniziali, client cloud, audio e i componenti comuni in `app/shared/ui`; `app/domain/` contiene la logica pura testata. Le decisioni sono raccolte in `docs/adr/README.md`.
 
 Cloudflare Workers Builds usa `pnpm run build` e poi `pnpm run deploy:cloudflare`. La configurazione di produzione è in `wrangler.production.jsonc`; il nome distinto evita che Vinext tenti di risolvere l'artefatto prima di averlo generato. Le migrazioni D1 restano un'operazione separata e controllata. La decisione e le impostazioni del collegamento Git sono documentate in `docs/adr/0011-deploy-cloudflare-da-git.md`.
 

@@ -2,7 +2,8 @@
 
 import { Check, Paintbrush, PaintBucket, Pencil, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../domain/coloring-pages";
+import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
+import { PageHeader } from "../../shared/ui/headings";
 import { ColoringCanvas, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import "./games-view.css";
 
@@ -35,12 +36,7 @@ export function GamesView() {
 
   return (
     <div className="page games-page">
-      <div className="page-title-row">
-        <div>
-          <h1>Giochi</h1>
-          <p>Scegli un disegno da colorare.</p>
-        </div>
-      </div>
+      <PageHeader title="Giochi" description="Scegli un disegno da colorare." />
       <section aria-labelledby="coloring-gallery">
         <h2 id="coloring-gallery">Colorare</h2>
         <div className="coloring-gallery">
