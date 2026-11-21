@@ -17,3 +17,18 @@ export function popCelebrationBalloon(popped: ReadonlySet<number>, index: number
   if (!Number.isInteger(index) || index < 0 || (!continuous && index >= BALLOON_COUNT) || popped.has(index)) return popped;
   return new Set([...popped, index]);
 }
+
+export type DragPoint = { x: number; y: number };
+
+/**
+ * Points sampled every `step` pixels from `from` to `to` (both included), so a
+ * fast drag still hits every balloon it crosses between two pointer events.
+ */
+export function pointsAlongDrag(from: DragPoint, to: DragPoint, step = 10): DragPoint[] {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const count = Math.max(1, Math.ceil(distance / step));
+  return Array.from({ length: count + 1 }, (_, index) => ({
+    x: from.x + (to.x - from.x) * index / count,
+    y: from.y + (to.y - from.y) * index / count,
+  }));
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { X } from "lucide-react";
-import { BALLOON_COLORS, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, popCelebrationBalloon } from "../domain/celebration";
+import { BALLOON_COLORS, BALLOON_WAVE_COUNT, BALLOON_WAVE_INTERVAL_MS, CELEBRATION_DURATION_MS, celebrationBalloons, pointsAlongDrag, popCelebrationBalloon, type DragPoint } from "../domain/celebration";
+import { FingerTrail } from "./finger-trail";
 import type { RewardMusicPlayer } from "../domain/reward-soundtrack";
 
 const confettiColors = ["#ee6f8b", "#ffc65f", "#80cbb1", "#9c8de6", "#76b8ed"];
@@ -74,9 +75,56 @@ export function SequenceCelebration({ onPop, onClose, mode = "completion", start
     setPopCount((count) => count + 1);
     onPop?.();
   };
+  // Game mode: dragging a finger (or the pressed mouse) pops every balloon it
+  // crosses and leaves a light fading trail.
+  const trailCanvas = useRef<HTMLCanvasElement>(null);
+  const trail = useRef<FingerTrail | null>(null);
+  const drag = useRef<{ pointerId: number; point: DragPoint } | null>(null);
+  useEffect(() => {
+    if (!isGame || !trailCanvas.current) return;
+    const current = new FingerTrail(trailCanvas.current);
+    trail.current = current;
+    return () => { current.dispose(); trail.current = null; };
+  }, [isGame]);
+  const popAlong = (from: DragPoint, to: DragPoint, root: HTMLElement) => {
+    for (const { x, y } of pointsAlongDrag(from, to)) {
+      const balloon = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-balloon-index]");
+      if (balloon && root.contains(balloon)) pop(Number(balloon.dataset.balloonIndex));
+    }
+  };
+  const startDrag = (event: ReactPointerEvent<HTMLElement>, root: HTMLElement) => {
+    if (!isGame || drag.current || (event.pointerType === "mouse" && event.button !== 0)) return;
+    const point = { x: event.clientX, y: event.clientY };
+    drag.current = { pointerId: event.pointerId, point };
+    try { root.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
+    trail.current?.add(point.x, point.y);
+    popAlong(point, point, root);
+  };
+  const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const root = event.currentTarget;
+    const events = typeof event.nativeEvent.getCoalescedEvents === "function" ? event.nativeEvent.getCoalescedEvents() : [];
+    for (const sample of events.length ? events : [event.nativeEvent]) {
+      const point = { x: sample.clientX, y: sample.clientY };
+      popAlong(current.point, point, root);
+      trail.current?.add(point.x, point.y);
+      current.point = point;
+    }
+  };
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = null;
+    trail.current?.end();
+  };
   return <div className="sequence-celebration" role={isGame ? undefined : "dialog"} aria-modal={isGame ? undefined : true}
     aria-label={isGame ? undefined : `${mode === "reward" ? "Premio" : "Festa di fine sequenza"}: tocca i palloncini per farli scoppiare`}
     style={{ "--celebration-duration": `${CELEBRATION_DURATION_MS}ms` } as CSSProperties}
+    onPointerDown={isGame ? (event) => { if (!(event.target as Element).closest("button")) startDrag(event, event.currentTarget); } : undefined}
+    onPointerMove={isGame ? moveDrag : undefined}
+    onPointerUp={isGame ? endDrag : undefined}
+    onPointerCancel={isGame ? endDrag : undefined}
+    onLostPointerCapture={isGame ? endDrag : undefined}
     onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); }
       if (event.key !== "Tab") return;
@@ -93,12 +141,19 @@ export function SequenceCelebration({ onPop, onClose, mode = "completion", start
     <span className="celebration-status" role="status" aria-live="polite">{popCount > 0 ? `${popCount} palloncini scoppiati` : "Tocca un palloncino"}</span>
     {celebrationBalloons(wave, continuous).map(({ id: index, slot, color, wave: flight }) => <span key={index} className="celebration-balloon-flight" data-current-wave={flight === wave} style={{ left: `calc(${((slot + flight * 3) % BALLOON_COLORS.length + 0.5) * 100 / BALLOON_COLORS.length}% - clamp(22px, 3.5vw, 38px))`, animationDelay: `${slot * 0.24}s`, "--balloon-color": color, "--rest-y": `${15 + (slot % 3) * 17}%` } as CSSProperties}>
       <button type="button" className={`celebration-balloon ${popped.has(index) ? "popped" : ""}`} disabled={popped.has(index)} tabIndex={flight === wave ? 0 : -1} aria-label={`Scoppia il palloncino ${index + 1}`}
-        onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); pop(index); }}
+        data-balloon-index={index}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault(); event.stopPropagation(); pop(index);
+          const root = event.currentTarget.closest<HTMLElement>(".sequence-celebration");
+          if (root) startDrag(event, root);
+        }}
         onClick={(event) => { event.stopPropagation(); pop(index); }}>
         <span className="celebration-balloon-body" aria-hidden="true" />
         {popped.has(index) && <span className="celebration-balloon-burst" aria-hidden="true">{burstDirections.map((style, piece) => <i key={piece} style={style} />)}</span>}
       </button>
     </span>)}
+    {isGame && <canvas ref={trailCanvas} className="celebration-trail" aria-hidden="true" />}
     {Array.from({ length: 36 }, (_, index) => <span aria-hidden="true" key={index} className="celebration-confetti" style={{ left: `${(index * 37) % 97}%`, backgroundColor: confettiColors[index % confettiColors.length], animationDelay: `${(index * 13) % 23 / 10}s`, animationDuration: `${3.1 + (index % 5) * 0.48}s` }} />)}
   </div>;
 }

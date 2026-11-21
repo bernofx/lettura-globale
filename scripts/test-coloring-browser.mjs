@@ -468,6 +468,30 @@ try {
   await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [balloon] });
   await touch("touchEnd");
   await wait("document.querySelector('.balloon-game-dialog .celebration-status')?.textContent === '1 palloncini scoppiati'");
+  // Dragging a finger across balloons pops each one it crosses and draws a trail.
+  const dragPath = await evaluate(`(() => {
+    const centres = [...document.querySelectorAll('.balloon-game-dialog [data-current-wave=true] button:not(:disabled)')]
+      .map(button => button.getBoundingClientRect()).map(rect => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }));
+    return centres.length >= 2 ? [centres[0], centres[1]] : null;
+  })()`);
+  assert.ok(dragPath, "at least two balloons are available to drag across");
+  const [dragFrom, dragTo] = dragPath;
+  await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...dragFrom, id: 2 }] });
+  for (let step = 1; step <= 12; step++) {
+    const point = { x: dragFrom.x + (dragTo.x - dragFrom.x) * step / 12, y: dragFrom.y + (dragTo.y - dragFrom.y) * step / 12, id: 2 };
+    await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+  }
+  // The helper does not await promises: read the next drawn frame into a page variable.
+  await evaluate(`delete window.testTrailInk; requestAnimationFrame(() => {
+    const canvas = document.querySelector('.balloon-game-dialog .celebration-trail');
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let ink = 0; for (let index = 3; index < data.length; index += 4) if (data[index]) ink++;
+    window.testTrailInk = ink;
+  })`);
+  await wait("window.testTrailInk !== undefined");
+  assert.ok(await evaluate("window.testTrailInk") > 0, "the drag leaves a visible trail");
+  await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await wait("Number(document.querySelector('.balloon-game-dialog .celebration-status')?.textContent.split(' ')[0]) >= 3");
   await wait("document.querySelector('.balloon-game-dialog button[aria-label=\"Scoppia il palloncino 9\"]')");
   await assertGameIgnoresBack(".balloon-game-dialog[open]");
   await button("Chiudi il gioco dei palloncini");
