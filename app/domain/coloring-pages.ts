@@ -1,4 +1,4 @@
-import { extraColoringPages } from "./coloring-extra-pages";
+import { extraColoringPages } from "./coloring-extra-pages.ts";
 
 export const COLORING_WIDTH = 720;
 export const COLORING_HEIGHT = 480;
@@ -81,3 +81,21 @@ export const coloringPages = [
 ] as const;
 
 export type ColoringPage = typeof coloringPages[number];
+
+/**
+ * Splits the decorative strokes of a drawing into dots (eyes, nostrils: `M x y h.1`,
+ * drawn with a thick round cap) and lines (mouths, antennae, steam: drawn thin).
+ * The split is per sub-path, so it does not depend on the order of `details`.
+ */
+export function detailStrokes(details: readonly string[]) {
+  const dots: string[] = [];
+  const lines: string[] = [];
+  for (const detail of details) {
+    for (const part of detail.trim().split(/(?=M)/)) {
+      const subpath = part.trim();
+      if (!subpath) continue;
+      (/^M\s*-?[\d.]+[\s,]+-?[\d.]+\s*h\s*\.1$/.test(subpath) ? dots : lines).push(subpath);
+    }
+  }
+  return { dots: dots.join(" "), lines: lines.join(" ") };
+}

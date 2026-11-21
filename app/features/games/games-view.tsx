@@ -181,6 +181,15 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     if (!element) return;
     const viewport = window.visualViewport;
     let viewportFrame = 0;
+    let unmounting = false;
+
+    // Esc/Back must not leave the game (only the X does). Browsers may still close
+    // a modal dialog natively, e.g. on a repeated Esc without user activation:
+    // reopen it so the visible state never diverges from React's `game`.
+    function keepOpen() {
+      if (unmounting || !element || element.open || !element.isConnected) return;
+      try { element.showModal(); } catch { /* not connected anymore */ }
+    }
 
     function stopStroke() {
       const current = stroke.current;
@@ -217,11 +226,14 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 
     fitViewport();
     element.showModal();
+    element.addEventListener("close", keepOpen);
     viewport?.addEventListener("resize", scheduleFit);
     viewport?.addEventListener("scroll", scheduleFit);
     window.addEventListener("resize", scheduleFit);
     window.addEventListener("blur", stopStroke);
     return () => {
+      unmounting = true;
+      element.removeEventListener("close", keepOpen);
       element.close();
       stopStroke();
       cancelAnimationFrame(viewportFrame);
@@ -250,7 +262,11 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     const observer = new ResizeObserver(fitCanvas);
     observer.observe(surface);
     fitCanvas();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      // Keep the vectors for the next visit but free the device-resolution caches.
+      painting.releaseCaches();
+    };
   }, [painting]);
 
   function start(event: PointerEvent<HTMLCanvasElement>) {

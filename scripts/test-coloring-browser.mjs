@@ -44,7 +44,13 @@ socket.addEventListener("message", event => {
     }
     const url = new URL(request.url);
     if (url.pathname === gameSoundtrackPath) {
-      if (request.method === "PUT") hasCustomSoundtrack = true;
+      if (request.method === "PUT") {
+        const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
+        assert.equal(headers["x-soundtrack-rights"], "confirmed", "the rights confirmation is sent with the upload");
+        assert.equal(decodeURIComponent(headers["x-soundtrack-source"]), "Registrazione di prova", "the source is sent with the upload");
+        assert.equal(decodeURIComponent(headers["x-soundtrack-license"]), "CC0", "the licence is sent with the upload");
+        hasCustomSoundtrack = true;
+      }
       if (request.method === "DELETE") hasCustomSoundtrack = false;
       const info = url.searchParams.has("info") || request.method !== "GET";
       const audio = !info && hasCustomSoundtrack;
@@ -98,9 +104,14 @@ async function assertGameIgnoresBack(selector) {
     assert.equal((await send("Page.getNavigationHistory")).currentIndex, currentIndex, "Back does not accumulate entries");
     assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Back leaves the game open");
   }
-  await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
-  await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
-  assert.ok(await evaluate(`document.querySelector(${JSON.stringify(selector)})?.isConnected`), "Escape leaves the game open");
+  // Twice: Chromium's close watcher lets a repeated Esc without user activation
+  // close a modal dialog natively even when the first cancel was prevented.
+  for (let press = 0; press < 2; press++) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await delay(50);
+  }
+  assert.ok(await evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); return Boolean(element?.isConnected && (element.tagName !== "DIALOG" || element.open)); })()`), "Escape leaves the game open and visible");
 }
 
 async function viewport(width, height) {
@@ -409,6 +420,11 @@ try {
   const { root } = await send("DOM.getDocument");
   const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: ".game-soundtrack-file input" });
   await send("DOM.setFileInputFiles", { nodeId, files: [new URL("../public/audio/coloring-game.mp3", import.meta.url).pathname] });
+  for (const [index, value] of ["Registrazione di prova", "CC0"].entries()) {
+    await evaluate(`document.querySelectorAll('.game-soundtrack-file input:not([type=file])')[${index}].focus()`);
+    await send("Input.insertText", { text: value });
+  }
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(item => item.textContent.includes('Carica MP3')).disabled"), true, "rights are still required");
   await evaluate("document.querySelector('.game-soundtrack-panel input[type=checkbox]').click()");
   await button("Carica MP3");
   await wait("document.querySelector('.game-soundtrack-panel [role=status]')?.textContent.includes('salvata nel cloud')");

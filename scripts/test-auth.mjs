@@ -106,8 +106,9 @@ try {
   assert.equal((await read(cookie(recovered))).status, 200);
   const soundtrackPath = "/api/game-soundtrack";
   const mp3 = readFileSync("public/audio/coloring-calypso.mp3");
-  const upload = (body, key = adminCookie) => request(soundtrackPath, {
-    method: "PUT", headers: { cookie: key, "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3") }, body,
+  const uploadHeaders = { "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3"), "x-soundtrack-source": encodeURIComponent("Autore di prova"), "x-soundtrack-license": "CC0", "x-soundtrack-rights": "confirmed" };
+  const upload = (body, key = adminCookie, extra = {}) => request(soundtrackPath, {
+    method: "PUT", headers: { cookie: key, ...uploadHeaders, ...extra }, body,
   });
   const info = (key = adminCookie) => request(`${soundtrackPath}?info`, { headers: { cookie: key } });
   assert.equal((await request(soundtrackPath)).status, 401);
@@ -115,10 +116,17 @@ try {
   assert.equal((await (await info()).json()).soundtrack, null);
   assert.equal((await upload(Buffer.from("ID3 non è un MP3"))).status, 422);
   assert.equal((await upload(Buffer.alloc(6_000_001))).status, 413);
+  assert.equal((await upload(mp3, adminCookie, { "x-soundtrack-rights": "" })).status, 400, "the rights confirmation is mandatory");
+  assert.equal((await upload(mp3, adminCookie, { "x-soundtrack-license": "" })).status, 400, "the licence is mandatory");
+  const withTrailer = Buffer.concat([mp3, Buffer.from("APETAGEX"), Buffer.alloc(24)]);
+  assert.equal((await upload(withTrailer)).status, 200, "an APEv2 trailer does not invalidate the MP3");
   const saved = await upload(mp3);
   assert.equal(saved.status, 200);
   const { soundtrack } = await saved.json();
   assert.equal(soundtrack.name, "Colonna sonora 🎵.mp3");
+  assert.equal(soundtrack.source, "Autore di prova");
+  assert.equal(soundtrack.license, "CC0");
+  assert.ok(soundtrack.rightsConfirmedAt, "the rights confirmation time is stored");
   assert.deepEqual((await (await info(secondCookie)).json()).soundtrack, soundtrack, "the library soundtrack is shared within its account");
 
   const outsider = { id: "adult-outsider", email: "outsider@example.test", firstName: "Outsider", role: "Amministratore", pinHash: firstHash, childIds: [] };
@@ -138,6 +146,16 @@ try {
   assert.equal(slice.status, 206);
   assert.equal(slice.headers.get("content-range"), `bytes 0-1/${mp3.length}`);
   assert.deepEqual(Buffer.from(await slice.arrayBuffer()), mp3.subarray(0, 2));
+  const tail = await request(soundtrackPath, { headers: { cookie: adminCookie, range: `bytes=${mp3.length - 10}-` } });
+  assert.equal(tail.status, 206, "open-ended ranges are partial responses");
+  assert.equal(tail.headers.get("content-range"), `bytes ${mp3.length - 10}-${mp3.length - 1}/${mp3.length}`);
+  assert.deepEqual(Buffer.from(await tail.arrayBuffer()), mp3.subarray(mp3.length - 10));
+  const suffix = await request(soundtrackPath, { headers: { cookie: adminCookie, range: "bytes=-4" } });
+  assert.equal(suffix.status, 206, "suffix ranges are partial responses");
+  assert.deepEqual(Buffer.from(await suffix.arrayBuffer()), mp3.subarray(mp3.length - 4));
+  const beyond = await request(soundtrackPath, { headers: { cookie: adminCookie, range: `bytes=${mp3.length}-` } });
+  assert.equal(beyond.status, 416, "unsatisfiable ranges are rejected instead of failing");
+  assert.equal(beyond.headers.get("content-range"), `bytes */${mp3.length}`);
   assert.equal((await request(soundtrackPath, { method: "DELETE", headers: { cookie: adminCookie } })).status, 200);
   assert.equal((await (await info()).json()).soundtrack, null);
   console.log("PASS: MP3 validation, authorized private R2 audio and byte ranges, account isolation and reset.");

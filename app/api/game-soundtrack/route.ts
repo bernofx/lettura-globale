@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
-import { GAME_SOUNDTRACK_URL, MAX_SOUNDTRACK_BYTES, MAX_SOUNDTRACK_SECONDS, mp3Duration } from "../../domain/game-soundtrack";
+import { GAME_SOUNDTRACK_URL, MAX_SOUNDTRACK_BYTES, MAX_SOUNDTRACK_SECONDS, mp3Duration, SOUNDTRACK_TEXT_LIMIT } from "../../domain/game-soundtrack";
+import { resolveByteRange } from "../../domain/byte-range";
 import { authenticatedAdult, noStoreJson } from "../controller/_shared";
 import { ownerStoragePrefix } from "../media-key";
 
@@ -31,7 +32,14 @@ async function boundedBytes(request: Request) {
 }
 
 function metadata(object: R2Object) {
-  return { name: object.customMetadata?.name ?? "Colonna sonora dei giochi", etag: object.etag };
+  const custom = object.customMetadata ?? {};
+  return { name: custom.name ?? "Colonna sonora dei giochi", etag: object.etag, source: custom.source, license: custom.license, rightsConfirmedAt: custom.rightsConfirmedAt };
+}
+
+/** Reads a percent-encoded text header; `undefined` when it cannot be decoded. */
+function textHeader(request: Request, name: string) {
+  try { return decodeURIComponent(request.headers.get(name)?.slice(0, 1024) ?? "").trim().slice(0, SOUNDTRACK_TEXT_LIMIT); }
+  catch { return undefined; }
 }
 
 export async function GET(request: Request) {
@@ -42,20 +50,27 @@ export async function GET(request: Request) {
     const object = await env.BUCKET.head(key);
     return noStoreJson({ soundtrack: object ? metadata(object) : null });
   }
-  const object = await env.BUCKET.get(key, { range: request.headers });
-  if (!object) return noStoreJson({ error: "soundtrack_not_found" }, { status: 404 });
-
+  const info = await env.BUCKET.head(key);
+  if (!info) return noStoreJson({ error: "soundtrack_not_found" }, { status: 404 });
   const headers = new Headers({
     "content-type": "audio/mpeg", "cache-control": "private, no-store",
-    "x-content-type-options": "nosniff", "accept-ranges": "bytes", etag: object.httpEtag,
+    "x-content-type-options": "nosniff", "accept-ranges": "bytes", etag: info.httpEtag,
   });
-  const range = object.range;
-  if (request.headers.has("range") && range && "offset" in range && range.offset !== undefined && range.length !== undefined) {
-    headers.set("content-range", `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}`);
+  // Resolve the range ourselves: R2 echoes open-ended and suffix ranges without a
+  // length, which previously produced a 200 whose body did not match its length.
+  const range = resolveByteRange(request.headers.get("range"), info.size);
+  if (range === "unsatisfiable") {
+    headers.set("content-range", `bytes */${info.size}`);
+    return new Response(null, { status: 416, headers });
+  }
+  const object = await env.BUCKET.get(key, range ? { range } : undefined);
+  if (!object) return noStoreJson({ error: "soundtrack_not_found" }, { status: 404 });
+  if (range) {
+    headers.set("content-range", `bytes ${range.offset}-${range.offset + range.length - 1}/${info.size}`);
     headers.set("content-length", String(range.length));
     return new Response(object.body, { status: 206, headers });
   }
-  headers.set("content-length", String(object.size));
+  headers.set("content-length", String(info.size));
   return new Response(object.body, { headers });
 }
 
@@ -70,12 +85,16 @@ export async function PUT(request: Request) {
   if (duration === null) return noStoreJson({ error: "mp3_required" }, { status: 422 });
   if (duration > MAX_SOUNDTRACK_SECONDS) return noStoreJson({ error: "duration_limit" }, { status: 422 });
 
-  let name: string;
-  try { name = decodeURIComponent(request.headers.get("x-soundtrack-name")?.slice(0, 1024) ?? "").trim().slice(0, 120); }
-  catch { return noStoreJson({ error: "invalid_name" }, { status: 400 }); }
+  const name = textHeader(request, "x-soundtrack-name");
+  const source = textHeader(request, "x-soundtrack-source");
+  const license = textHeader(request, "x-soundtrack-license");
+  if (name === undefined || source === undefined || license === undefined) return noStoreJson({ error: "invalid_name" }, { status: 400 });
+  // Source and licence are mandatory metadata; the adult must confirm the right to use the audio.
+  if (request.headers.get("x-soundtrack-rights") !== "confirmed") return noStoreJson({ error: "rights_required" }, { status: 400 });
+  if (!source || !license) return noStoreJson({ error: "metadata_required" }, { status: 400 });
   const object = await env.BUCKET.put(key, bytes, {
     httpMetadata: { contentType: "audio/mpeg", cacheControl: "private, no-store" },
-    customMetadata: { name: name || "Colonna sonora dei giochi" },
+    customMetadata: { name: name || "Colonna sonora dei giochi", source, license, rightsConfirmedAt: new Date().toISOString() },
   });
   return noStoreJson({ soundtrack: metadata(object), url: GAME_SOUNDTRACK_URL });
 }
