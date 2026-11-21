@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Giochi mostra un catalogo di tessere con immagine e nome. Colorare apre la galleria e dispone subito il gioco in orizzontale, con tocchi e zoom adattati al viewport. Libreria → Audio permette di ascoltare, caricare e rimuovere la colonna sonora MP3 dell’account su R2. Cache PWA v66.
+
 - [x] Lo sfondo del foglio in Colorare si colora con tutti gli strumenti, con i contorni che isolano ciascuna zona. Musica predefinita: estratto di «Tummy-Rumble Calypso» di DURU-AI (CC0). Cache PWA v65.
 
 - [x] Sistemato lo scorrimento orizzontale su smartphone nella barra dell’app, nella scelta del profilo e nelle schede con nomi lunghi. In Colorare, strumenti e tavolozza sono due colonne affiancate. Cache PWA v64.

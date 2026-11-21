@@ -8,6 +8,16 @@
   gap: clamp(12px, 2vw, 22px);
 }
 
+.game-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 230px));
+  gap: clamp(12px, 2vw, 22px);
+}
+
+.game-picker-back {
+  margin-bottom: 16px;
+}
+
 .coloring-card {
   display: grid;
   gap: 12px;
@@ -191,6 +201,10 @@
   touch-action: pan-y pinch-zoom;
 }
 
+.coloring-dialog[data-rotated="true"] .coloring-colors {
+  touch-action: none;
+}
+
 .coloring-colors button[aria-pressed="true"] .coloring-swatch {
   outline: 2px solid var(--violet);
   outline-offset: 2px;
@@ -220,29 +234,6 @@
 
 .coloring-controls button:focus-visible {
   outline-offset: -2px;
-}
-
-.coloring-rotate {
-  display: none;
-}
-
-@media (orientation: portrait) {
-  .coloring-workspace {
-    display: none;
-  }
-
-  .coloring-rotate {
-    display: grid;
-    align-content: center;
-    justify-items: center;
-    padding: 24px;
-    text-align: center;
-    font-size: 20px;
-  }
-
-  .coloring-rotate svg {
-    color: var(--violet);
-  }
 }
 
 @media (max-width: 520px) {

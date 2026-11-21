@@ -25,7 +25,8 @@ crypto.subtle.deriveBits = function(algorithm, key, length) {
   return originalDeriveBits(algorithm, key, length);
 };\n` + modules[0].contents;
 const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", compatibilityFlags: ["nodejs_compat"], modules,
-  durableObjects: { SESSIONS: { className: "RealtimeSession", useSQLite: true } }, d1Databases: { DB: "synthetic-auth-d1" } });
+  durableObjects: { SESSIONS: { className: "RealtimeSession", useSQLite: true } }, d1Databases: { DB: "synthetic-auth-d1" },
+  r2Buckets: { BUCKET: "synthetic-soundtrack-r2" } });
 async function request(path, init) {
   let timeout;
   try {
@@ -103,6 +104,43 @@ try {
   assert.equal(recovered.status, 200);
   assert.equal((await recovered.json()).therapistId, "adult-old");
   assert.equal((await read(cookie(recovered))).status, 200);
+  const soundtrackPath = "/api/game-soundtrack";
+  const mp3 = readFileSync("public/audio/coloring-calypso.mp3");
+  const upload = (body, key = adminCookie) => request(soundtrackPath, {
+    method: "PUT", headers: { cookie: key, "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3") }, body,
+  });
+  const info = (key = adminCookie) => request(`${soundtrackPath}?info`, { headers: { cookie: key } });
+  assert.equal((await request(soundtrackPath)).status, 401);
+  assert.equal((await upload(mp3, firstCookie)).status, 401, "a revoked adult session cannot upload");
+  assert.equal((await (await info()).json()).soundtrack, null);
+  assert.equal((await upload(Buffer.from("ID3 non è un MP3"))).status, 422);
+  assert.equal((await upload(Buffer.alloc(6_000_001))).status, 413);
+  const saved = await upload(mp3);
+  assert.equal(saved.status, 200);
+  const { soundtrack } = await saved.json();
+  assert.equal(soundtrack.name, "Colonna sonora 🎵.mp3");
+  assert.deepEqual((await (await info(secondCookie)).json()).soundtrack, soundtrack, "the library soundtrack is shared within its account");
+
+  const outsider = { id: "adult-outsider", email: "outsider@example.test", firstName: "Outsider", role: "Amministratore", pinHash: firstHash, childIds: [] };
+  await db.prepare("INSERT INTO user_states (user_id,email,payload,schema_version,revision,created_at,updated_at) VALUES (?,?,?,1,1,?,?)")
+    .bind("another-account", outsider.email, JSON.stringify({ ...state, therapists: [outsider] }), now, now).run();
+  await db.prepare("INSERT INTO therapist_credentials (login_email,owner_user_id,therapist_id,pin_hash,display_name,updated_at) VALUES (?,?,?,?,?,?)")
+    .bind(outsider.email, "another-account", outsider.id, outsider.pinHash, outsider.firstName, now).run();
+  const outsiderCookie = cookie(await login(outsider.email, "1357"));
+  assert.ok(outsiderCookie);
+  assert.equal((await (await info(outsiderCookie)).json()).soundtrack, null, "another account cannot see the track");
+  assert.equal((await request(soundtrackPath, { headers: { cookie: outsiderCookie } })).status, 404);
+  const full = await request(soundtrackPath, { headers: { cookie: adminCookie } });
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(Buffer.from(await full.arrayBuffer()), mp3);
+  const slice = await request(soundtrackPath, { headers: { cookie: adminCookie, range: "bytes=0-1" } });
+  assert.equal(slice.status, 206);
+  assert.equal(slice.headers.get("content-range"), `bytes 0-1/${mp3.length}`);
+  assert.deepEqual(Buffer.from(await slice.arrayBuffer()), mp3.subarray(0, 2));
+  assert.equal((await request(soundtrackPath, { method: "DELETE", headers: { cookie: adminCookie } })).status, 200);
+  assert.equal((await (await info()).json()).soundtrack, null);
+  console.log("PASS: MP3 validation, authorized private R2 audio and byte ranges, account isolation and reset.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

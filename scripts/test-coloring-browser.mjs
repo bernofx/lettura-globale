@@ -1,7 +1,7 @@
 // Run against the local production build and a fresh Chromium profile with CDP.
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const origin = process.env.COLORING_TEST_ORIGIN ?? "http://127.0.0.1:5180";
 const debuggerUrl = process.env.COLORING_TEST_DEBUGGER ?? "http://127.0.0.1:9222";
@@ -17,6 +17,9 @@ const state = { schemaVersion: 1, therapists: [therapist], children: [], library
 const pending = new Map();
 let id = 0;
 let availableVersion = null;
+let hasCustomSoundtrack = false;
+const soundtrack = { name: "coloring-game.mp3", etag: "test-mp3" };
+const gameSoundtrackPath = "/api/game-soundtrack";
 
 function send(method, params = {}) {
   return new Promise((resolve, reject) => {
@@ -37,6 +40,22 @@ socket.addEventListener("message", event => {
     const { requestId, request } = message.params;
     if (request.url === `${origin}/api/app-version` && availableVersion === null) {
       void send("Fetch.continueRequest", { requestId });
+      return;
+    }
+    const url = new URL(request.url);
+    if (url.pathname === gameSoundtrackPath) {
+      if (request.method === "PUT") hasCustomSoundtrack = true;
+      if (request.method === "DELETE") hasCustomSoundtrack = false;
+      const info = url.searchParams.has("info") || request.method !== "GET";
+      const audio = !info && hasCustomSoundtrack;
+      const body = info
+        ? Buffer.from(JSON.stringify({ soundtrack: hasCustomSoundtrack ? soundtrack : null }))
+        : audio ? readFileSync("public/audio/coloring-game.mp3") : Buffer.from("{}");
+      void send("Fetch.fulfillRequest", {
+        requestId, responseCode: info || audio ? 200 : 404,
+        responseHeaders: [{ name: "Content-Type", value: audio ? "audio/mpeg" : "application/json" }],
+        body: body.toString("base64"),
+      });
       return;
     }
     const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: 1 };
@@ -88,6 +107,10 @@ async function touch(type, x, y) {
     const point = await evaluate(`(() => {
       const canvas = document.querySelector('.coloring-board canvas');
       const rect = canvas.getBoundingClientRect();
+      if (canvas.closest('dialog').dataset.rotated === 'true') {
+        return { x: rect.right - rect.width * ${y} / canvas.height,
+          y: rect.top + rect.height * ${x} / canvas.width };
+      }
       return { x: rect.left + rect.width * ${x} / canvas.width,
         y: rect.top + rect.height * ${y} / canvas.height };
     })()`);
@@ -106,7 +129,7 @@ try {
   await send("Page.enable");
   await send("Network.enable");
   await send("Network.setBypassServiceWorker", { bypass: true });
-  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }] });
+  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
@@ -139,6 +162,10 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   assert.equal(await evaluate(documentFitsWidth), true, "profile selection fits a narrow phone");
   await button("Apri Giochi");
+  await wait("document.querySelectorAll('.game-picker button').length === 1");
+  assert.equal(await evaluate("document.querySelector('.game-picker button').textContent.trim()"), "Colorare");
+  assert.equal(await evaluate("Boolean(document.querySelector('.game-picker button canvas'))"), true);
+  await button("Colorare");
   await wait("document.querySelectorAll('.coloring-card').length >= 24");
   await wait(`[...document.querySelectorAll('.coloring-card canvas')].every(canvas =>
     canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0))`);
@@ -146,10 +173,27 @@ try {
   await wait("document.querySelector('.coloring-dialog[open]')");
   assert.equal(await evaluate("document.querySelector('.coloring-heading').textContent.trim()"), "Esci");
   assert.equal(await evaluate("document.querySelector('.coloring-dialog').getAttribute('aria-label')"), "Colorare");
-  assert.equal(await evaluate("getComputedStyle(document.querySelector('.coloring-workspace')).display"), "none");
-  assert.equal(await evaluate("document.querySelector('.coloring-rotate').checkVisibility()"), true);
+  await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'true'");
+  await wait(gameFitsVisibleViewport);
+  const palette = await evaluate(`(() => {
+    const bounds = document.querySelector('.coloring-colors').getBoundingClientRect();
+    return { x: bounds.left + bounds.width / 5, y: bounds.top + bounds.height / 2, width: bounds.width };
+  })()`);
+  for (let step = 0; step <= 8; step++) {
+    await send("Input.dispatchTouchEvent", {
+      type: step === 0 ? "touchStart" : "touchMove",
+      touchPoints: [{ x: palette.x + step * palette.width / 12, y: palette.y, id: 1 }],
+    });
+  }
+  await touch("touchEnd");
+  await wait("document.querySelector('.coloring-colors').scrollTop > 0");
+  await touch("touchStart", 130, 110);
+  await touch("touchMove", 160, 110);
+  await touch("touchEnd");
+  assert.deepEqual(await rgb(145, 110), red, "the brush follows the touch while the game is turned");
+  await wait("window.testMusic.starts === 1 && window.testMusic.gain?.value > 0");
   await viewport(800, 390);
-  assert.equal(await evaluate("document.querySelector('.coloring-rotate').checkVisibility()"), false);
+  await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'false'");
   assert.equal(await evaluate("document.querySelector('.coloring-colors').scrollHeight > document.querySelector('.coloring-colors').clientHeight"), true);
   await viewport(568, 320);
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
@@ -227,9 +271,10 @@ try {
   assert.deepEqual(await rgb(340, 330), green, "background fill preserves previously colored areas");
   assert.deepEqual(await rgb(355, 135), white, "background fill leaves the unpainted figure white");
   await viewport(390, 800);
-  await wait("window.testMusic.gain?.value === 0");
+  await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'true'");
+  assert.ok(await evaluate("window.testMusic.gain?.value > 0"));
   await viewport(568, 320);
-  await wait("window.testMusic.gain?.value > 0");
+  await wait("document.querySelector('.coloring-dialog').dataset.rotated === 'false'");
   assert.deepEqual(await rgb(340, 330), green, "rotation preserves the current drawing");
 
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
@@ -254,6 +299,8 @@ try {
   await touch("touchEnd");
   await wait("!document.querySelector('.coloring-dialog[open]')");
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+  await button("Torna ai giochi");
+  await wait("document.querySelector('.game-picker')");
   await evaluate("history.back()");
   await wait("document.querySelector('.child-choice-page')");
   await evaluate("history.forward()");
@@ -276,15 +323,45 @@ try {
       await button("Apri menu");
       await button(view);
       await wait(`document.querySelector('.nav-item.active')?.textContent === ${JSON.stringify(view)}`);
-      assert.equal(await evaluate(documentFitsWidth), true, `${view} must fit a ${width}px mobile viewport`);
+      if (!await evaluate(documentFitsWidth)) {
+        const overflow = await evaluate(`[...document.querySelectorAll("main *")].filter(element => element.getBoundingClientRect().right > ${width} + 1)
+          .slice(0, 12).map(element => [element.tagName, String(element.className), Math.round(element.getBoundingClientRect().right)])`);
+        assert.fail(`${view} must fit a ${width}px mobile viewport: ${JSON.stringify(overflow)}`);
+      }
     }
   }
+  await viewport(320, 800);
+  await button("Apri menu");
+  await button("Libreria");
+  await wait("document.querySelector('.game-soundtrack-file input:not(:disabled)')");
+  const { root } = await send("DOM.getDocument");
+  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: ".game-soundtrack-file input" });
+  await send("DOM.setFileInputFiles", { nodeId, files: [new URL("../public/audio/coloring-game.mp3", import.meta.url).pathname] });
+  await evaluate("document.querySelector('.game-soundtrack-panel input[type=checkbox]').click()");
+  await button("Carica MP3");
+  await wait("document.querySelector('.game-soundtrack-panel [role=status]')?.textContent.includes('salvata nel cloud')");
+  assert.equal(await evaluate("document.querySelector('.game-soundtrack-current strong').textContent"), soundtrack.name);
+  assert.equal(await evaluate(documentFitsWidth), true, "the MP3 controls fit a narrow phone");
+  await button("Apri menu");
+  await button("Giochi");
+  await button("Colorare");
+  await button("Casa");
+  await wait("document.querySelector('.coloring-dialog[open]')");
+  await touch("touchStart", 130, 110);
+  await touch("touchEnd");
+  await wait("window.testMusic.duration > 20 && window.testMusic.duration < 35");
+  await button("Esci");
+  await button("Apri menu");
+  await button("Libreria");
+  await wait("document.querySelector('.game-soundtrack-current strong')?.textContent === 'coloring-game.mp3'");
+  await button("Ripristina musica predefinita");
+  await wait("document.querySelector('.game-soundtrack-current strong')?.textContent.includes('Calypso')");
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
   await send("Page.reload");
   await wait("document.querySelector('.topbar .app-version.has-update button')?.textContent === 'Aggiorna'");
   assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
-  console.log("PASS Colorare: mobile zoom, pinch, exit, scrolling palette, touch, rotation, and music lifecycle.");
+  console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {
   socket.close();

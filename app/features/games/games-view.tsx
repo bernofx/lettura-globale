@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Music2, Paintbrush, PaintBucket, Pencil, RotateCw, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
-import { startBackgroundMusic } from "../../shared/audio";
+import { DEFAULT_GAME_SOUNDTRACK, GAME_SOUNDTRACK_URL } from "../../domain/game-soundtrack";
+import { createRewardMusic, type RewardMusicPlayer } from "../../domain/reward-soundtrack";
+import { feedbackContext } from "../../shared/audio";
 import { PageHeader } from "../../shared/ui/headings";
 import { ColoringCanvas, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import "./games-view.css";
@@ -23,9 +25,28 @@ const colors = [
   ["Bianco", "#ffffff"],
 ] as const;
 
-const COLORING_MUSIC = "/audio/coloring-calypso.mp3";
+const games = [{ id: "coloring", title: "Colorare", picture: coloringPages[0] }] as const;
+type GameId = (typeof games)[number]["id"];
+
+async function loadGameSoundtrack(context: AudioContext, signal: AbortSignal) {
+  try {
+    const custom = await fetch(GAME_SOUNDTRACK_URL, {
+      cache: "no-store",
+      signal: typeof AbortSignal.any === "function" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.any([signal, AbortSignal.timeout(6000)])
+        : signal,
+    });
+    if (custom.ok) return await context.decodeAudioData(await custom.arrayBuffer());
+  } catch {
+    // A custom track may be unavailable when the game is opened offline.
+  }
+  if (signal.aborted) return null;
+  const standard = await fetch(DEFAULT_GAME_SOUNDTRACK, { signal });
+  return standard.ok ? context.decodeAudioData(await standard.arrayBuffer()) : null;
+}
 
 export function GamesView({ soundVolume }: { soundVolume: number }) {
+  const [selectedGame, setSelectedGame] = useState<GameId | null>(null);
   const [game, setGame] = useState<{ page: ColoringPage; painting: ColoringCanvas } | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const artwork = useRef(new Map<string, ColoringCanvas>());
@@ -40,8 +61,21 @@ export function GamesView({ soundVolume }: { soundVolume: number }) {
 
   return (
     <div className="page games-page">
-      <PageHeader title="Giochi" description="Scegli un disegno da colorare." />
-      <section aria-labelledby="coloring-gallery">
+      <PageHeader title="Giochi" />
+      {selectedGame === null && (
+        <div className="game-picker">
+          {games.map(({ id, title, picture }) => (
+            <button className="coloring-card" key={id} type="button" onClick={() => setSelectedGame(id)}>
+              <DrawingThumbnail page={picture} />
+              <span>{title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {selectedGame === "coloring" && <section aria-labelledby="coloring-gallery">
+        <button className="ghost-button game-picker-back" type="button" onClick={() => setSelectedGame(null)}>
+          <ArrowLeft size={18} aria-hidden="true" /> Torna ai giochi
+        </button>
         <h2 id="coloring-gallery">Colorare</h2>
         <div className="coloring-gallery">
           {coloringPages.map(page => (
@@ -51,7 +85,7 @@ export function GamesView({ soundVolume }: { soundVolume: number }) {
             </button>
           ))}
         </div>
-      </section>
+      </section>}
       {game && (
         <ColoringGame
           page={game.page}
@@ -90,8 +124,14 @@ type Stroke = {
   color: string;
 };
 
-function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>): ColoringPoint {
-  const { left, top, width, height } = event.currentTarget.getBoundingClientRect();
+function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean): ColoringPoint {
+  const { left, top, right, width, height } = event.currentTarget.getBoundingClientRect();
+  if (rotated) {
+    return {
+      x: (event.clientY - top) / height * COLORING_WIDTH,
+      y: (right - event.clientX) / width * COLORING_HEIGHT,
+    };
+  }
   return {
     x: (event.clientX - left) / width * COLORING_WIDTH,
     y: (event.clientY - top) / height * COLORING_HEIGHT,
@@ -109,39 +149,38 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stroke = useRef<Stroke | null>(null);
-  const music = useRef<ReturnType<typeof startBackgroundMusic> | null>(null);
+  const paletteDrag = useRef<{ pointerId: number; startX: number; scrollTop: number } | null>(null);
+  const music = useRef<RewardMusicPlayer | null>(null);
+  const rotated = useRef(false);
   const [tool, setTool] = useState<ColoringTool>("brush");
   const [color, setColor] = useState<string>(colors[0][1]);
 
   useEffect(() => {
-    const player = startBackgroundMusic(COLORING_MUSIC, 0);
+    const context = feedbackContext();
+    const request = new AbortController();
+    const player = createRewardMusic(context, async () => context && loadGameSoundtrack(context, request.signal), 0);
     music.current = player;
     return () => {
       player.stop();
+      request.abort();
       music.current = null;
     };
   }, []);
 
   useEffect(() => {
-    const orientation = window.matchMedia("(orientation: landscape)");
     function updateMusic() {
-      const audible = musicEnabled && orientation.matches && !document.hidden;
+      const audible = musicEnabled && !document.hidden;
       music.current?.setVolume(audible ? soundVolume * 0.55 : 0);
     }
     updateMusic();
-    orientation.addEventListener("change", updateMusic);
     document.addEventListener("visibilitychange", updateMusic);
-    return () => {
-      orientation.removeEventListener("change", updateMusic);
-      document.removeEventListener("visibilitychange", updateMusic);
-    };
+    return () => document.removeEventListener("visibilitychange", updateMusic);
   }, [musicEnabled, soundVolume]);
 
   useEffect(() => {
     const element = dialog.current;
     const surface = canvas.current;
     if (!element) return;
-    const orientation = window.matchMedia("(orientation: landscape)");
     const viewport = window.visualViewport;
     let viewportFrame = 0;
 
@@ -154,13 +193,19 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     }
 
     function fitViewport() {
-      if (!element || !viewport || viewport.width <= 0 || viewport.height <= 0) return;
-      const { width, height, offsetLeft, offsetTop, scale } = viewport;
+      if (!element) return;
+      const { width, height, offsetLeft, offsetTop, scale } = viewport ?? {
+        width: window.innerWidth, height: window.innerHeight, offsetLeft: 0, offsetTop: 0, scale: 1,
+      };
+      if (width <= 0 || height <= 0 || scale <= 0) return;
       // Fixed dialogs use the layout viewport. Follow the visible rectangle
       // and compensate for pinch zoom to keep the full-size game usable in it.
-      element.style.setProperty("--coloring-viewport-width", `${width * scale}px`);
-      element.style.setProperty("--coloring-viewport-height", `${height * scale}px`);
-      element.style.transform = `translate(${offsetLeft}px, ${offsetTop}px) scale(${1 / scale})`;
+      rotated.current = width < height;
+      element.dataset.rotated = String(rotated.current);
+      element.style.setProperty("--coloring-viewport-width", `${(rotated.current ? height : width) * scale}px`);
+      element.style.setProperty("--coloring-viewport-height", `${(rotated.current ? width : height) * scale}px`);
+      const left = offsetLeft + (rotated.current ? width : 0);
+      element.style.transform = `translate(${left}px, ${offsetTop}px) scale(${1 / scale})${rotated.current ? " rotate(90deg)" : ""}`;
     }
 
     function scheduleFit() {
@@ -176,7 +221,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     element.showModal();
     viewport?.addEventListener("resize", scheduleFit);
     viewport?.addEventListener("scroll", scheduleFit);
-    orientation.addEventListener("change", stopStroke);
+    window.addEventListener("resize", scheduleFit);
     window.addEventListener("blur", stopStroke);
     return () => {
       element.close();
@@ -184,7 +229,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
       cancelAnimationFrame(viewportFrame);
       viewport?.removeEventListener("resize", scheduleFit);
       viewport?.removeEventListener("scroll", scheduleFit);
-      orientation.removeEventListener("change", stopStroke);
+      window.removeEventListener("resize", scheduleFit);
       window.removeEventListener("blur", stopStroke);
     };
   }, []);
@@ -195,10 +240,10 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   }, [painting]);
 
   function start(event: PointerEvent<HTMLCanvasElement>) {
-    if (event.button !== 0 || stroke.current || !window.matchMedia("(orientation: landscape)").matches) return;
+    if (event.button !== 0 || stroke.current) return;
     const context = event.currentTarget.getContext("2d");
     if (!context) return;
-    const point = pointOnDrawing(event);
+    const point = pointOnDrawing(event, rotated.current);
     const area = painting.areaAt(context, point);
     if (area < 0) return;
 
@@ -217,7 +262,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     if (!current || current.pointerId !== event.pointerId) return;
     const context = event.currentTarget.getContext("2d");
     if (!context) return;
-    const point = pointOnDrawing(event);
+    const point = pointOnDrawing(event, rotated.current);
     painting.stroke(current.area, current.point, point, current.color, current.tool);
     current.point = point;
     painting.render(context);
@@ -225,6 +270,28 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 
   function stop(event: PointerEvent<HTMLCanvasElement>) {
     if (stroke.current?.pointerId === event.pointerId) stroke.current = null;
+  }
+
+  function startPaletteDrag(event: PointerEvent<HTMLDivElement>) {
+    if (!rotated.current || event.pointerType !== "touch" || !event.isPrimary) return;
+    paletteDrag.current = { pointerId: event.pointerId, startX: event.clientX, scrollTop: event.currentTarget.scrollTop };
+  }
+
+  function movePaletteDrag(event: PointerEvent<HTMLDivElement>) {
+    const drag = paletteDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId || !rotated.current) return;
+    const palette = event.currentTarget;
+    const movement = (event.clientX - drag.startX) * palette.offsetHeight / palette.getBoundingClientRect().width;
+    if (!palette.hasPointerCapture(drag.pointerId)) {
+      if (Math.abs(movement) < 8) return;
+      palette.setPointerCapture(drag.pointerId);
+    }
+    // The palette's local vertical axis maps to the viewport's horizontal axis.
+    palette.scrollTop = drag.scrollTop + movement;
+  }
+
+  function endPaletteDrag(event: PointerEvent<HTMLDivElement>) {
+    if (paletteDrag.current?.pointerId === event.pointerId) paletteDrag.current = null;
   }
 
   return (
@@ -248,10 +315,6 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
           <button type="button" className="ghost-button" onClick={onClose}><X size={20} aria-hidden="true" /> Esci</button>
         </div>
       </header>
-      <div className="coloring-rotate">
-        <RotateCw size={44} aria-hidden="true" />
-        <p>Gira lo schermo per colorare.</p>
-      </div>
       <div className="coloring-workspace">
         <div className="coloring-board">
           <canvas
@@ -275,7 +338,9 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
               </button>
             ))}
           </div>
-          <div role="group" aria-label="Colori" className="coloring-colors">
+          <div role="group" aria-label="Colori" className="coloring-colors"
+            onPointerDown={startPaletteDrag} onPointerMove={movePaletteDrag}
+            onPointerUp={endPaletteDrag} onPointerCancel={endPaletteDrag}>
             {colors.map(([label, value]) => (
               <button key={value} type="button" aria-label={label} title={label} aria-pressed={color === value} onClick={() => setColor(value)}>
                 <span className="coloring-swatch" style={{ backgroundColor: value }} aria-hidden="true">
