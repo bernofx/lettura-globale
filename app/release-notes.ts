@@ -1,7 +1,8 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Scegli un puzzle dalla galleria",
+  title: "Carica i tuoi puzzle dalla Libreria",
   items: [
+    "In Libreria → Puzzle puoi salvare più immagini insieme. Le trovi subito nella galleria di Giochi.",
     "Guarda le anteprime e avvia il puzzle nel formato 4 × 4, 4 × 5 o 5 × 5 con un tocco.",
     "Sposta i pezzi sul tavolo per scoprire quelli sotto. Puoi mostrare l’immagine guida quando vuoi.",
     "Il dettaglio di ogni gioco mostra il suo nome e il pulsante Torna ai giochi.",

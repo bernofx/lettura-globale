@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Libreria → Puzzle supporta più immagini per caricamento, salvataggio privato per account in R2 e rimozione. Le anteprime salvate compaiono automaticamente in Giochi. I caricamenti in attesa si sincronizzano al ritorno della rete. Cache PWA v72.
+
 - [x] I puzzle si avviano dalla galleria di anteprime. Ogni immagine offre 4 × 4, 4 × 5 e 5 × 5, con righe indicate per prime. La Libreria e i file dal dispositivo possono aggiungere altre anteprime. Cache PWA v71.
 
 - [x] Puzzle a incastro in Giochi con 4 × 4, 5 × 4 e 5 × 5. Immagine Casa, scelta da Libreria o file di prova dal dispositivo. Vassoio riordinabile, aggancio dei pezzi, guida e X. Cache PWA v70.

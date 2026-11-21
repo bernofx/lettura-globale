@@ -20,6 +20,9 @@ let availableVersion = null;
 let hasCustomSoundtrack = false;
 const soundtrack = { name: "coloring-game.mp3", etag: "test-mp3" };
 const gameSoundtrackPath = "/api/game-soundtrack";
+const puzzlePath = "/api/puzzle-images";
+const puzzleUploads = new Map();
+let postponePuzzleUpload = true;
 
 function send(method, params = {}) {
   return new Promise((resolve, reject) => {
@@ -43,6 +46,36 @@ socket.addEventListener("message", event => {
       return;
     }
     const url = new URL(request.url);
+    if (url.pathname === puzzlePath) {
+      const puzzleId = url.searchParams.get("image");
+      let status = 200;
+      let data;
+      if (request.method === "PUT") {
+        const title = decodeURIComponent(Object.entries(request.headers).find(([name]) => name.toLowerCase() === "x-puzzle-title")?.[1] ?? "");
+        if (postponePuzzleUpload && title === "giochi") {
+          status = 503;
+          data = { error: "storage_unavailable" };
+        } else {
+          const image = { id: puzzleId, title, image: puzzlePath + "?image=" + puzzleId };
+          puzzleUploads.set(puzzleId, image);
+          data = { image };
+        }
+      } else if (request.method === "DELETE") {
+        puzzleUploads.delete(puzzleId);
+        data = { deleted: true };
+      } else if (!puzzleId) {
+        data = { scope: "a".repeat(32), images: [...puzzleUploads.values()] };
+      } else if (!puzzleUploads.has(puzzleId)) {
+        status = 404;
+        data = { error: "image_not_found" };
+      }
+      void send("Fetch.fulfillRequest", {
+        requestId, responseCode: status,
+        responseHeaders: [{ name: "Content-Type", value: data ? "application/json" : "image/webp" }],
+        body: (data ? Buffer.from(JSON.stringify(data)) : readFileSync("public/images/categories/casa.webp")).toString("base64"),
+      });
+      return;
+    }
     if (url.pathname === gameSoundtrackPath) {
       if (request.method === "PUT") hasCustomSoundtrack = true;
       if (request.method === "DELETE") hasCustomSoundtrack = false;
@@ -171,7 +204,7 @@ try {
   await send("Page.enable");
   await send("Network.enable");
   await send("Network.setBypassServiceWorker", { bypass: true });
-  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }] });
+  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }, { urlPattern: `${origin}${puzzlePath}*` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
@@ -576,6 +609,39 @@ try {
   await wait("!document.querySelector('.sequence-celebration') && !history.state?.lgGameGuard");
   assert.ok(await evaluate("Boolean(document.querySelector('.session-complete-screen'))"), "the X returns to the session summary");
 
+  await button("Apri menu");
+  await button("Libreria");
+  await wait("document.querySelector('.puzzle-library input[type=file]')");
+  const libraryDocument = await send("DOM.getDocument");
+  const files = await send("DOM.querySelector", { nodeId: libraryDocument.root.nodeId, selector: ".puzzle-library input[type=file]" });
+  await send("DOM.setFileInputFiles", {
+    nodeId: files.nodeId,
+    files: ["casa", "giochi"].map(name => new URL("../public/images/categories/" + name + ".webp", import.meta.url).pathname),
+  });
+  await evaluate("document.querySelector('.puzzle-library input[type=checkbox]').click()");
+  await wait("document.querySelector('.puzzle-library button[type=submit]:not(:disabled)')");
+  await button("Carica immagini");
+  await wait("[...document.querySelectorAll('.puzzle-library [role=status]')].some(node => node.textContent.includes('in attesa di sincronizzazione'))");
+  assert.equal(puzzleUploads.size, 1, "an unavailable upload is queued while the other image is saved");
+  postponePuzzleUpload = false;
+  await evaluate("window.dispatchEvent(new Event('online'))");
+  await wait("document.querySelectorAll('.puzzle-library .category-library-card').length === 2");
+  await button("Apri menu");
+  await button("Giochi");
+  await button("Puzzle a incastro");
+  await wait("document.querySelectorAll('.puzzle-gallery-card').length === 3");
+  await button("giochi · 4 × 5 · 20 pezzi");
+  await wait("document.querySelectorAll('.puzzle-tray button').length === 20");
+  await button("Esci dal puzzle");
+  await wait("!history.state?.lgGameGuard");
+  await button("Apri menu");
+  await button("Libreria");
+  await wait("document.querySelector('.puzzle-library [aria-label=\"Rimuovi giochi\"]')");
+  await button("Rimuovi giochi");
+  await button("Rimuovi immagine");
+  await wait("document.querySelectorAll('.puzzle-library .category-library-card').length === 1");
+  assert.equal(puzzleUploads.size, 1);
+
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
   await send("Page.reload");
@@ -584,6 +650,7 @@ try {
   console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
   console.log("PASS Palloncini: dedicated detail page, playable touch targets, new waves, uploaded soundtrack and close button.");
   console.log("PASS Puzzle gallery: previews and direct launch of 16, 20 and 25 pieces, device image, stacking, completion, rotation and protected exit.");
+  console.log("PASS Puzzle library: multiple files, automatic retry, gallery visibility, playback and confirmed removal.");
   console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {

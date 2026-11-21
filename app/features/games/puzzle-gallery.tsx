@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PuzzleImage } from "../../domain/puzzle-library";
 import { prepareUploadedImage } from "../../shared/media-storage";
 import type { LibraryItem } from "../../shared/types";
 import { demoPuzzleImage, puzzleGrids, type PuzzleSize } from "./puzzle-art";
@@ -13,7 +14,7 @@ const formats = (Object.keys(puzzleGrids) as PuzzleSize[]).map(size => {
   return { size, label: rows + " × " + columns, pieces: rows * columns };
 });
 
-export function PuzzleGallery({ library, onStart }: { library: LibraryItem[]; onStart: (selection: PuzzleSelection) => void }) {
+export function PuzzleGallery({ library, puzzleImages, onStart }: { library: LibraryItem[]; puzzleImages: PuzzleImage[]; onStart: (selection: PuzzleSelection) => void }) {
   const [libraryIds, setLibraryIds] = useState<string[]>([]);
   const [localImages, setLocalImages] = useState<PuzzleSource[]>([]);
   const [busy, setBusy] = useState(false);
@@ -31,6 +32,7 @@ export function PuzzleGallery({ library, onStart }: { library: LibraryItem[]; on
   const availableImages = libraryImages.filter(item => !inGallery.has(item.id));
   const sources = [
     ...examples,
+    ...puzzleImages,
     ...libraryImages.filter(item => inGallery.has(item.id)).map(item => ({ ...item, id: "library:" + item.id })),
     ...localImages,
   ];
