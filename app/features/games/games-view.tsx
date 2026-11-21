@@ -1,14 +1,15 @@
 "use client";
 
-import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, VolumeX, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
-import { DEFAULT_GAME_SOUNDTRACK, GAME_SOUNDTRACK_URL } from "../../domain/game-soundtrack";
-import { createRewardMusic, type RewardMusicPlayer } from "../../domain/reward-soundtrack";
-import { feedbackContext } from "../../shared/audio";
+import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import { PageHeader } from "../../shared/ui/headings";
+import { BalloonGame, BalloonThumbnail } from "./balloon-game";
 import { ColoringCanvas, coloringFrame, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
+import { startGameMusic } from "./game-music";
 import "./games-view.css";
+import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
 const tools = [
   { id: "brush", label: "Pennello", icon: Paintbrush },
@@ -25,29 +26,16 @@ const colors = [
   ["Bianco", "#ffffff"],
 ] as const;
 
-const games = [{ id: "coloring", title: "Colorare", picture: coloringPages[0] }] as const;
-type GameId = (typeof games)[number]["id"];
-
-async function loadGameSoundtrack(context: AudioContext, signal: AbortSignal) {
-  try {
-    const custom = await fetch(GAME_SOUNDTRACK_URL, {
-      cache: "no-store",
-      signal: typeof AbortSignal.any === "function" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.any([signal, AbortSignal.timeout(6000)])
-        : signal,
-    });
-    if (custom.ok) return await context.decodeAudioData(await custom.arrayBuffer());
-  } catch {
-    // A custom track may be unavailable when the game is opened offline.
-  }
-  if (signal.aborted) return null;
-  const standard = await fetch(DEFAULT_GAME_SOUNDTRACK, { signal });
-  return standard.ok ? context.decodeAudioData(await standard.arrayBuffer()) : null;
-}
+const games = [
+  { id: "coloring", title: "Colorare", thumbnail: <DrawingThumbnail page={coloringPages[0]} /> },
+  { id: "balloons", title: "Palloncini", thumbnail: <BalloonThumbnail /> },
+] as const;
+type Game = (typeof games)[number];
+type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } | { id: "balloons" };
 
 export function GamesView({ soundVolume, onPlayingChange }: { soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
-  const [selectedGame, setSelectedGame] = useState<GameId | null>(null);
-  const [game, setGame] = useState<{ page: ColoringPage; painting: ColoringCanvas } | null>(null);
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [game, setGame] = useState<ActiveGame | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const artwork = useRef(new Map<string, ColoringCanvas>());
   const playing = game !== null;
@@ -67,32 +55,43 @@ export function GamesView({ soundVolume, onPlayingChange }: { soundVolume: numbe
 
   return (
     <div className="page games-page">
-      <PageHeader title="Giochi" />
+      <PageHeader title={selectedGame?.title ?? "Giochi"} />
+      {selectedGame && (
+        <button className="ghost-button game-picker-back" type="button" onClick={() => setSelectedGame(null)}>
+          <ArrowLeft size={18} aria-hidden="true" /><span>Torna ai giochi</span>
+        </button>
+      )}
       {selectedGame === null && (
         <div className="game-picker">
-          {games.map(({ id, title, picture }) => (
-            <button className="coloring-card" key={id} type="button" onClick={() => setSelectedGame(id)}>
-              <DrawingThumbnail page={picture} />
-              <span>{title}</span>
+          {games.map(entry => (
+            <button className="coloring-card" key={entry.id} type="button" onClick={() => setSelectedGame(entry)}>
+              {entry.thumbnail}
+              <span>{entry.title}</span>
             </button>
           ))}
         </div>
       )}
-      {selectedGame === "coloring" && <section aria-labelledby="coloring-gallery">
-        <button className="ghost-button game-picker-back" type="button" onClick={() => setSelectedGame(null)}>
-          <ArrowLeft size={18} aria-hidden="true" /> Torna ai giochi
-        </button>
-        <h2 id="coloring-gallery">Colorare</h2>
-        <div className="coloring-gallery">
+      {selectedGame?.id === "coloring" && (
+        <section className="coloring-gallery" aria-label="Scegli un disegno">
           {coloringPages.map(page => (
-            <button className="coloring-card" key={page.id} type="button" onClick={() => setGame({ page, painting: paintingFor(page) })}>
+            <button className="coloring-card" key={page.id} type="button" onClick={() => setGame({ id: "coloring", page, painting: paintingFor(page) })}>
               <DrawingThumbnail page={page} />
               <span>{page.title}</span>
             </button>
           ))}
-        </div>
-      </section>}
-      {game && (
+        </section>
+      )}
+      {selectedGame?.id === "balloons" && (
+        <section className="panel balloon-game-setup">
+          <BalloonThumbnail />
+          <p>Tocca i palloncini mentre salgono per farli scoppiare.</p>
+          <button className="primary-button" type="button" onClick={() => setGame({ id: "balloons" })}>
+            <Play size={18} aria-hidden="true" /> Inizia
+          </button>
+        </section>
+      )}
+      {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
+      {game?.id === "coloring" && (
         <ColoringGame
           page={game.page}
           painting={game.painting}
@@ -146,6 +145,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  useKeepDialogOpen(dialog);
   const stroke = useRef<Stroke | null>(null);
   const paletteDrag = useRef<{ pointerId: number; startX: number; scrollTop: number } | null>(null);
   const music = useRef<RewardMusicPlayer | null>(null);
@@ -154,25 +154,16 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   const [color, setColor] = useState<string>(colors[0][1]);
 
   useEffect(() => {
-    const context = feedbackContext();
-    const request = new AbortController();
-    const player = createRewardMusic(context, async () => context && loadGameSoundtrack(context, request.signal), 0);
+    const player = startGameMusic(0);
     music.current = player;
     return () => {
       player.stop();
-      request.abort();
       music.current = null;
     };
   }, []);
 
   useEffect(() => {
-    function updateMusic() {
-      const audible = musicEnabled && !document.hidden;
-      music.current?.setVolume(audible ? soundVolume * 0.55 : 0);
-    }
-    updateMusic();
-    document.addEventListener("visibilitychange", updateMusic);
-    return () => document.removeEventListener("visibilitychange", updateMusic);
+    music.current?.setVolume(musicEnabled ? soundVolume * 0.55 : 0);
   }, [musicEnabled, soundVolume]);
 
   useEffect(() => {
@@ -181,15 +172,6 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     if (!element) return;
     const viewport = window.visualViewport;
     let viewportFrame = 0;
-    let unmounting = false;
-
-    // Esc/Back must not leave the game (only the X does). Browsers may still close
-    // a modal dialog natively, e.g. on a repeated Esc without user activation:
-    // reopen it so the visible state never diverges from React's `game`.
-    function keepOpen() {
-      if (unmounting || !element || element.open || !element.isConnected) return;
-      try { element.showModal(); } catch { /* not connected anymore */ }
-    }
 
     function stopStroke() {
       const current = stroke.current;
@@ -226,14 +208,11 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 
     fitViewport();
     element.showModal();
-    element.addEventListener("close", keepOpen);
     viewport?.addEventListener("resize", scheduleFit);
     viewport?.addEventListener("scroll", scheduleFit);
     window.addEventListener("resize", scheduleFit);
     window.addEventListener("blur", stopStroke);
     return () => {
-      unmounting = true;
-      element.removeEventListener("close", keepOpen);
       element.close();
       stopStroke();
       cancelAnimationFrame(viewportFrame);

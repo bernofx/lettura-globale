@@ -217,11 +217,20 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   assert.equal(await evaluate(documentFitsWidth), true, "profile selection fits a narrow phone");
   await button("Apri Giochi");
-  await wait("document.querySelectorAll('.game-picker button').length === 1");
-  assert.equal(await evaluate("document.querySelector('.game-picker button').textContent.trim()"), "Colorare");
-  assert.equal(await evaluate("Boolean(document.querySelector('.game-picker button canvas'))"), true);
+  await wait("document.querySelectorAll('.game-picker button').length === 2");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.game-picker button')].map(button => button.textContent.trim())"), ["Colorare", "Palloncini"]);
+  assert.equal(await evaluate("document.querySelectorAll('.game-picker button .coloring-card-art').length"), 2);
+  assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Giochi");
   await button("Colorare");
   await wait("document.querySelectorAll('.coloring-card').length >= 24");
+  assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Colorare");
+  assert.ok(await evaluate(`(() => {
+    const button = document.querySelector('.game-picker-back');
+    const icon = button.querySelector('svg').getBoundingClientRect();
+    const label = button.querySelector('span').getBoundingClientRect();
+    return icon.right <= label.left && Math.abs(icon.top + icon.height / 2 - label.top - label.height / 2) < 1 &&
+      button.getBoundingClientRect().width < document.querySelector('.games-page').clientWidth;
+  })()`), "the back arrow and text are horizontally aligned on a narrow phone");
   await wait(`[...document.querySelectorAll('.coloring-card canvas')].every(canvas =>
     canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0))`);
   await button("Casa");
@@ -355,6 +364,7 @@ try {
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await button("Esci");
+  await wait("!history.state?.lgGameGuard");
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
   await wait("visualViewport.scale >= 1.99");
   await button("Casa");
@@ -439,6 +449,32 @@ try {
   await touch("touchEnd");
   await wait("window.testMusic.duration > 20 && window.testMusic.duration < 35");
   await button("Esci");
+  await wait("!history.state?.lgGameGuard");
+  const musicBeforeBalloons = await evaluate("window.testMusic.starts");
+  const stopsBeforeBalloons = await evaluate("window.testMusic.stops");
+  await button("Torna ai giochi");
+  await button("Palloncini");
+  await wait("document.querySelector('.games-page h1')?.textContent === 'Palloncini'");
+  assert.equal(await evaluate(documentFitsWidth), true, "the balloon detail fits a narrow phone");
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await button("Inizia");
+  await wait("document.querySelector('.balloon-game-dialog[open]')?.getAttribute('aria-label') === 'Palloncini'");
+  await wait(`window.testMusic.starts === ${musicBeforeBalloons} + 1`);
+  assert.ok(await evaluate("window.testMusic.duration > 20 && window.testMusic.duration < 35"), "balloons use the uploaded game soundtrack");
+  const balloon = await evaluate(`(() => {
+    const bounds = document.querySelector('.balloon-game-dialog [data-current-wave=true] button').getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, id: 1 };
+  })()`);
+  await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [balloon] });
+  await touch("touchEnd");
+  await wait("document.querySelector('.balloon-game-dialog .celebration-status')?.textContent === '1 palloncini scoppiati'");
+  await wait("document.querySelector('.balloon-game-dialog button[aria-label=\"Scoppia il palloncino 9\"]')");
+  await assertGameIgnoresBack(".balloon-game-dialog[open]");
+  await button("Chiudi il gioco dei palloncini");
+  await wait("!document.querySelector('.balloon-game-dialog') && !history.state?.lgGameGuard");
+  await wait(`window.testMusic.stops === ${stopsBeforeBalloons} + 1`);
+  assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Palloncini");
+  await send("Emulation.setEmulatedMedia", { features: [] });
   await button("Apri menu");
   await button("Libreria");
   await wait("document.querySelector('.game-soundtrack-current strong')?.textContent === 'coloring-game.mp3'");
@@ -475,6 +511,7 @@ try {
   await wait("document.querySelector('.topbar .app-version.has-update button')?.textContent === 'Aggiorna'");
   assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
   console.log("PASS Giochi: icon catalog, full landscape layout in portrait viewport, zoom, touch, palette, MP3 upload and playback.");
+  console.log("PASS Palloncini: dedicated detail page, playable touch targets, new waves, uploaded soundtrack and close button.");
   console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
   console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {
