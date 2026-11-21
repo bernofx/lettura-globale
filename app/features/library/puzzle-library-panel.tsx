@@ -1,9 +1,12 @@
 "use client";
 
-import { Plus, Trash2, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { PuzzleImage } from "../../domain/puzzle-library";
 import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
+import { SectionHeading } from "../../shared/ui/headings";
+import { FilePicker, IMAGE_FILE_ACCEPT, IMAGE_FILE_HINT } from "../../shared/ui/file-picker";
+import { CheckLine } from "../../shared/ui/form-controls";
 import type { PuzzleLibrary } from "../games/use-puzzle-library";
 import "./puzzle-library-panel.css";
 import { supportsMultipleFiles } from "../../domain/android-bridge";
@@ -34,14 +37,10 @@ export function PuzzleLibraryPanel({ catalog, search, onAdd }: { catalog: Puzzle
   }
 
   return (
-    <section className="library-area puzzle-library" aria-labelledby="puzzle-library-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="puzzle-library-title">Puzzle</h2>
-          <p>Le immagini salvate qui compaiono in Giochi → Puzzle a incastro.</p>
-        </div>
-        <button type="button" className="primary-button" onClick={onAdd}><Plus size={18} />Aggiungi immagini</button>
-      </div>
+    <section className="panel library-area puzzle-library" aria-labelledby="puzzle-library-title">
+      <SectionHeading id="puzzle-library-title" title="Puzzle" description="Le immagini salvate qui compaiono in Giochi → Puzzle a incastro.">
+        <button type="button" className="primary-button" onClick={onAdd}><Plus size={18} aria-hidden="true" />Aggiungi immagini</button>
+      </SectionHeading>
       {!catalog.ready && !catalog.error && <p role="status">Connettiti al cloud per aprire il catalogo dei puzzle.</p>}
       {busy && <p role="status">Operazione in corso…</p>}
       {catalog.pending > 0 && <p role="status">
@@ -62,11 +61,12 @@ export function PuzzleLibraryPanel({ catalog, search, onAdd }: { catalog: Puzzle
           ))}
         </div>
       )}
-      {!query && images.length > 4 && (
+      {!query && images.length > 4 && <div className="library-expansion">
+        <span>Mostrati {visible.length} di {images.length}</span>
         <button type="button" className="ghost-button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-          {expanded ? "Riduci anteprime" : "Mostra tutte le immagini puzzle"}
+          {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}{expanded ? "Riduci" : "Mostra tutte le immagini puzzle"}
         </button>
-      )}
+      </div>}
       {confirm && <ConfirmDialog labelledBy="puzzle-delete-title" eyebrow="PUZZLE"
         title={"Rimuovere «" + confirm.title + "» dai puzzle?"} confirmLabel="Rimuovi immagine"
         onCancel={() => setConfirm(null)} onConfirm={() => void remove(confirm)}>
@@ -81,7 +81,6 @@ export function PuzzleUploadDialog({ catalog, onClose, onSaved }: { catalog: Puz
   const [rights, setRights] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const input = useRef<HTMLInputElement>(null);
   const mounted = useRef(false);
   const [multiple] = useState(() => supportsMultipleFiles());
   useEffect(() => {
@@ -107,7 +106,6 @@ export function PuzzleUploadDialog({ catalog, onClose, onSaved }: { catalog: Puz
       if (saved || queued) {
         setFiles([]);
         setRights(false);
-        if (input.current) input.current.value = "";
       }
     } catch {
       if (mounted.current) setError("Impossibile caricare le immagini. Riprova.");
@@ -120,21 +118,15 @@ export function PuzzleUploadDialog({ catalog, onClose, onSaved }: { catalog: Puz
     <Modal labelledBy="puzzle-upload-title" className="puzzle-upload-dialog" onClose={busy ? undefined : onClose}
       closeButton onSubmit={event => { event.preventDefault(); void upload(); }}>
       <ModalTitle id="puzzle-upload-title" eyebrow="PUZZLE">Aggiungi immagini ai puzzle</ModalTitle>
-      <button className="drop-zone" type="button" disabled={busy} onClick={() => input.current?.click()}>
-        <Upload aria-hidden="true" />
-        <strong>{files.length === 0 ? (multiple ? "Scegli una o più immagini" : "Scegli un’immagine") : files.length === 1 ? "1 immagine selezionata" : files.length + " immagini selezionate"}</strong>
-        <small>{files.length ? "Cambia selezione" : "JPG, PNG o WebP"}</small>
-      </button>
-      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple={multiple} hidden disabled={busy}
-        onChange={event => {
-          setFiles(Array.from(event.target.files ?? []));
+      <FilePicker accept={IMAGE_FILE_ACCEPT} hint={IMAGE_FILE_HINT} multiple={multiple} disabled={busy}
+        label={files.length ? "Cambia selezione" : multiple ? "Scegli una o più immagini" : "Scegli un’immagine"}
+        selection={files.length ? (files.length === 1 ? "1 immagine selezionata" : files.length + " immagini selezionate") : undefined}
+        onFiles={selected => {
+          setFiles(selected);
           setRights(false);
           setError("");
         }} />
-      {files.length > 0 && <label className="check-line">
-        <input type="checkbox" checked={rights} disabled={busy} onChange={event => setRights(event.target.checked)} />
-        Confermo di avere i diritti per usare queste immagini.
-      </label>}
+      {files.length > 0 && <CheckLine checked={rights} disabled={busy} onChange={setRights} title="Confermo di avere i diritti per usare queste immagini." />}
       {!catalog.ready && !catalog.error && <p role="status">Connettiti al cloud per aprire il catalogo dei puzzle.</p>}
       {(error || catalog.error) && <p className="form-error" role="alert">{error || catalog.error}</p>}
       <ModalActions onCancel={onClose} cancelDisabled={busy}>

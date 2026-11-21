@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PuzzleImage } from "../../domain/puzzle-library";
+import { FilePicker, IMAGE_FILE_ACCEPT, IMAGE_FILE_HINT } from "../../shared/ui/file-picker";
+import { SectionHeading } from "../../shared/ui/headings";
 import { prepareUploadedImage } from "../../shared/media-storage";
 import type { LibraryItem } from "../../shared/types";
 import { demoPuzzleImage, puzzleGrids, type PuzzleSize } from "./puzzle-art";
@@ -82,8 +84,24 @@ export function PuzzleGallery({ library, puzzleImages, onStart }: { library: Lib
 
   return (
     <>
-      {busy && <p role="status">Caricamento immagini…</p>}
-      {error && <p role="alert">{error}</p>}
+      <section className="panel puzzle-gallery-tools" aria-labelledby="puzzle-gallery-tools-title">
+        <SectionHeading id="puzzle-gallery-tools-title" title="Aggiungi immagini" description="Le immagini aggiunte qui restano disponibili fino all’uscita dalla galleria dei puzzle." />
+        <div className="puzzle-gallery-inputs">
+          <FilePicker accept={IMAGE_FILE_ACCEPT} hint={IMAGE_FILE_HINT} label={allowMultiple ? "Scegli immagini dal dispositivo" : "Scegli un’immagine dal dispositivo"}
+            multiple={allowMultiple} disabled={busy} compact onFiles={files => void upload(files)} />
+          {availableImages.length > 0 && <label>Da Libreria
+            <select value="" disabled={busy} onChange={event => {
+              const id = event.target.value;
+              if (id) setLibraryIds(previous => [...previous, id]);
+            }}>
+              <option value="">Scegli un’immagine</option>
+              {availableImages.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+          </label>}
+        </div>
+        {busy && <p role="status">Caricamento immagini…</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </section>
       <section className="puzzle-gallery" aria-label="Immagini dei puzzle">
         {sources.map(source => (
           <article key={source.id} className="puzzle-gallery-card" aria-label={source.title}>
@@ -99,24 +117,6 @@ export function PuzzleGallery({ library, puzzleImages, onStart }: { library: Lib
           </article>
         ))}
       </section>
-      <details className="panel puzzle-gallery-tools">
-        <summary>Aggiungi immagini</summary>
-        {availableImages.length > 0 && <label>Da Libreria
-          <select value="" disabled={busy} onChange={event => {
-            const id = event.target.value;
-            if (id) setLibraryIds(previous => [...previous, id]);
-          }}>
-            <option value="">Scegli un’immagine</option>
-            {availableImages.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-          </select>
-        </label>}
-        <label>Dal dispositivo
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple={allowMultiple} disabled={busy} onChange={event => {
-            void upload(Array.from(event.target.files ?? []));
-            event.target.value = "";
-          }} />
-        </label>
-      </details>
     </>
   );
 }

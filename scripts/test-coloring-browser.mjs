@@ -125,6 +125,13 @@ async function button(label) {
     .find(button => (button.getAttribute('aria-label') ?? button.textContent.trim()) === ${JSON.stringify(label)}).click()`);
 }
 
+async function chooseFixture(selector, fixture) {
+  const { root } = await send("DOM.getDocument");
+  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector });
+  assert.ok(nodeId, selector);
+  await send("DOM.setFileInputFiles", { nodeId, files: [new URL(fixture, import.meta.url).pathname] });
+}
+
 async function assertGameIgnoresBack(selector) {
   await wait("history.state?.lgGameGuard");
   const state = await evaluate("history.state.lgGameGuard");
@@ -459,17 +466,47 @@ try {
   await viewport(320, 800);
   await button("Apri menu");
   await button("Libreria");
-  await wait("document.querySelector('.game-soundtrack-file input:not(:disabled)')");
-  const { root } = await send("DOM.getDocument");
-  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: ".game-soundtrack-file input" });
-  await send("DOM.setFileInputFiles", { nodeId, files: [new URL("../public/audio/coloring-game.mp3", import.meta.url).pathname] });
+  await wait("document.querySelectorAll('.library-sections > .library-area.panel > .section-heading').length === 6");
+  const testPhoto = "../public/images/categories/casa.webp";
+  for (const action of ["Aggiungi immagine", "Aggiungi frase"]) {
+    await button(action);
+    await wait("document.querySelector('#upload-library-title ~ .file-picker .drop-zone')");
+    await chooseFixture("#upload-library-title ~ .file-picker input[type=file]", testPhoto);
+    await wait("document.querySelector('#upload-library-title ~ .file-picker .drop-zone small')?.textContent === 'Cambia immagine'");
+    await evaluate("document.querySelector('#upload-library-title').closest('.modal').querySelector('input[type=checkbox]').click()");
+    await chooseFixture("#upload-library-title ~ .file-picker input[type=file]", testPhoto);
+    await wait("!document.querySelector('#upload-library-title').closest('.modal').querySelector('input[type=checkbox]').checked");
+    await button("Annulla");
+    await wait("!history.state?.lgModal");
+  }
+  await evaluate("document.querySelector('.library-card .card-actions button').click()");
+  await wait("document.querySelector('#edit-library-title ~ .file-picker .drop-zone')?.textContent.includes('Sostituisci immagine')");
+  await button("Annulla");
+  await wait("!history.state?.lgModal");
+  await evaluate("document.querySelector('.category-library-card button').click()");
+  await wait("document.querySelector('#category-image-title ~ .file-picker .drop-zone')");
+  await chooseFixture("#category-image-title ~ .file-picker input[type=file]", testPhoto);
+  await wait("document.querySelector('#category-image-title ~ .file-picker .drop-zone small')?.textContent === 'Cambia immagine'");
+  assert.equal(await evaluate("[...document.querySelectorAll('.modal button')].find(b => b.textContent.includes('Salva associazione')).disabled"), true);
+  await button("Annulla");
+
+  await wait("document.querySelector('.game-soundtrack-panel .section-heading button:not(:disabled)')");
+  await button("Aggiungi MP3");
+  await wait("document.querySelector('.game-soundtrack-dialog .drop-zone') && history.state?.lgModal");
+  await evaluate("history.back()");
+  await wait("!document.querySelector('.game-soundtrack-dialog') && document.querySelector('.nav-item.active')?.textContent === 'Libreria'");
+  await button("Aggiungi MP3");
+  await wait("document.querySelector('.game-soundtrack-dialog input[type=file]')");
+  await chooseFixture(".game-soundtrack-dialog input[type=file]", "../public/audio/coloring-game.mp3");
+  await wait("document.querySelector('.game-soundtrack-dialog .drop-zone small')?.textContent === 'Cambia file'");
   for (const [index, value] of ["Registrazione di prova", "CC0"].entries()) {
-    await evaluate(`document.querySelectorAll('.game-soundtrack-file input:not([type=file])')[${index}].focus()`);
+    await evaluate(`document.querySelectorAll('.game-soundtrack-dialog input[type=text], .game-soundtrack-dialog input:not([type])')[${index}].focus()`);
     await send("Input.insertText", { text: value });
   }
-  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(item => item.textContent.includes('Carica MP3')).disabled"), true, "rights are still required");
-  await evaluate("document.querySelector('.game-soundtrack-panel input[type=checkbox]').click()");
+  assert.equal(await evaluate("document.querySelector('.game-soundtrack-dialog button[type=submit]').disabled"), true, "rights are still required");
+  await evaluate("document.querySelector('.game-soundtrack-dialog input[type=checkbox]').click()");
   await button("Carica MP3");
+  await wait("!document.querySelector('.game-soundtrack-dialog') && !history.state?.lgModal");
   await wait("document.querySelector('.game-soundtrack-panel [role=status]')?.textContent.includes('salvata nel cloud')");
   assert.equal(await evaluate("document.querySelector('.game-soundtrack-current strong').textContent"), soundtrack.name);
   assert.equal(await evaluate(documentFitsWidth), true, "the MP3 controls fit a narrow phone");
@@ -539,7 +576,8 @@ try {
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.puzzle-gallery-card[aria-label=Casa] button')].map(button=>button.textContent)"),
     ["4 × 4", "4 × 5", "5 × 5"]);
   assert.ok(await evaluate("[...document.querySelectorAll('.puzzle-formats button')].every(button=>button.offsetWidth>=44 && button.offsetHeight>=44)"));
-  await evaluate("document.querySelector('.puzzle-gallery-tools summary').click()");
+  assert.ok(await evaluate("document.querySelector('.puzzle-gallery-tools .drop-zone').checkVisibility()"), "the device picker is visible before opening a game");
+  assert.ok(await evaluate("document.querySelector('.puzzle-gallery-tools .section-heading p').textContent.includes('fino all’uscita')"), "the device picker explains how long images are available");
   await evaluate(`(() => {
     const input = document.querySelector('.puzzle-gallery-tools input[type=file]');
     const photo = document.createElement('canvas');

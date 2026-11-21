@@ -104,7 +104,11 @@
 .caa-symbol-results button:hover { border-color:var(--violet); background:var(--lavender); }
 .caa-symbol-results img { width:75px; height:75px; object-fit:contain; }
 .caa-attribution { font-size:12px; color:var(--muted); line-height:1.65; }
-.caa-upload { padding:16px; background:var(--canvas); border:1px dashed var(--line); border-radius:var(--control-radius); margin-top:16px; }
+.caa-personal-image { margin: 12px 0 16px; }
+.caa-personal-image summary { width: fit-content; min-height: 44px; list-style: none; }
+.caa-personal-image summary::-webkit-details-marker { display: none; }
+.caa-personal-image-content { margin-top: 12px; }
+.caa-personal-image-content > .primary-button { margin-top: 12px; }
 .caa-sharing { display:grid; gap:16px; }
 .caa-sharing>.ghost-button { justify-content:flex-start; width:100%; }
 .caa-sharing .caa-toolbar { justify-content:flex-start; margin:0; }

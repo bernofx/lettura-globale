@@ -3,7 +3,7 @@ import { RewardSoundtrackLibraryItem } from "../../components/reward-soundtrack-
 import { appearancePresetId, appearancePresets, type AppearanceSettings, type ControlShape, type ThemePalette } from "../../domain/appearance";
 import { type SoundCue, soundOptions, type SoundPreferences } from "../../domain/sound-preferences";
 import { playSoundCue } from "../../shared/audio";
-import { PageHeader, PanelHeading } from "../../shared/ui/headings";
+import { PageHeader, PanelHeading, SectionHeading } from "../../shared/ui/headings";
 
 export function AppearanceView({ settings, onChange }: { settings: AppearanceSettings; onChange: (settings: AppearanceSettings) => void }) {
   const presetId = appearancePresetId(settings);
@@ -19,5 +19,5 @@ export function SoundSettingsPanel({ sounds, onChange }: { sounds: SoundPreferen
     { id: "finish", label: "Fine esercizio nella sequenza", detail: "Alla fine dell’ultimo turno di ciascun esercizio" },
     { id: "select", label: "Selezione in Numero quantità", detail: "Quando un oggetto viene selezionato o deselezionato" },
   ];
-  return <section className="panel sound-settings"><PanelHeading eyebrow="AUDIO" title="Suoni degli esercizi" /><p>Scegli un suono per ogni momento. Le scelte vengono salvate nel cloud e restano disponibili sugli altri dispositivi.</p><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}<RewardSoundtrackLibraryItem /></div></section>;
+  return <section className="panel library-area sound-settings" aria-labelledby="library-exercise-sounds"><SectionHeading id="library-exercise-sounds" title="Suoni degli esercizi" description="Scegli i suoni della sessione. Le preferenze si sincronizzano con gli altri dispositivi." /><div className="sound-settings-list">{cues.map((cue) => <div className="sound-setting" key={cue.id}><div><strong>{cue.label}</strong><small>{cue.detail}</small></div><div className="sound-setting-actions"><select aria-label={`Suono per ${cue.label}`} value={sounds[cue.id]} onChange={(event) => onChange({ ...sounds, [cue.id]: event.target.value })}>{soundOptions[cue.id].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select><button type="button" className="ghost-button" onClick={() => playSoundCue(cue.id, true, true, sounds[cue.id])} aria-label={`Ascolta ${cue.label}`}><Volume2 size={18} />Ascolta</button></div></div>)}<RewardSoundtrackLibraryItem /></div></section>;
 }

@@ -16,3 +16,10 @@ export function PanelHeading({ eyebrow, title, description, level = 2, children 
     {children}
   </div>;
 }
+
+export function SectionHeading({ title, id, description, children }: { title: string; id?: string; description?: string; children?: ReactNode }) {
+  return <div className="section-heading">
+    <div><h2 id={id}>{title}</h2>{description && <p>{description}</p>}</div>
+    {children}
+  </div>;
+}

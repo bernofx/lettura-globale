@@ -83,9 +83,14 @@ try{
  await fill(".caa-modal input","gatto");await clickText("Cerca in ARASAAC");await wait("document.querySelector('.caa-modal [data-source=arasaac] button span')?.textContent==='gatto'");await evaluate("document.querySelector('.caa-modal [data-source=arasaac] button').click()");await wait("!document.querySelector('.caa-modal')");assert.equal(arasaacCalls,4);
  await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await evaluate("[...document.querySelectorAll('.caa-token-button')].find(button=>button.textContent.includes('presto')).click()");await wait("document.querySelector('.caa-modal input[type=file]')");
- await evaluate("document.querySelectorAll('.caa-modal input[type=checkbox]')[1].click()");
+ await evaluate("document.querySelector('.caa-personal-image summary').click()");
+ await wait("document.querySelector('.caa-personal-image .drop-zone').checkVisibility()");
  const fileInput=await send("Runtime.evaluate",{expression:"document.querySelector('.caa-modal input[type=file]')",returnByValue:false});
  await send("DOM.setFileInputFiles",{files:[`${process.cwd()}/public/lettura-globale-icon-v2.png`],objectId:fileInput.result.objectId});
+ await wait("document.querySelector('.caa-personal-image-content .primary-button:disabled')");
+ assert.equal(mediaUploads,0,"file selection requires rights and an explicit confirmation before upload");
+ await evaluate("document.querySelector('.caa-personal-image input[type=checkbox]').click()");
+ await clickText("Usa immagine");
  await wait("!document.querySelector('.caa-modal') && document.querySelector('.caa-token-button img[src^=blob]')");assert.equal(mediaUploads,0,"offline photo stays queued locally");
  await send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
  await wait("document.querySelector('.caa-save-state').textContent.includes('Salvata nel cloud')");assert.equal(mediaUploads,1,"photo uploads before the document is marked saved");

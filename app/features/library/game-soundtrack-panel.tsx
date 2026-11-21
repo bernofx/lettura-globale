@@ -1,10 +1,12 @@
 "use client";
 
-import { Upload, Undo2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Plus, Undo2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { DEFAULT_GAME_SOUNDTRACK, GAME_SOUNDTRACK_URL, MAX_SOUNDTRACK_BYTES, MAX_SOUNDTRACK_SECONDS, SOUNDTRACK_TEXT_LIMIT, type GameSoundtrack } from "../../domain/game-soundtrack";
 import { CheckLine } from "../../shared/ui/form-controls";
-import { PanelHeading } from "../../shared/ui/headings";
+import { SectionHeading } from "../../shared/ui/headings";
+import { FilePicker } from "../../shared/ui/file-picker";
+import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
 const uploadErrors: Record<string, string> = {
   size_limit: "Scegli un MP3 da massimo 6 MB.",
@@ -15,7 +17,7 @@ const uploadErrors: Record<string, string> = {
   metadata_required: "Indica fonte o autore e licenza dell’audio.",
 };
 
-export function GameSoundtrackPanel() {
+export function GameSoundtrackPanel({ open, onOpen, onClose }: { open: boolean; onOpen: () => void; onClose: () => void }) {
   const [soundtrack, setSoundtrack] = useState<GameSoundtrack | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -25,7 +27,6 @@ export function GameSoundtrackPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,8 +90,8 @@ export function GameSoundtrackPanel() {
       setRights(false);
       setSource("");
       setLicense("");
-      if (input.current) input.current.value = "";
       setMessage(method === "PUT" ? "Colonna sonora salvata nel cloud." : "Musica predefinita ripristinata.");
+      if (method === "PUT") onClose();
     } catch {
       setError(fallback);
     } finally {
@@ -99,36 +100,46 @@ export function GameSoundtrackPanel() {
   }
 
   return (
-    <section className="panel game-soundtrack-panel">
-      <PanelHeading eyebrow="AUDIO" title="Colonna sonora dei giochi" description="Carica un MP3 da usare come sottofondo nella sezione Giochi." />
+    <section className="panel library-area game-soundtrack-panel" aria-labelledby="library-game-soundtrack">
+      <SectionHeading id="library-game-soundtrack" title="Colonna sonora dei giochi" description="Sottofondo usato nei giochi del catalogo.">
+        <button className="primary-button" type="button" disabled={!loaded || busy} onClick={() => { selectFile(null); onOpen(); }}>
+          <Plus size={18} aria-hidden="true" />{soundtrack ? "Sostituisci MP3" : "Aggiungi MP3"}
+        </button>
+      </SectionHeading>
       <div className="game-soundtrack-current">
         <strong>{loaded ? soundtrack?.name ?? "Musica predefinita · Tummy-Rumble Calypso" : "Caricamento della colonna sonora…"}</strong>
         {soundtrack && (soundtrack.source || soundtrack.license) && <small>{[soundtrack.source, soundtrack.license].filter(Boolean).join(" · ")}</small>}
         {loaded && <audio key={soundtrack?.etag ?? "default"} controls preload="none" aria-label="Ascolta la colonna sonora dei giochi"
           src={soundtrack ? `${GAME_SOUNDTRACK_URL}?v=${encodeURIComponent(soundtrack.etag)}` : DEFAULT_GAME_SOUNDTRACK} />}
       </div>
-      <form onSubmit={event => { event.preventDefault(); void save("PUT"); }}>
-        <label className="game-soundtrack-file">File audio
-          <input ref={input} type="file" accept=".mp3,audio/mpeg" disabled={!loaded || busy} onChange={event => selectFile(event.target.files?.[0] ?? null)} />
-          <small>MP3, massimo {MAX_SOUNDTRACK_BYTES / 1_000_000} MB e {MAX_SOUNDTRACK_SECONDS / 60} minuti.</small>
-        </label>
+      {soundtrack && <button className="ghost-button" type="button" disabled={busy} onClick={() => void save("DELETE")}>
+        <Undo2 size={18} aria-hidden="true" /> Ripristina musica predefinita
+      </button>}
+      {!open && busy && <p role="status">Salvataggio nel cloud…</p>}
+      {!open && error && <p className="form-error" role="alert">{error}</p>}
+      {message && <p role="status">{message}</p>}
+      {open && <Modal labelledBy="game-soundtrack-title" className="game-soundtrack-dialog" closeButton onClose={busy ? undefined : onClose}
+        onSubmit={event => { event.preventDefault(); void save("PUT"); }}>
+        <ModalTitle id="game-soundtrack-title">{soundtrack ? "Sostituisci colonna sonora" : "Aggiungi colonna sonora"}</ModalTitle>
+        <FilePicker accept=".mp3,audio/mpeg" label={file ? "Cambia file" : "Scegli un MP3"} selection={file?.name}
+          hint={`MP3, massimo ${MAX_SOUNDTRACK_BYTES / 1_000_000} MB e ${MAX_SOUNDTRACK_SECONDS / 60} minuti`}
+          disabled={busy} onFiles={([selected]) => selectFile(selected)} />
         {file && <>
-          <label className="game-soundtrack-file">Fonte o autore
+          <label>Fonte o autore
             <input value={source} maxLength={SOUNDTRACK_TEXT_LIMIT} required disabled={busy} onChange={event => setSource(event.target.value)} placeholder="Es. registrazione propria, sito o autore" />
           </label>
-          <label className="game-soundtrack-file">Licenza
+          <label>Licenza
             <input value={license} maxLength={SOUNDTRACK_TEXT_LIMIT} required disabled={busy} onChange={event => setLicense(event.target.value)} placeholder="Es. creata da me, CC0, CC BY 4.0" />
           </label>
           <CheckLine checked={rights} disabled={busy} onChange={setRights} title="Confermo di avere i diritti per usare questo audio." />
         </>}
-        <div className="game-soundtrack-actions">
-          <button className="primary-button" type="submit" disabled={!file || !rights || !source.trim() || !license.trim() || busy}><Upload size={18} aria-hidden="true" /> Carica MP3</button>
-          {soundtrack && <button className="ghost-button" type="button" disabled={busy} onClick={() => void save("DELETE")}><Undo2 size={18} aria-hidden="true" /> Ripristina musica predefinita</button>}
-        </div>
-        {busy && <p role="status">Salvataggio nel cloud…</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        {message && <p role="status">{message}</p>}
-      </form>
+        <ModalActions onCancel={onClose} cancelDisabled={busy}>
+          <button className="primary-button" type="submit" disabled={!file || !rights || !source.trim() || !license.trim() || busy}>
+            {busy ? "Salvataggio…" : "Carica MP3"}
+          </button>
+        </ModalActions>
+      </Modal>}
     </section>
   );
 }

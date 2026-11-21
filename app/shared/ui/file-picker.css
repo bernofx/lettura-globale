@@ -1,0 +1,24 @@
+.file-picker { min-width: 0; }
+.file-picker .drop-zone {
+  width: 100%;
+  min-height: 132px;
+  padding: 14px;
+  border: 1.5px dashed var(--violet);
+  border-radius: var(--control-radius);
+  background: var(--lavender);
+  color: var(--violet);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.file-picker .drop-zone.compact { min-height: 84px; }
+.file-picker .drop-zone:disabled { opacity: .65; cursor: default; }
+.file-picker .drop-zone:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+.file-picker .drop-zone small { color: var(--muted); }
+.file-picker-preview { width: 100%; height: min(164px, 25dvh); background: center / contain no-repeat; }

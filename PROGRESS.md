@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] I sei pannelli della Libreria condividono struttura e intestazione. Gli otto percorsi di caricamento usano lo stesso selettore di file, con sostituzione esplicita, formato e conferma dove richiesta. La galleria Puzzle distingue le aggiunte temporanee dalla Libreria. Nelle storie CAA la scelta di una foto è disponibile vicino alla ricerca. Cache PWA v75.
+
 - [x] Libreria → Puzzle e galleria Puzzle su tablet Android: con gli APK fino alla 0.1.3 la selezione di più file non restituiva alcun file alla pagina (nessuna anteprima, pulsante disabilitato), perché il contenitore leggeva solo il primo risultato del selettore. Ora la pagina chiede un file alla volta su questi APK (`supportsMultipleFiles`, test di dominio; verificato nel browser con bridge simulato 0.1.3/0.1.4). Il sorgente dell'APK 0.1.4 legge tutti i file scelti e dichiara `multipleFiles()`; non è stato compilato qui (manca l'SDK Android) e va costruito, firmato, provato e pubblicato su approvazione (ADR 0017).
 - [x] Palloncini: trascinando il dito (o il mouse premuto) scoppiano tutti i palloncini attraversati, con una scia leggera che sbiadisce; il tratto è campionato ogni 10 px per non saltare palloncini nei gesti veloci. Solo nel gioco, non nel premio di fine attività. Test di dominio sul campionamento e test browser con trascinamento touch reale (scoppi e pixel della scia). Cache PWA v71.
 - [x] Il Puzzle usa lo stesso `useKeepDialogOpen` di Colorare: senza, un doppio Esc chiudeva il dialogo lasciando la partita aperta per l'app (riprodotto dal test browser, che fallisce senza la correzione).

@@ -31,3 +31,5 @@ Puzzle a incastro riusa la vista orizzontale e la protezione Indietro dei giochi
 Libreria → Puzzle salva immagini WebP in R2 dentro un prefisso privato dell’account, con titolo, fonte e dichiarazione del diritto d’uso. La galleria le include automaticamente. I dati degli esercizi restano separati. Se la rete cade, il browser tiene in coda solo i caricamenti non confermati di un account già verificato e li ritenta quando torna la connessione. Lo stesso identificativo rende sicuri i tentativi ripetuti. La rimozione sostituisce l’immagine con un marcatore vuoto, così un ritentativo tardivo non la ripristina.
 
 La sezione Puzzle usa il pulsante di aggiunta della Libreria e il dialogo condiviso con parole e frasi. La selezione multipla mostra il conteggio dei file prima del caricamento.
+
+I pannelli Puzzle e Colonna sonora condividono intestazioni e selettore di file con la Libreria. La galleria Puzzle espone il selettore per le immagini disponibili durante la visita.

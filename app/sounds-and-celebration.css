@@ -1,5 +1,4 @@
 .celebration-start-music { position: absolute; z-index: 5; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-.sound-settings > p { margin: 4px 0 18px; color: var(--muted); font-size: 13px; }
 .sound-settings-list { display: grid; gap: 14px; }
 .sound-setting { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 13px 0; border-top: 1px solid var(--line); }
 .sound-setting > div:first-child { display: grid; gap: 4px; }
@@ -10,14 +9,8 @@
 .sound-setting-actions button { min-height: 40px; padding: 0 10px; gap: 5px; }
 @media (max-width: 600px) { .sound-setting { align-items: stretch; flex-direction: column; } .sound-setting-actions select { flex: 1; min-width: 0; } }
 
-.game-soundtrack-panel { margin-top: 16px; }
-.game-soundtrack-panel form, .game-soundtrack-file, .game-soundtrack-current { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.game-soundtrack-current { margin: 16px 0; overflow-wrap: anywhere; }
+.game-soundtrack-current { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 16px 0; overflow-wrap: anywhere; }
 .game-soundtrack-current audio { width: min(100%, 340px); min-width: 0; }
-.game-soundtrack-file { justify-items: start; }
-.game-soundtrack-file input { width: 100%; max-width: 340px; min-width: 0; }
-.game-soundtrack-file small { color: var(--muted); }
-.game-soundtrack-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .sequence-celebration { position: fixed; inset: 0; z-index: 110; overflow: hidden; pointer-events: auto; touch-action: none; background: rgba(255, 255, 255, .13); }
 .sequence-celebration .celebration-close { position: absolute; z-index: 3; top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #d6dce7; border-radius: 50%; background: #fff; color: #0b3a6d; box-shadow: 0 3px 14px #0b3a6d20; cursor: pointer; touch-action: manipulation; }

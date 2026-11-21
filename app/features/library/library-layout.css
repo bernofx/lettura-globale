@@ -1,0 +1,19 @@
+.library-sections > .library-area {
+  min-width: 0;
+  margin-bottom: 24px;
+  padding: clamp(14px, 2.2vw, 24px);
+}
+
+.library-sections .section-heading {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.library-sections .section-heading h2 { margin: 0 0 5px; }
+.library-sections .section-heading .primary-button { flex: 0 0 auto; min-height: 44px; }
+.library-sections .modal .file-picker { margin-top: 16px; }
+
+@media (max-width: 540px) {
+  .library-sections .section-heading { flex-direction: column; align-items: stretch; }
+  .library-sections .section-heading .primary-button { align-self: flex-start; }
+}
