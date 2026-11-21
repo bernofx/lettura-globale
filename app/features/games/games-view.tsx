@@ -4,10 +4,13 @@ import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, Volume
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
+import type { LibraryItem } from "../../shared/types";
 import { PageHeader } from "../../shared/ui/headings";
 import { BalloonGame, BalloonThumbnail } from "./balloon-game";
 import { ColoringCanvas, coloringFrame, type ColoringPoint, type ColoringTool } from "./coloring-canvas";
 import { startGameMusic } from "./game-music";
+import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
+import { PuzzleGame, PuzzleSetup, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
 import "./games-view.css";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
@@ -29,11 +32,13 @@ const colors = [
 const games = [
   { id: "coloring", title: "Colorare", thumbnail: <DrawingThumbnail page={coloringPages[0]} /> },
   { id: "balloons", title: "Palloncini", thumbnail: <BalloonThumbnail /> },
+  { id: "puzzle", title: "Puzzle a incastro", thumbnail: <PuzzleThumbnail /> },
 ] as const;
 type Game = (typeof games)[number];
-type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } | { id: "balloons" };
+type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
+  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection };
 
-export function GamesView({ soundVolume, onPlayingChange }: { soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
+export function GamesView({ library, soundVolume, onPlayingChange }: { library: LibraryItem[]; soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [game, setGame] = useState<ActiveGame | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
@@ -91,6 +96,8 @@ export function GamesView({ soundVolume, onPlayingChange }: { soundVolume: numbe
         </section>
       )}
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
+      {selectedGame?.id === "puzzle" && <PuzzleSetup library={library} onStart={selection => setGame({ id: "puzzle", selection })} />}
+      {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {game?.id === "coloring" && (
         <ColoringGame
           page={game.page}
@@ -129,9 +136,7 @@ type Stroke = {
 };
 
 function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean, frame: ReturnType<typeof coloringFrame>): ColoringPoint {
-  const { left, top, right, width, height } = event.currentTarget.getBoundingClientRect();
-  const x = rotated ? (event.clientY - top) / height : (event.clientX - left) / width;
-  const y = rotated ? (right - event.clientX) / width : (event.clientY - top) / height;
+  const { x, y } = landscapePoint(event.currentTarget.getBoundingClientRect(), event.clientX, event.clientY, rotated);
   return { x: frame.left + x * (frame.right - frame.left), y: frame.top + y * (frame.bottom - frame.top) };
 }
 
@@ -170,8 +175,6 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     const element = dialog.current;
     const surface = canvas.current;
     if (!element) return;
-    const viewport = window.visualViewport;
-    let viewportFrame = 0;
 
     function stopStroke() {
       const current = stroke.current;
@@ -181,46 +184,8 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
       }
     }
 
-    function fitViewport() {
-      if (!element) return;
-      const { width, height, offsetLeft, offsetTop, scale } = viewport ?? {
-        width: window.innerWidth, height: window.innerHeight, offsetLeft: 0, offsetTop: 0, scale: 1,
-      };
-      if (width <= 0 || height <= 0 || scale <= 0) return;
-      // Fixed dialogs use the layout viewport. Follow the visible rectangle
-      // and compensate for pinch zoom to keep the full-size game usable in it.
-      rotated.current = width < height;
-      element.dataset.rotated = String(rotated.current);
-      element.style.setProperty("--coloring-viewport-width", `${(rotated.current ? height : width) * scale}px`);
-      element.style.setProperty("--coloring-viewport-height", `${(rotated.current ? width : height) * scale}px`);
-      const left = offsetLeft + (rotated.current ? width : 0);
-      element.style.transform = `translate(${left}px, ${offsetTop}px) scale(${1 / scale})${rotated.current ? " rotate(90deg)" : ""}`;
-    }
-
-    function scheduleFit() {
-      if (viewportFrame) return;
-      viewportFrame = requestAnimationFrame(() => {
-        viewportFrame = 0;
-        stopStroke();
-        fitViewport();
-      });
-    }
-
-    fitViewport();
-    element.showModal();
-    viewport?.addEventListener("resize", scheduleFit);
-    viewport?.addEventListener("scroll", scheduleFit);
-    window.addEventListener("resize", scheduleFit);
-    window.addEventListener("blur", stopStroke);
-    return () => {
-      element.close();
-      stopStroke();
-      cancelAnimationFrame(viewportFrame);
-      viewport?.removeEventListener("resize", scheduleFit);
-      viewport?.removeEventListener("scroll", scheduleFit);
-      window.removeEventListener("resize", scheduleFit);
-      window.removeEventListener("blur", stopStroke);
-    };
+    const unmount = mountLandscapeDialog(element, stopStroke, (value) => { rotated.current = value; });
+    return () => { unmount(); stopStroke(); };
   }, []);
 
   useEffect(() => {

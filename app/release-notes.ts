@@ -1,13 +1,13 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Palloncini arriva in Giochi",
+  title: "Puzzle a incastro in Giochi",
   items: [
-    "Apri Palloncini da Giochi e tocca quelli che salgono per farli scoppiare, oppure trascina il dito: scoppiano tutti quelli che attraversi, con una scia luminosa.",
+    "Componi un puzzle da 16, 20 o 25 pezzi con la Casa di esempio o una tua immagine.",
+    "Sposta i pezzi sul tavolo per scoprire quelli sotto. Puoi mostrare l’immagine guida quando vuoi.",
+    "In Palloncini puoi anche trascinare il dito: scoppiano tutti i palloncini che attraversi, con una scia luminosa.",
     "Il dettaglio di ogni gioco mostra il suo nome e il pulsante Torna ai giochi.",
-    "Colorare si apre subito in orizzontale, con un foglio più grande e colorabile fino ai bordi.",
-    "Durante Colorare e i palloncini, Indietro lascia aperto il gioco. Per uscire usa la X.",
-    "La colonna sonora di Libreria → Audio si usa sia in Colorare sia in Palloncini.",
-    "Da Libreria → Audio puoi caricare il tuo MP3 per i giochi, indicando fonte e licenza, e ascoltarlo in anteprima.",
-    "In Colorare gli occhi dei disegni sono ben visibili e i colori restano nitidi anche su schermi grandi.",
+    "Colorare si apre subito in orizzontale, con un foglio più grande e colorabile fino ai bordi; gli occhi dei disegni sono ben visibili e i colori restano nitidi.",
+    "Durante i giochi, Indietro lascia aperta la partita. Per uscire usa la X.",
+    "Da Libreria → Audio puoi caricare un tuo MP3, indicando fonte e licenza: lo usano tutti i giochi.",
   ],
 };
