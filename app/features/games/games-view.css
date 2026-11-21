@@ -124,7 +124,7 @@
 
 .coloring-controls {
   display: grid;
-  grid-template-columns: auto 50px;
+  grid-template-columns: 50px 50px;
   grid-template-rows: minmax(0, 1fr);
   gap: 6px;
   padding: clamp(4px, 1vw, 10px);
@@ -136,9 +136,17 @@
 
 .coloring-tools {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 4px;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: 3px 0;
+}
+
+.coloring-tools button {
+  flex: 0 0 44px;
 }
 
 .coloring-controls button {
@@ -208,7 +216,7 @@
   outline-offset: 2px;
 }
 
-.coloring-colors button:focus-visible {
+.coloring-controls button:focus-visible {
   outline-offset: -2px;
 }
 

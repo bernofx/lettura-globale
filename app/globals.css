@@ -256,7 +256,30 @@ body.lg-session-active .session-screen{height:100dvh}
 @media(pointer:coarse){.card-actions button,.sound-toggle.setup{min-width:44px;min-height:44px}.sound-setting-actions select,.sound-setting-actions button{min-height:44px}}
 .calm-panel p{color:#556860}
 .hero-actions{margin-top:24px}.hero-meta+.hero-actions{margin-top:0}.hero-card.hero-card-compact{min-height:0;grid-template-columns:1fr}
-@media(max-width:460px){.child-pill small{display:none}}
+/* Let the profile name take the remaining header space on narrow displays. */
+.topbar{gap:8px}
+.topbar>.menu-button,.topbar-right{flex-shrink:0}
+.child-pill,.child-pill>span:nth-child(2){min-width:0}
+.child-pill strong,.child-pill small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.child-pill>.child-avatar,.child-pill>svg{flex-shrink:0}
+.child-pill select{min-width:0}
+.child-editor-heading{grid-template-columns:auto minmax(0,1fr) auto}
+.child-editor-heading strong,.wizard-child-list button strong{overflow-wrap:anywhere}
+.wizard-child-list button{max-width:100%;min-width:0}
+.wizard-child-list button>.child-avatar,.wizard-child-list button>svg{flex-shrink:0}
+@media(max-width:460px){
+  .auth-page{grid-template-columns:minmax(0,560px)}
+  .child-choice-grid button{min-width:0;grid-template-columns:auto minmax(0,1fr) auto}
+  .child-choice-grid strong{overflow-wrap:anywhere}
+  .child-editor{min-width:0}
+  .topbar{padding-inline:12px;gap:6px}
+  .topbar-right{gap:6px}
+  .topbar .child-pill{flex:1;gap:6px}
+  .topbar .child-pill>.child-avatar{width:28px;height:28px;border-radius:9px}
+  .topbar .child-pill small,.topbar .child-pill>svg{display:none}
+  .topbar .app-version.has-update{display:flex;max-width:100px}
+  .topbar .app-update-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+}
 /* Phone session header: with 44px touch targets the controls no longer share one row
    with the labels, so the progress bar moves to its own full-width row. */
 @media(max-width:760px){.session-screen>.session-header{grid-template-columns:minmax(0,1fr) auto;row-gap:4px;min-height:0}.session-screen .session-header>.session-progress{grid-column:1/-1;grid-row:2;width:100%}.session-screen .mode-tag{font-size:12px;padding:5px 8px}}

@@ -16,6 +16,7 @@ const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Gio
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
 const pending = new Map();
 let id = 0;
+let availableVersion = null;
 
 function send(method, params = {}) {
   return new Promise((resolve, reject) => {
@@ -33,11 +34,16 @@ socket.addEventListener("message", event => {
     else command?.resolve(message.result);
   }
   if (message.method === "Fetch.requestPaused") {
-    const { requestId } = message.params;
+    const { requestId, request } = message.params;
+    if (request.url === `${origin}/api/app-version` && availableVersion === null) {
+      void send("Fetch.continueRequest", { requestId });
+      return;
+    }
+    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: 1 };
     void send("Fetch.fulfillRequest", {
       requestId, responseCode: 200,
       responseHeaders: [{ name: "Content-Type", value: "application/json" }],
-      body: Buffer.from(JSON.stringify({ state, revision: 1 })).toString("base64"),
+      body: Buffer.from(JSON.stringify(body)).toString("base64"),
     });
   }
 });
@@ -74,6 +80,8 @@ const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-headin
     bounds.right <= offsetLeft + width + 1 && bounds.bottom <= offsetTop + height + 1;
 })`;
 
+const documentFitsWidth = "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1";
+
 async function touch(type, x, y) {
   let touchPoints = [];
   if (type === "touchStart" || type === "touchMove") {
@@ -97,7 +105,7 @@ try {
   await send("Page.enable");
   await send("Network.enable");
   await send("Network.setBypassServiceWorker", { bypass: true });
-  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }] });
+  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
@@ -123,8 +131,9 @@ try {
     }));
   ` });
   await send("Page.navigate", { url: origin });
-  await viewport(390, 800);
+  await viewport(320, 800);
   await wait("document.querySelector('.child-choice-page')");
+  assert.equal(await evaluate(documentFitsWidth), true, "profile selection fits a narrow phone");
   await button("Apri Giochi");
   await wait("document.querySelectorAll('.coloring-card').length >= 24");
   await wait(`[...document.querySelectorAll('.coloring-card canvas')].every(canvas =>
@@ -148,6 +157,10 @@ try {
     !button.textContent.trim() && button.hasAttribute('aria-label') && button.offsetWidth >= 44 && button.offsetHeight >= 44)`), true);
   assert.equal(await evaluate(`document.querySelector('.coloring-tools').getBoundingClientRect().right <=
     document.querySelector('.coloring-colors').getBoundingClientRect().left`), true);
+  assert.equal(await evaluate(`(() => {
+    const [brush, crayon, bucket] = [...document.querySelectorAll('.coloring-tools button')].map(button => button.getBoundingClientRect());
+    return brush.left === crayon.left && brush.left === bucket.left && brush.bottom <= crayon.top && crayon.bottom <= bucket.top;
+  })()`), true);
   await evaluate("document.querySelector('.coloring-colors').scrollTop = document.querySelector('.coloring-colors').scrollHeight");
   assert.equal(await evaluate(`document.querySelector('button[aria-label="Bianco"]').getBoundingClientRect().bottom <=
     document.querySelector('.coloring-colors').getBoundingClientRect().bottom`), true);
@@ -233,7 +246,34 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   await evaluate("history.forward()");
   await wait("document.querySelector('.games-page')");
+  // Exercise the ordinary app shell with a long synthetic profile name.
+  const child = { id: "child-width-demo", firstName: "AlessandroMassimiliano", lastName: "Dimostrazione", birthYear: "2015", notes: "", avatarColor: "#7568d9" };
+  therapist.childIds = [child.id];
+  state.children = [child];
+  state.activeChildId = child.id;
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+    localStorage.setItem("lg-therapists", ${JSON.stringify(JSON.stringify([therapist]))});
+    localStorage.setItem("lg-children", ${JSON.stringify(JSON.stringify([child]))});
+    localStorage.setItem("lg-active-child", ${JSON.stringify(JSON.stringify(child.id))});
+  ` });
+  await send("Page.reload");
+  await wait("document.querySelector('.topbar .child-pill strong')?.textContent === 'AlessandroMassimiliano'");
+  for (const width of [320, 360, 390, 430, 568, 768]) {
+    await viewport(width, width === 568 ? 320 : 800);
+    for (const view of ["Oggi", "Libreria", "Configurazione", "Sessione", "Giochi", "Storie in CAA", "Progressi", "Aspetto", "Profili"]) {
+      await button("Apri menu");
+      await button(view);
+      await wait(`document.querySelector('.nav-item.active')?.textContent === ${JSON.stringify(view)}`);
+      assert.equal(await evaluate(documentFitsWidth), true, `${view} must fit a ${width}px mobile viewport`);
+    }
+  }
+  availableVersion = "r999999-abcdef0";
+  await viewport(320, 800);
+  await send("Page.reload");
+  await wait("document.querySelector('.topbar .app-version.has-update button')?.textContent === 'Aggiorna'");
+  assert.equal(await evaluate(documentFitsWidth), true, "the update action fits alongside the profile on a narrow phone");
   console.log("PASS Colorare: mobile zoom, pinch, exit, scrolling palette, touch, rotation, and music lifecycle.");
+  console.log("PASS App shell: nine views fit six mobile and tablet widths.");
 } finally {
   socket.close();
 }
