@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] In Giochi → Ripassa lettere e numeri si scelgono 26 maiuscole e 10 cifre. Una breve dimostrazione mostra i tratti, poi il bambino ripassa sul foglio grande. L’inchiostro segue la guida entro la tolleranza e si interrompe fuori dal tracciato. Cache PWA v79.
+
 - [x] Le miniature di Colorare mostrano i colori del profilo adulto, aggiornano l’anteprima all’uscita dal disegno e ripristinano quella iniziale dopo l’azzeramento. Le bozze locali sono visibili offline e le modifiche cloud sono rilevate per revisione. Cache PWA v78.
 
 - [x] La Coccinella sorridente, ricalcata dal disegno allegato, apre la galleria di Colorare. Guscio, testa e macchie si possono colorare separatamente. Cache PWA v77.

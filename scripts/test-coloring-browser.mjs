@@ -303,9 +303,9 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   assert.equal(await evaluate(documentFitsWidth), true, "profile selection fits a narrow phone");
   await button("Apri Giochi");
-  await wait("document.querySelectorAll('.game-picker button').length === 3");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.game-picker button')].map(button => button.textContent.trim())"), ["Colorare", "Palloncini", "Puzzle a incastro"]);
-  assert.equal(await evaluate("document.querySelectorAll('.game-picker button .coloring-card-art').length"), 3);
+  await wait("document.querySelectorAll('.game-picker button').length === 4");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.game-picker button')].map(button => button.textContent.trim())"), ["Colorare", "Palloncini", "Puzzle a incastro", "Ripassa lettere e numeri"]);
+  assert.equal(await evaluate("document.querySelectorAll('.game-picker button .coloring-card-art').length"), 4);
   assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Giochi");
   await button("Colorare");
   await wait("document.querySelectorAll('.coloring-card').length >= 24");
@@ -872,6 +872,65 @@ try {
   writeFileSync("/tmp/lg-coloring-smiling-ladybug.png", Buffer.from(ladybug.data, "base64"));
   await button("Esci");
   await wait("!document.querySelector('.coloring-dialog') && !history.state?.lgGameGuard");
+
+  await viewport(1501, 1048);
+  await button("Torna ai giochi");
+  await button("Ripassa lettere e numeri");
+  await wait("document.querySelectorAll('.tracing-picker [aria-label=Lettere] button').length === 26 && document.querySelectorAll('.tracing-picker [aria-label=Numeri] button').length === 10");
+  await button("A");
+  await wait("document.querySelector('.tracing-dialog[open][data-phase=demo] .tracing-finger[transform]')");
+  const demoStart = await evaluate("document.querySelector('.tracing-finger').getAttribute('transform')");
+  await wait(`document.querySelector('.tracing-finger[visibility=visible]')?.getAttribute('transform') !== ${JSON.stringify(demoStart)}`);
+  await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
+  assert.equal(await evaluate("document.querySelectorAll('.tracing-sheet .tracing-arrow').length"), 3);
+
+  async function traceTouch(type, x, y) {
+    const touchPoints = type === "touchEnd" ? [] : [await evaluate(`(() => {
+      const { x, y } = new DOMPoint(${x}, ${y}).matrixTransform(document.querySelector('.tracing-sheet').getScreenCTM());
+      return { x, y, id: 1 };
+    })()`)];
+    await send("Input.dispatchTouchEvent", { type, touchPoints });
+  }
+  const traced = "document.querySelector('.tracing-sheet > .tracing-ink').getAttribute('d')";
+  await traceTouch("touchStart", 4, 60);
+  await traceTouch("touchMove", 4, 160);
+  await traceTouch("touchEnd");
+  assert.equal(await evaluate(traced), "", "drawing far from the guide leaves no ink");
+  await traceTouch("touchStart", 13, 319);
+  await traceTouch("touchMove", 148, 34);
+  await traceTouch("touchEnd");
+  await wait(`Boolean(${traced})`);
+  const firstStroke = await evaluate(traced);
+  assert.match(firstStroke, /^M35 319L/);
+  const tracingScreenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  writeFileSync("/tmp/lg-tracing-tablet.png", Buffer.from(tracingScreenshot.data, "base64"));
+
+  await viewport(390, 844);
+  await wait("document.querySelector('.tracing-dialog').dataset.rotated === 'true'");
+  assert.equal(await evaluate(traced), firstStroke, "rotation preserves the traced stroke");
+  await traceTouch("touchStart", 170, 34);
+  await traceTouch("touchMove", 305, 319);
+  await traceTouch("touchEnd");
+  await traceTouch("touchStart", 83, 218);
+  await traceTouch("touchMove", 257, 218);
+  await traceTouch("touchEnd");
+  await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
+  await assertGameIgnoresBack(".tracing-dialog[open]");
+  await button("Ricomincia");
+  await wait("document.querySelector('.tracing-dialog[data-phase=demo]')");
+  assert.equal(await evaluate(traced), "", "reset clears the trace and replays the demonstration");
+  await button("Esci dal ripasso");
+  await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await button("4");
+  await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
+  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa il 4");
+  const tracedNumber = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  writeFileSync("/tmp/lg-tracing-phone.png", Buffer.from(tracedNumber.data, "base64"));
+  await button("Esci dal ripasso");
+  await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
+  await send("Emulation.setEmulatedMedia", { features: [] });
+  console.log("PASS Ripassa lettere e numeri: demo, generous path tolerance, rotation, reset and completion.");
 
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);

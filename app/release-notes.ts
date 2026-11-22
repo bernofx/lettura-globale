@@ -1,7 +1,8 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Riprendi i tuoi disegni e gioca nuovi puzzle",
+  title: "Ripassa lettere e numeri",
   items: [
+    "In Giochi trovi Ripassa lettere e numeri. Guarda il ditino e segui con il dito la guida di una lettera o di un numero.",
     "La galleria di Colorare mostra i progressi nei disegni direttamente nelle miniature.",
     "La Coccinella sorridente è il primo disegno in Giochi → Colorare.",
     "Colorare salva tratti, riempimenti e sfondo. Riapri lo stesso disegno per continuare o premi Azzera disegno in alto a sinistra.",

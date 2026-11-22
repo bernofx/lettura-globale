@@ -1,0 +1,138 @@
+.tracing-thumbnail {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 2;
+  background: var(--lavender);
+}
+
+.tracing-thumbnail svg { width: 60%; height: 85%; }
+
+.tracing-picker {
+  display: grid;
+  gap: 16px;
+}
+
+.tracing-picker h2 { margin: 0 0 12px; }
+
+.tracing-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 8px;
+}
+
+.tracing-picker-grid button {
+  min-height: 48px;
+  padding: 4px;
+  font-size: 23px;
+  font-weight: 800;
+  justify-content: center;
+}
+
+html:has(.tracing-dialog[open]) { overflow: hidden; }
+
+.tracing-dialog {
+  --tracing-radius: clamp(18px, 4.3vmin, 48px);
+  position: fixed;
+  inset: 0;
+  width: var(--game-viewport-width, 100%);
+  height: var(--game-viewport-height, 100dvh);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  border: 1px solid var(--line);
+  border-radius: var(--tracing-radius);
+  color: var(--ink);
+  background: var(--paper);
+  overflow: hidden;
+  transform-origin: top left;
+}
+
+.tracing-dialog::backdrop { background: var(--canvas); }
+.tracing-dialog:focus { outline: none; }
+
+.tracing-dialog[data-rotated="true"] {
+  padding: max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom))
+    max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-top));
+}
+
+.tracing-dialog[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(4px, 1.5vmin, 16px);
+}
+
+.tracing-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: clamp(8px, 2.1vmin, 24px);
+  padding: clamp(3px, 1.5vmin, 18px);
+}
+
+.tracing-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 0;
+  padding: .22em .85em;
+  border-radius: calc(var(--tracing-radius) * .75);
+  background: var(--lavender);
+  font-size: clamp(1.55rem, 5.3vmin, 3.45rem);
+  line-height: 1.2;
+  font-weight: 850;
+}
+
+.tracing-header .ghost-button {
+  display: grid;
+  place-items: center;
+  width: max(45px, 9.2vmin);
+  min-height: max(44px, 8.8vmin);
+  padding: 0;
+  border-radius: calc(var(--tracing-radius) * .66);
+}
+
+.tracing-header button svg {
+  width: clamp(23px, 4vmin, 37px);
+  height: clamp(23px, 4vmin, 37px);
+}
+
+.tracing-sheet {
+  width: 100%;
+  height: calc(100% - clamp(6px, 3.8vmin, 42px));
+  min-height: 0;
+  display: block;
+  background: var(--paper);
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+.tracing-art path.tracing-guide,
+.tracing-art path.tracing-ink {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tracing-guide {
+  stroke: color-mix(in srgb, var(--violet) 21%, var(--paper));
+  stroke-width: 36px;
+}
+
+.tracing-ink { stroke: #00a99e; stroke-width: 16px; }
+.tracing-arrow { color: var(--violet-dark); }
+.tracing-start { fill: var(--violet); }
+.tracing-finger { color: var(--violet-dark); }
+.tracing-finger svg { fill: var(--paper); }
+.tracing-completed { width: 1em; height: 1em; color: #20834d; }
+
+.tracing-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

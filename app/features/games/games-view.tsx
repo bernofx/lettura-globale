@@ -3,6 +3,7 @@
 import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, RotateCcw, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
+import type { TracingGlyph } from "../../domain/tracing-glyphs";
 import type { ColoringArea } from "../../domain/coloring-drawings";
 import type { ColoringPreviews, ColoringStorage } from "./coloring-storage";
 import type { PuzzleImage } from "../../domain/puzzle-library";
@@ -15,6 +16,7 @@ import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
 import { PuzzleGame, PuzzleThumbnail, type PuzzleSelection } from "./puzzle-game";
 import { PuzzleGallery } from "./puzzle-gallery";
+import { TracingGame, TracingPicker, TracingThumbnail } from "./tracing-game";
 import "./games-view.css";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
 
@@ -37,10 +39,11 @@ const games = [
   { id: "coloring", title: "Colorare", thumbnail: <DrawingThumbnail page={coloringPages[0]} /> },
   { id: "balloons", title: "Palloncini", thumbnail: <BalloonThumbnail /> },
   { id: "puzzle", title: "Puzzle a incastro", thumbnail: <PuzzleThumbnail /> },
+  { id: "tracing", title: "Ripassa lettere e numeri", thumbnail: <TracingThumbnail /> },
 ] as const;
 type Game = (typeof games)[number];
 type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
-  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection };
+  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection } | { id: "tracing"; glyph: TracingGlyph };
 
 export function GamesView({ library, puzzleImages, soundVolume, coloringStorage, notify, onPlayingChange }: {
   library: LibraryItem[];
@@ -147,6 +150,8 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {selectedGame?.id === "puzzle" && <PuzzleGallery library={library} puzzleImages={puzzleImages} onStart={selection => setGame({ id: "puzzle", selection })} />}
       {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
+      {selectedGame?.id === "tracing" && <TracingPicker onStart={glyph => setGame({ id: "tracing", glyph })} />}
+      {game?.id === "tracing" && <TracingGame glyph={game.glyph} soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {game?.id === "coloring" && (
         <ColoringGame
           page={game.page}

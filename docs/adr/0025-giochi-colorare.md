@@ -35,3 +35,8 @@ La sezione Puzzle usa il pulsante di aggiunta della Libreria e il dialogo condiv
 I pannelli Puzzle e Colonna sonora condividono intestazioni e selettore di file con la Libreria. La galleria Puzzle espone il selettore per le immagini disponibili durante la visita.
 
 Il Puzzle mostra la guida semitrasparente all’apertura di ogni tabellone. Al completamento mostra la spunta e usa il suono di risposta corretta degli esercizi. Dopo un breve intervallo passa alla prossima immagine caricabile della galleria, mantenendo lo stesso formato e la stessa partita.
+
+
+## Ripassa lettere e numeri
+
+Il gioco adotta un foglio a schermo intero con un solo carattere stampato, frecce direzionali, comando per ricominciare e uscita dalla X. Un ditino percorre i tratti per poco più di un secondo, poi sparisce con l’inchiostro della dimostrazione. Con movimento ridotto si mostra brevemente il punto di partenza. Durante la prova i punti vicini sono proiettati sul tracciato e i movimenti lontani lasciano interruzioni. La copertura è verificata per ogni tratto. Le lettere e le cifre si scelgono in Giochi senza passare dalle sessioni degli esercizi.
