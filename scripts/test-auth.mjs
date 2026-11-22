@@ -190,6 +190,35 @@ try {
   assert.deepEqual((await catalogRead(adminCookie)).images, []);
   assert.equal((await request(puzzleUrl, { headers: { cookie: adminCookie } })).status, 404);
   console.log("PASS: puzzle WebP validation, private scope, repeated upload and removal on R2.");
+  const drawingPath = "/api/coloring-drawings?drawing=casa";
+  const drawingHeaders = (key, profile, scope) => ({
+    cookie: key, "x-coloring-profile": profile, ...(scope && { "x-coloring-scope": scope }),
+  });
+  const readDrawing = (key, profile, scope) => request(drawingPath, { headers: drawingHeaders(key, profile, scope) });
+  assert.equal((await request(drawingPath)).status, 401);
+  const initialDrawing = await readDrawing(adminCookie, "adult-a");
+  assert.equal(initialDrawing.headers.get("cache-control"), "private, no-store");
+  const { scope: drawingScope, drawing: blank } = await initialDrawing.json();
+  assert.equal(blank, null);
+  const drawing = { version: 1, editedAt: Date.now(), operation: crypto.randomUUID(),
+    areas: [{ index: -1, fill: "#f8d245", strokes: [{ tool: "brush", color: "#e84252", points: [{ x: 25, y: 45 }] }] }],
+  };
+  const uploadDrawing = (value, headers = drawingHeaders(adminCookie, "adult-a", drawingScope)) => request(drawingPath, {
+    method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(value),
+  });
+  assert.equal((await uploadDrawing(drawing, drawingHeaders(adminCookie, "adult-a"))).status, 401);
+  assert.equal((await uploadDrawing(drawing, drawingHeaders(secondCookie, "adult-b", drawingScope))).status, 401);
+  assert.equal((await uploadDrawing({ ...drawing, areas: [{ index: 100, strokes: [] }] })).status, 400);
+  assert.equal((await uploadDrawing(drawing)).status, 200);
+  assert.deepEqual((await (await readDrawing(adminCookie, "adult-a", drawingScope)).json()).drawing, drawing);
+  assert.equal((await (await readDrawing(secondCookie, "adult-b")).json()).drawing, null);
+  const reset = { ...drawing, editedAt: drawing.editedAt + 2, operation: crypto.randomUUID(), areas: [] };
+  const interim = { ...drawing, editedAt: drawing.editedAt + 1, operation: crypto.randomUUID() };
+  const concurrent = await Promise.all([uploadDrawing(reset), uploadDrawing(interim)]);
+  assert.ok(concurrent.every(response => response.status === 200));
+  assert.deepEqual((await (await uploadDrawing(drawing)).json()).drawing, reset, "an old offline edit cannot undo a newer reset");
+  assert.deepEqual((await (await readDrawing(adminCookie, "adult-a")).json()).drawing, reset);
+  console.log("PASS: drafts and resets of coloring drawings, adult isolation, concurrent writes and offline retries on R2.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

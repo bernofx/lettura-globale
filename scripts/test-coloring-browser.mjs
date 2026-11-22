@@ -21,12 +21,15 @@ let hasCustomSoundtrack = false;
 const soundtrack = { name: "coloring-game.mp3", etag: "test-mp3" };
 const gameSoundtrackPath = "/api/game-soundtrack";
 const puzzlePath = "/api/puzzle-images";
+const drawingsPath = "/api/coloring-drawings";
+const drawingScope = "b".repeat(32);
+const cloudDrawings = new Map();
 const puzzleUploads = new Map();
 let postponePuzzleUpload = true;
 
 function send(method, params = {}) {
   return new Promise((resolve, reject) => {
-    pending.set(++id, { resolve, reject });
+    pending.set(++id, { method, resolve, reject });
     socket.send(JSON.stringify({ id, method, params }));
   });
 }
@@ -36,7 +39,9 @@ socket.addEventListener("message", event => {
   if (message.id) {
     const command = pending.get(message.id);
     pending.delete(message.id);
-    if (message.error) command?.reject(new Error(message.error.message));
+    // A page reload can cancel an intercepted request before CDP replies.
+    const cancelled = command?.method.startsWith("Fetch.") && message.error?.message.includes("Invalid InterceptionId");
+    if (message.error && !cancelled) command?.reject(new Error(command.method + ": " + message.error.message));
     else command?.resolve(message.result);
   }
   if (message.method === "Fetch.requestPaused") {
@@ -46,6 +51,23 @@ socket.addEventListener("message", event => {
       return;
     }
     const url = new URL(request.url);
+    if (url.pathname === drawingsPath) {
+      const drawingId = url.searchParams.get("drawing");
+      const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
+      assert.equal(headers["x-coloring-profile"], therapist.id);
+      let data = { scope: drawingScope, drawing: cloudDrawings.get(drawingId) ?? null };
+      if (request.method === "PUT") {
+        assert.equal(headers["x-coloring-scope"], drawingScope);
+        cloudDrawings.set(drawingId, JSON.parse(request.postData));
+        data = { written: true };
+      }
+      void send("Fetch.fulfillRequest", {
+        requestId, responseCode: 200,
+        responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+        body: Buffer.from(JSON.stringify(data)).toString("base64"),
+      });
+      return;
+    }
     if (url.pathname === puzzlePath) {
       const puzzleId = url.searchParams.get("image");
       let status = 200;
@@ -159,7 +181,7 @@ async function viewport(width, height) {
   await wait(`innerWidth === ${width} && innerHeight === ${height}`);
 }
 
-const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-header-actions button, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
+const gameFitsVisibleViewport = `[...document.querySelectorAll('.coloring-header-actions button, .coloring-reset, .coloring-board, .coloring-controls, .coloring-tools button')].every(element => {
   const bounds = element.getBoundingClientRect();
   const { offsetLeft, offsetTop, width, height } = visualViewport;
   return bounds.width > 0 && bounds.height > 0 &&
@@ -222,20 +244,26 @@ try {
   await send("Page.enable");
   await send("Network.enable");
   await send("Network.setBypassServiceWorker", { bypass: true });
-  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }, { urlPattern: `${origin}${puzzlePath}*` }] });
+  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }, { urlPattern: `${origin}${puzzlePath}*` }, { urlPattern: `${origin}${drawingsPath}*` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
     window.testGamePops = 0;
+    window.testFeedback = 0;
     window.addEventListener("popstate", () => window.testGamePops++);
     const nativeStart = AudioBufferSourceNode.prototype.start;
     const nativeStop = AudioBufferSourceNode.prototype.stop;
     const nativeConnect = AudioBufferSourceNode.prototype.connect;
+    const nativePlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (...args) {
+      if (this.src.endsWith("/correct.mp3")) window.testFeedback++;
+      return nativePlay.apply(this, args);
+    };
     AudioBufferSourceNode.prototype.start = function (...args) {
       if (this.loop) {
         window.testMusic.starts++;
         window.testMusic.duration = this.buffer?.duration;
-      }
+      } else { window.testFeedback++; }
       return nativeStart.apply(this, args);
     };
     AudioBufferSourceNode.prototype.connect = function (target, ...args) {
@@ -380,6 +408,8 @@ try {
   await assertPixel(340, 330, green, "bucket fills all of the door");
   await assertPixel(235, 355, white, "bucket leaves the wall outside the door untouched");
   await assertPixel(315, 215, red, "bucket preserves existing strokes in other zones");
+  await send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+  await wait("!navigator.onLine");
   await button("Giallo");
   await touch("touchStart", 125, 140);
   await touch("touchEnd");
@@ -404,13 +434,17 @@ try {
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await button("Esci");
-  await wait("!history.state?.lgGameGuard");
+  await wait("!document.querySelector('.coloring-dialog') && !history.state?.lgGameGuard");
+  // Wait for the modal focus restoration before applying zoom to the gallery.
+  await evaluate("window.testGalleryReady = false; requestAnimationFrame(() => requestAnimationFrame(() => { window.testGalleryReady = true; }))");
+  await wait("window.testGalleryReady");
   await send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
   await wait("visualViewport.scale >= 1.99");
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await wait(gameFitsVisibleViewport);
-  await assertPixel(340, 330, green, "switching drawings preserves work until leaving Games");
+  await assertPixel(340, 330, green, "opening a drawing restores the latest paint while offline");
+  await assertPixel(600, 420, yellow, "the offline background fill was also restored");
   const exit = await evaluate(`(() => {
     const bounds = document.querySelector('.coloring-controls button[aria-label=Esci]').getBoundingClientRect();
     return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, id: 1 };
@@ -438,6 +472,39 @@ try {
   await wait("document.querySelector('.child-choice-page')");
   await evaluate("history.forward()");
   await wait("document.querySelector('.games-page')");
+  await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await wait("navigator.onLine");
+  const deadline = Date.now() + 6000;
+  while (!cloudDrawings.get("casa")?.areas.some(area => area.index === -1 && area.fill === "#f8d245") && Date.now() < deadline) await delay(100);
+  assert.ok(cloudDrawings.get("casa")?.areas.some(area => area.index === -1 && area.fill === "#f8d245"), "the offline edit syncs when the network returns");
+  await wait(`Object.keys(localStorage).some(key => key.startsWith("lg-coloring:") && key.endsWith(":casa") && JSON.parse(localStorage.getItem(key)).pending === false)`);
+  await evaluate(`Object.keys(localStorage).filter(key => key.startsWith("lg-coloring:")).forEach(key => localStorage.removeItem(key))`);
+  await send("Page.reload");
+  await wait("document.querySelector('.games-page') || document.querySelector('.child-choice-page')");
+  if (!await evaluate("Boolean(document.querySelector('.games-page'))")) await button("Apri Giochi");
+  await viewport(568, 320);
+  await button("Colorare");
+  await button("Casa");
+  await wait("document.querySelector('.coloring-dialog[open]')");
+  await wait(canvasFillsBoard);
+  await assertPixel(340, 330, green, "a fresh page restores the drawing from the cloud");
+  assert.ok(await evaluate("document.querySelector('.coloring-reset').offsetLeft < 10 && document.querySelector('.coloring-reset').offsetTop < 10"));
+  await button("Azzera disegno");
+  await assertPixel(340, 330, white, "reset removes the fill");
+  await assertPixel(315, 215, white, "reset removes the freehand stroke");
+  await assertPixel(600, 420, [0, 0, 0, 0], "reset removes the background fill");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.coloring-board')).backgroundColor"), "rgb(255, 255, 255)", "the blank paper remains white");
+  await button("Esci");
+  await wait("!document.querySelector('.coloring-dialog[open]')");
+  const resetDeadline = Date.now() + 6000;
+  while (cloudDrawings.get("casa")?.areas.length && Date.now() < resetDeadline) await delay(100);
+  assert.deepEqual(cloudDrawings.get("casa")?.areas, [], "the cloud stores the reset as a new blank drawing");
+  await button("Casa");
+  await wait("document.querySelector('.coloring-dialog[open]')");
+  await wait(canvasFillsBoard);
+  await assertPixel(340, 330, white, "a reset drawing stays blank after reopening");
+  await button("Esci");
+  await wait("!document.querySelector('.coloring-dialog[open]') && !history.state?.lgGameGuard");
   // Exercise the ordinary app shell with a long synthetic profile name.
   const child = { id: "child-width-demo", firstName: "AlessandroMassimiliano", lastName: "Dimostrazione", birthYear: "2015", notes: "", avatarColor: "#7568d9" };
   therapist.childIds = [child.id];
@@ -569,6 +636,21 @@ try {
   await wait(`window.testMusic.stops === ${stopsBeforeBalloons} + 1`);
   assert.equal(await evaluate("document.querySelector('.games-page h1').textContent"), "Palloncini");
   await send("Emulation.setEmulatedMedia", { features: [] });
+  await button("Inizia");
+  await wait("document.querySelector('.balloon-game-dialog[open] .celebration-trail')");
+  await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 40, y: 230, id: 1 }] });
+  await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 275, y: 230, id: 1 }] });
+  await touch("touchEnd");
+  await delay(530);
+  const trailStillVisible = `(() => {
+    const canvas = document.querySelector('.balloon-game-dialog .celebration-trail');
+    return canvas.getContext('2d').getImageData(185, 230, 1, 1).data[3] > 5;
+  })()`;
+  assert.ok(await evaluate(trailStillVisible), "the trail is still visible after half a second");
+  await delay(550);
+  assert.equal(await evaluate(trailStillVisible), false, "the trail fades away after the drag");
+  await button("Chiudi il gioco dei palloncini");
+  await wait("!document.querySelector('.balloon-game-dialog') && !history.state?.lgGameGuard");
   await button("Torna ai giochi");
   await button("Puzzle a incastro");
   await wait("document.querySelector('.puzzle-gallery-card[aria-label=Casa] .puzzle-preview')");
@@ -598,7 +680,7 @@ try {
     });
   })()`);
   await wait("document.querySelector('.puzzle-gallery-card[aria-label=panoramica-sintetica] .puzzle-preview')");
-  assert.equal(await evaluate("document.querySelectorAll('.puzzle-gallery-card').length"), 2);
+  assert.equal(await evaluate("document.querySelectorAll('.puzzle-gallery-card').length"), 4);
   assert.equal(await evaluate("document.querySelectorAll('.puzzle-gallery-card[aria-label=panoramica-sintetica] button').length"), 3);
   await viewport(568, 320);
   await button("panoramica-sintetica · 4 × 5 · 20 pezzi");
@@ -619,6 +701,8 @@ try {
     assert.equal(await tileAt(below), from === tile ? topId : belowId);
   }
   await assertGameIgnoresBack(".puzzle-dialog[open]");
+  assert.ok(await evaluate("document.querySelector('.puzzle-toolbar [aria-pressed=true]').textContent === 'Nascondi immagine'"), "the overlay starts enabled");
+  await button("Nascondi immagine");
   await button("Mostra immagine");
   assert.ok(await evaluate(`(() => {
     const canvas = document.querySelector('.puzzle-board canvas');
@@ -627,6 +711,7 @@ try {
     const right = ctx.getImageData(canvas.width-13, 215, 1, 1).data;
     return left[0] > 220 && left[2] < 40 && right[2] > 220 && right[0] < 40;
   })()`), "the guide keeps both sides of a wide photo");
+  const feedbackBeforePuzzle = await evaluate("window.testFeedback");
   for (let index = 0; index < 20; index++) {
     const piece = `document.querySelector('.puzzle-piece[data-piece="${index}"]')`;
     await evaluate(`${piece}.click()`);
@@ -634,7 +719,12 @@ try {
     await evaluate("document.querySelectorAll('.puzzle-slots button')[" + index + "].click()");
     await wait(`!${piece}`);
   }
-  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Puzzle completato!'");
+  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Puzzle completato!' && document.querySelector('.puzzle-completion')");
+  await wait(`window.testFeedback === ${feedbackBeforePuzzle} + 1`);
+  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.getAttribute('aria-label') === 'Casa, 0/20 pezzi'");
+  assert.equal(await evaluate("document.querySelectorAll('.puzzle-tray button').length"), 20);
+  assert.ok(await evaluate("Boolean(document.querySelector('.puzzle-toolbar [aria-pressed=true]'))"), "the next puzzle also starts with the guide");
+  assert.ok(await evaluate("document.querySelector('.puzzle-dialog[open]') && history.state?.lgGameGuard"));
   await button("Esci dal puzzle");
   await wait("!history.state?.lgGameGuard");
   for (const [size, pieces] of [["4 × 4",16],["5 × 5",25]]) {
@@ -716,7 +806,7 @@ try {
   await button("Apri menu");
   await button("Giochi");
   await button("Puzzle a incastro");
-  await wait("document.querySelectorAll('.puzzle-gallery-card').length === 3");
+  await wait("document.querySelectorAll('.puzzle-gallery-card').length === 5");
   await button("giochi · 4 × 5 · 20 pezzi");
   await wait("document.querySelectorAll('.puzzle-tray button').length === 20");
   await button("Esci dal puzzle");

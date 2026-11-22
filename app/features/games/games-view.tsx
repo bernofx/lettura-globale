@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, VolumeX, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, RotateCcw, VolumeX, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
+import type { ColoringArea } from "../../domain/coloring-drawings";
+import type { ColoringStorage } from "./coloring-storage";
 import type { PuzzleImage } from "../../domain/puzzle-library";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import type { LibraryItem } from "../../shared/types";
@@ -40,11 +42,25 @@ type Game = (typeof games)[number];
 type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
   { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection };
 
-export function GamesView({ library, puzzleImages, soundVolume, onPlayingChange }: { library: LibraryItem[]; puzzleImages: PuzzleImage[]; soundVolume: number; onPlayingChange: (playing: boolean) => void }) {
+export function GamesView({ library, puzzleImages, soundVolume, coloringStorage, notify, onPlayingChange }: {
+  library: LibraryItem[];
+  puzzleImages: PuzzleImage[];
+  soundVolume: number;
+  coloringStorage: ColoringStorage | null;
+  notify: (message: string) => void;
+  onPlayingChange: (playing: boolean) => void;
+}) {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [game, setGame] = useState<ActiveGame | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
-  const artwork = useRef(new Map<string, ColoringCanvas>());
+  const [openingDrawing, setOpeningDrawing] = useState(false);
+  const drawingRequest = useRef(0);
+  useEffect(() => () => { drawingRequest.current++; }, []);
+  const saveDrawing = useCallback((id: string, areas: ColoringArea[]) => {
+    const result = coloringStorage?.save(id, areas);
+    if (!result?.kept) notify("Copia sul dispositivo non disponibile per questo disegno.");
+    else if (result.tooLarge) notify("Disegno salvato sul dispositivo. È troppo grande per il cloud.");
+  }, [coloringStorage, notify]);
   const playing = game !== null;
   useLayoutEffect(() => {
     if (!playing) return;
@@ -52,19 +68,30 @@ export function GamesView({ library, puzzleImages, soundVolume, onPlayingChange 
     return () => onPlayingChange(false);
   }, [onPlayingChange, playing]);
 
-  function paintingFor(page: ColoringPage) {
-    const existing = artwork.current.get(page.id);
-    if (existing) return existing;
-    const painting = new ColoringCanvas(page);
-    artwork.current.set(page.id, painting);
-    return painting;
+  async function openDrawing(page: ColoringPage) {
+    const request = ++drawingRequest.current;
+    setOpeningDrawing(true);
+    try {
+      const areas = await coloringStorage?.load(page) ?? [];
+      if (drawingRequest.current === request) setGame({ id: "coloring", page, painting: new ColoringCanvas(page, areas) });
+    } catch {
+      if (drawingRequest.current === request) notify("Impossibile aprire il disegno. Riprova.");
+    } finally {
+      if (drawingRequest.current === request) setOpeningDrawing(false);
+    }
+  }
+
+  function closeColoringGallery() {
+    drawingRequest.current++;
+    setOpeningDrawing(false);
+    setSelectedGame(null);
   }
 
   return (
     <div className="page games-page">
       <PageHeader title={selectedGame?.title ?? "Giochi"} />
       {selectedGame && (
-        <button className="ghost-button game-picker-back" type="button" onClick={() => setSelectedGame(null)}>
+        <button className="ghost-button game-picker-back" type="button" onClick={closeColoringGallery}>
           <ArrowLeft size={18} aria-hidden="true" /><span>Torna ai giochi</span>
         </button>
       )}
@@ -79,9 +106,10 @@ export function GamesView({ library, puzzleImages, soundVolume, onPlayingChange 
         </div>
       )}
       {selectedGame?.id === "coloring" && (
-        <section className="coloring-gallery" aria-label="Scegli un disegno">
+        <section className="coloring-gallery" aria-label="Scegli un disegno" aria-busy={openingDrawing}>
+          {openingDrawing && <p className="coloring-loading" role="status">Caricamento disegno…</p>}
           {coloringPages.map(page => (
-            <button className="coloring-card" key={page.id} type="button" onClick={() => setGame({ id: "coloring", page, painting: paintingFor(page) })}>
+            <button className="coloring-card" key={page.id} type="button" disabled={openingDrawing} onClick={() => void openDrawing(page)}>
               <DrawingThumbnail page={page} />
               <span>{page.title}</span>
             </button>
@@ -107,7 +135,11 @@ export function GamesView({ library, puzzleImages, soundVolume, onPlayingChange 
           soundVolume={soundVolume}
           musicEnabled={musicEnabled}
           onToggleMusic={() => setMusicEnabled(current => !current)}
-          onClose={() => setGame(null)}
+          onSave={saveDrawing}
+          onClose={() => {
+            coloringStorage?.flush();
+            setGame(null);
+          }}
         />
       )}
     </div>
@@ -142,12 +174,13 @@ function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean
   return { x: frame.left + x * (frame.right - frame.left), y: frame.top + y * (frame.bottom - frame.top) };
 }
 
-function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic, onClose }: {
+function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic, onSave, onClose }: {
   page: ColoringPage;
   painting: ColoringCanvas;
   soundVolume: number;
   musicEnabled: boolean;
   onToggleMusic: () => void;
+  onSave: (id: string, areas: ColoringArea[]) => void;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -173,22 +206,27 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     music.current?.setVolume(musicEnabled ? soundVolume * 0.55 : 0);
   }, [musicEnabled, soundVolume]);
 
+  const finishStroke = useCallback(() => {
+    const current = stroke.current;
+    if (!current) return;
+    stroke.current = null;
+    const surface = canvas.current;
+    if (surface?.hasPointerCapture(current.pointerId)) surface.releasePointerCapture(current.pointerId);
+    onSave(page.id, painting.snapshot());
+  }, [onSave, page.id, painting]);
+
   useEffect(() => {
     const element = dialog.current;
-    const surface = canvas.current;
     if (!element) return;
 
-    function stopStroke() {
-      const current = stroke.current;
-      stroke.current = null;
-      if (current && surface?.hasPointerCapture(current.pointerId)) {
-        surface.releasePointerCapture(current.pointerId);
-      }
-    }
-
-    const unmount = mountLandscapeDialog(element, stopStroke, (value) => { rotated.current = value; });
-    return () => { unmount(); stopStroke(); };
-  }, []);
+    const unmount = mountLandscapeDialog(element, finishStroke, value => { rotated.current = value; });
+    window.addEventListener("pagehide", finishStroke);
+    return () => {
+      window.removeEventListener("pagehide", finishStroke);
+      finishStroke();
+      unmount();
+    };
+  }, [finishStroke]);
 
   useEffect(() => {
     const surface = canvas.current;
@@ -225,6 +263,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
 
     if (tool === "fill") {
       painting.fill(area, color);
+      onSave(page.id, painting.snapshot());
     } else {
       event.currentTarget.setPointerCapture(event.pointerId);
       stroke.current = { pointerId: event.pointerId, area, point, tool, color };
@@ -246,7 +285,18 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
   }
 
   function stop(event: PointerEvent<HTMLCanvasElement>) {
-    if (stroke.current?.pointerId === event.pointerId) stroke.current = null;
+    if (stroke.current?.pointerId === event.pointerId) finishStroke();
+  }
+
+  function resetDrawing() {
+    const current = stroke.current;
+    stroke.current = null;
+    const surface = canvas.current;
+    if (current && surface?.hasPointerCapture(current.pointerId)) surface.releasePointerCapture(current.pointerId);
+    painting.clear();
+    const context = surface?.getContext("2d");
+    if (context) painting.render(context);
+    onSave(page.id, []);
   }
 
   function startPaletteDrag(event: PointerEvent<HTMLDivElement>) {
@@ -287,6 +337,9 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
             onLostPointerCapture={stop}
             onContextMenu={event => event.preventDefault()}
           />
+          <button type="button" className="ghost-button coloring-reset" aria-label="Azzera disegno" title="Azzera disegno" onClick={resetDrawing}>
+            <RotateCcw size={20} aria-hidden="true" />
+          </button>
         </div>
         <aside className="coloring-controls" aria-label="Materiale per colorare">
           <div className="coloring-header-actions">
@@ -301,7 +354,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
             >
               {musicEnabled && soundVolume > 0 ? <Music2 size={21} aria-hidden="true" /> : <VolumeX size={21} aria-hidden="true" />}
             </button>
-            <button type="button" aria-label="Esci" title="Esci" onClick={onClose}><X size={20} aria-hidden="true" /></button>
+            <button type="button" aria-label="Esci" title="Esci" onClick={() => { finishStroke(); onClose(); }}><X size={20} aria-hidden="true" /></button>
           </div>
           <div role="group" aria-label="Strumenti" className="coloring-tools">
             {tools.map(({ id, label, icon: Icon }) => (

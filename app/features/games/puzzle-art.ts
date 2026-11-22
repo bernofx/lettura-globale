@@ -4,6 +4,15 @@ export const puzzleGrids = {
   "5x5": { columns: 5, rows: 5 },
 } as const;
 export type PuzzleSize = keyof typeof puzzleGrids;
+export type PuzzleSource = { id: string; title: string; image: string };
+
+export async function loadPuzzleImage(url: string) {
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  return image;
+}
+
 export const demoPuzzleImage = "/images/categories/casa.webp";
 const CELL = 120;
 const TAB = 19;

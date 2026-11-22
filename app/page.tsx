@@ -18,6 +18,7 @@ import { playBalloonPop } from "./domain/balloon-audio";
 import { SequenceCelebration } from "./components/sequence-celebration";
 import { listenForAudioGestures } from "./domain/audio-activation";
 import { CaaStoriesView } from "./components/caa-stories-view";
+import { useColoringStorage } from "./features/games/coloring-storage";
 import { GamesView } from "./features/games/games-view";
 import { useGameBackGuard } from "./features/games/use-game-back-guard";
 import { usePuzzleLibrary } from "./features/games/use-puzzle-library";
@@ -337,6 +338,7 @@ function HomePageContent() {
 
 
   const therapist = useMemo(() => therapists.find((item) => item.id === loggedInTherapistId), [loggedInTherapistId, therapists]);
+  const coloringStorage = useColoringStorage(therapist?.id, therapist?.email);
   const caaStories = useCaaStories(therapist?.id ?? null);
   const puzzleLibrary = usePuzzleLibrary(therapist?.id, view === "library" || view === "games");
   useBeforeAppUpdate("cloud-save", async () => {
@@ -1080,7 +1082,7 @@ function HomePageContent() {
           <button className="ghost-button" onClick={() => navigate("home")}>Torna alla scelta del profilo</button>
           <AppVersionBadge />
         </header>
-        {view === "games" ? <GamesView puzzleImages={puzzleLibrary.images} library={visibleLibrary} soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} /> : (
+        {view === "games" ? <GamesView coloringStorage={coloringStorage} notify={notify} puzzleImages={puzzleLibrary.images} library={visibleLibrary} soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} /> : (
           <CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} />
         )}
       </main>
@@ -1108,7 +1110,7 @@ function HomePageContent() {
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {view === "appearance" && <AppearanceView settings={appearance} onChange={setAppearance} />}
         {view === "caa" && <CaaStoriesView key={caaStories.owner || therapist.id} owner={caaStories.owner} store={caaStories} library={visibleLibrary} prepareImage={prepareUploadedImage} />}
-        {view === "games" && <GamesView puzzleImages={puzzleLibrary.images} library={visibleLibrary} soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} />}
+        {view === "games" && <GamesView coloringStorage={coloringStorage} notify={notify} puzzleImages={puzzleLibrary.images} library={visibleLibrary} soundVolume={effectiveSoundVolume / 100} onPlayingChange={setStandaloneGameOpen} />}
         {view === "stats" && <StatsView child={activeChild} therapist={therapist} therapists={therapists} attempts={childAttempts} helps={childHelps} histories={childSessionHistory} exercises={exercises} library={library} onSaveHistoryComment={(id, comment) => { setSessionHistory((current) => current.map((record) => record.id === id ? { ...record, comment } : record)); notify("Valutazione aggiornata"); }} onDeleteHistory={(id, label) => setPendingHistoryDelete({ id, label })} onDeleteAllHistory={() => setPendingHistoryDelete({ label: `tutto lo storico di ${activeChild.firstName}` })} onReset={() => setPendingStatsReset(true)} />}
         {view === "profiles" && <ProfilesView key={`${therapist.id}:${associatedChildren.map((child) => child.id).join(":")}`} therapist={therapist} therapists={therapists} childProfiles={associatedChildren} allChildren={children} activeChildId={activeChild.id} canDeleteTherapist={therapists.length > 1 && therapist.role !== "Amministratore"} onSelectChild={setActiveChildId} onSaveTherapist={(updated) => { setTherapists((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo adulto aggiornato"); }} onSaveTherapists={(updated) => { setTherapists(updated); notify("Profili adulti e associazioni aggiornati"); }} onSaveChild={(updated) => { setChildren((current) => current.map((item) => item.id === updated.id ? updated : item)); notify("Profilo bambino aggiornato"); }} onRequestDelete={setPendingDelete} />}
       </main>

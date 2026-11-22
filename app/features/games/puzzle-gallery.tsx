@@ -6,12 +6,15 @@ import { FilePicker, IMAGE_FILE_ACCEPT, IMAGE_FILE_HINT } from "../../shared/ui/
 import { SectionHeading } from "../../shared/ui/headings";
 import { prepareUploadedImage } from "../../shared/media-storage";
 import type { LibraryItem } from "../../shared/types";
-import { demoPuzzleImage, puzzleGrids, type PuzzleSize } from "./puzzle-art";
+import { demoPuzzleImage, loadPuzzleImage, puzzleGrids, type PuzzleSize, type PuzzleSource } from "./puzzle-art";
 import type { PuzzleSelection } from "./puzzle-game";
 import { supportsMultipleFiles } from "../../domain/android-bridge";
 
-type PuzzleSource = { id: string; title: string; image: string };
-const examples: PuzzleSource[] = [{ id: "demo:casa", title: "Casa", image: demoPuzzleImage }];
+const examples: PuzzleSource[] = [
+  { id: "demo:casa", title: "Casa", image: demoPuzzleImage },
+  { id: "demo:mela", title: "Mela", image: "/images/demo/mela.png" },
+  { id: "demo:gatto", title: "Gatto", image: "/images/demo/gatto.png" },
+];
 const formats = (Object.keys(puzzleGrids) as PuzzleSize[]).map(size => {
   const { rows, columns } = puzzleGrids[size];
   return { size, label: rows + " × " + columns, pieces: rows * columns };
@@ -71,10 +74,8 @@ export function PuzzleGallery({ library, puzzleImages, onStart }: { library: Lib
     setError("");
     setBusy(true);
     try {
-      const image = new Image();
-      image.src = source.image;
-      await image.decode();
-      if (active.current) onStart({ image, size });
+      const image = await loadPuzzleImage(source.image);
+      if (active.current) onStart({ image, size, sources, startIndex: sources.indexOf(source) });
     } catch {
       if (active.current) setError("Impossibile caricare «" + source.title + "». Riprova o scegli un’altra immagine.");
     } finally {

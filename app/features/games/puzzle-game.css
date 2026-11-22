@@ -121,10 +121,27 @@ html:has(.puzzle-dialog[open]) { overflow: hidden; }
 }
 
 .puzzle-board-space {
+  position: relative;
   display: grid;
   place-items: center;
   min-width: 0;
   min-height: 0;
+}
+
+.puzzle-completion {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  margin: auto;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #17803d;
+  color: #fff;
+  box-shadow: 0 5px 18px #163f2b50;
+  pointer-events: none;
 }
 
 .puzzle-board {

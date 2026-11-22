@@ -1,6 +1,6 @@
 type TrailPoint = { x: number; y: number };
 
-const TRAIL_LIFETIME_MS = 420;
+const TRAIL_LIFETIME_MS = 950;
 const REDUCED_TRAIL_LIFETIME_MS = 160;
 const HALO_COLOR = "#d9d2fb";
 const CORE_COLOR = "#ffffff";

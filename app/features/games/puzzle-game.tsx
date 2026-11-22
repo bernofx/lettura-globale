@@ -1,15 +1,16 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
+import { playFeedbackTone } from "../../shared/audio";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
-import { buildPuzzleArt, drawPuzzleBoard, PUZZLE_ART_SCALE, puzzleGrids, type PuzzleSize } from "./puzzle-art";
+import { buildPuzzleArt, drawPuzzleBoard, loadPuzzleImage, PUZZLE_ART_SCALE, puzzleGrids, type PuzzleSize, type PuzzleSource } from "./puzzle-art";
 import "./puzzle-game.css";
 
-export type PuzzleSelection = { image: HTMLImageElement; size: PuzzleSize };
+export type PuzzleSelection = { image: HTMLImageElement; size: PuzzleSize; sources: PuzzleSource[]; startIndex: number };
 type Point = { x: number; y: number };
 type Piece = Point & { id: number; angle: number; layer: number };
 type Gesture = { pointerId: number; button: HTMLButtonElement; piece: Piece; start: Point; offset: Point; moving: boolean };
@@ -25,25 +26,28 @@ function PuzzleTile({ tile }: { tile: HTMLCanvasElement }) {
   return <canvas ref={ref} width={tile.width} height={tile.height} aria-hidden="true" />;
 }
 
+function shufflePieces(columns: number, rows: number): Piece[] {
+  const order = Array.from({ length: columns * rows }, (_, index) => index);
+  for (let index = order.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+  return order.map((id, index) => ({
+    id, layer: index + 1,
+    x: clamp((index % columns) / (columns - 1) + Math.cos(index * 4.17) * (rows === 5 ? .08 : .04)),
+    y: clamp(Math.floor(index / columns) / (rows - 1) + Math.sin(index * 2.81 + 1) * (rows === 5 ? .08 : .04)),
+    angle: Math.cos(index * 2.93) * (rows === 5 ? 10 : 5),
+  }));
+}
+
 export function PuzzleGame({ selection, soundVolume, onClose }: { selection: PuzzleSelection; soundVolume: number; onClose: () => void }) {
   const { columns, rows } = puzzleGrids[selection.size];
-  const art = useMemo(() => buildPuzzleArt(selection.image, selection.size), [selection]);
-  const [pieces, setPieces] = useState<Piece[]>(() => {
-    const order = Array.from({ length: columns * rows }, (_, index) => index);
-    for (let index = order.length - 1; index > 0; index--) {
-      const other = Math.floor(Math.random() * (index + 1));
-      [order[index], order[other]] = [order[other], order[index]];
-    }
-    return order.map((id, index) => ({
-      id, layer: index + 1,
-      x: clamp((index % columns) / (columns - 1) + Math.cos(index * 4.17) * (rows === 5 ? .08 : .04)),
-      y: clamp(Math.floor(index / columns) / (rows - 1) + Math.sin(index * 2.81 + 1) * (rows === 5 ? .08 : .04)),
-      angle: Math.cos(index * 2.93) * (rows === 5 ? 10 : 5),
-    }));
-  });
+  const [round, setRound] = useState(() => ({ image: selection.image, index: selection.startIndex }));
+  const art = useMemo(() => buildPuzzleArt(round.image, selection.size), [round.image, selection.size]);
+  const [pieces, setPieces] = useState(() => shufflePieces(columns, rows));
   const [fitted, setFitted] = useState<ReadonlySet<number>>(() => new Set());
   const [selected, setSelected] = useState<number | null>(null);
-  const [guide, setGuide] = useState(false);
+  const [guide, setGuide] = useState(true);
   const [drag, setDrag] = useState<(Point & { id: number }) | null>(null);
   const [geometry, setGeometry] = useState({ cell: 0, width: 0, height: 0 });
   const dialog = useRef<HTMLDialogElement>(null);
@@ -95,6 +99,35 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
   }, []);
   useEffect(() => { music.current?.setVolume(soundVolume * .55); }, [soundVolume]);
 
+  const completed = fitted.size === pieces.length;
+  useEffect(() => {
+    if (!completed) return;
+    let cancelled = false;
+
+    async function advance() {
+      for (let offset = 1; offset < selection.sources.length && !cancelled; offset++) {
+        const index = (round.index + offset) % selection.sources.length;
+        const source = selection.sources[index];
+        if (source.image === selection.sources[round.index].image) continue;
+        let image;
+        try { image = await loadPuzzleImage(source.image); } catch { continue; }
+        if (cancelled) return;
+        layer.current = columns * rows;
+        skipClick.current = null;
+        setPieces(shufflePieces(columns, rows));
+        setFitted(new Set());
+        setSelected(null);
+        setGuide(true);
+        setDrag(null);
+        setRound({ image, index });
+        return;
+      }
+    }
+
+    const timer = window.setTimeout(() => void advance(), 1500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [completed, round.index, selection.sources, columns, rows]);
+
   const pieceArt = geometry.cell * PUZZLE_ART_SCALE;
   const target = Math.min(geometry.cell, Math.max(44, geometry.cell - 3));
   function pieceInset(length: number) {
@@ -112,9 +145,10 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
     setPieces(previous => previous.map(piece => piece.id === id ? { ...piece, ...change } : piece));
   }
   function fit(id: number, slot: number) {
-    if (id !== slot) return;
-    setFitted(previous => previous.has(id) ? previous : new Set([...previous, id]));
+    if (id !== slot || fitted.has(id)) return;
+    setFitted(new Set(fitted).add(id));
     setSelected(null);
+    if (fitted.size + 1 === pieces.length) playFeedbackTone("correct", soundVolume > 0);
   }
   function startDrag(event: PointerEvent<HTMLButtonElement>, piece: Piece) {
     if (event.button !== 0 || gesture.current) return;
@@ -169,7 +203,9 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
       onClick={() => music.current?.retry()}
       style={{ "--puzzle-art": pieceArt + "px", "--puzzle-target": target + "px" } as CSSProperties}>
       <header className="puzzle-toolbar">
-        <span role="status">{fitted.size === pieces.length ? "Puzzle completato!" : fitted.size + "/" + pieces.length + " pezzi"}</span>
+        <span role="status" aria-label={selection.sources[round.index].title + ", " + (completed ? "Puzzle completato!" : fitted.size + "/" + pieces.length + " pezzi")}>
+          {completed ? "Puzzle completato!" : fitted.size + "/" + pieces.length + " pezzi"}
+        </span>
         <button type="button" className="ghost-button" aria-pressed={guide} onClick={() => setGuide(value => !value)}>
           {guide ? "Nascondi immagine" : "Mostra immagine"}
         </button>
@@ -186,6 +222,7 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
               ))}
             </div>
           </div>
+          {completed && <span className="puzzle-completion" aria-hidden="true"><Check size={48} strokeWidth={3} /></span>}
         </div>
         <div ref={tray} className="puzzle-tray" role="group" aria-label="Pezzi sul tavolo">
           {pieces.map((piece, index) => !fitted.has(piece.id) && (

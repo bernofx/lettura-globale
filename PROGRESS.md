@@ -1,12 +1,16 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 21 novembre 2026
+**Aggiornato:** 22 novembre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
 **Target:** Cloudflare Workers + D1 + R2, distribuito automaticamente da GitHub
 
 ## Completato
+
+- [x] Puzzle avvia ogni immagine con la guida attiva. A fine round mostra una spunta verde, riproduce il suono di risposta corretta e passa alla prossima immagine utilizzabile con lo stesso formato.
+- [x] Colorare conserva tratti, riempimenti e sfondo per disegno e profilo adulto in R2. In assenza di rete riprende la copia del browser e sincronizza gli aggiornamenti in coda alla riconnessione. Azzera disegno è in alto a sinistra e salva una nuova versione bianca.
+- [x] In Palloncini la scia dura 950 ms con le animazioni standard e 160 ms con movimento ridotto. Cache PWA v76.
 
 - [x] I sei pannelli della Libreria condividono struttura e intestazione. Gli otto percorsi di caricamento usano lo stesso selettore di file, con sostituzione esplicita, formato e conferma dove richiesta. La galleria Puzzle distingue le aggiunte temporanee dalla Libreria. Nelle storie CAA la scelta di una foto è disponibile vicino alla ricerca. Cache PWA v75.
 

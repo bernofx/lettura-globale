@@ -1,7 +1,10 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Caricamenti più facili da trovare",
+  title: "Riprendi i tuoi disegni e gioca nuovi puzzle",
   items: [
+    "Colorare salva tratti, riempimenti e sfondo. Riapri lo stesso disegno per continuare o premi Azzera disegno in alto a sinistra.",
+    "La guida del Puzzle è visibile da subito. A fine puzzle senti il suono di conferma, vedi una spunta verde e passi all’immagine successiva con lo stesso numero di pezzi.",
+    "In Palloncini la scia del dito resta visibile più a lungo.",
     "La Libreria usa pannelli e pulsanti coerenti. Per cambiare una foto o un MP3, usa il comando visibile sotto l’anteprima o il nome del file.",
     "Nei puzzle trovi subito la scelta di immagini dal dispositivo. Nelle storie CAA, Usa una tua immagine è vicino ai comandi di ricerca.",
     "Premi Aggiungi immagini in Libreria → Puzzle per scegliere uno o più file (sull’app Android attuale, uno alla volta). Le immagini salvate compaiono in Giochi.",

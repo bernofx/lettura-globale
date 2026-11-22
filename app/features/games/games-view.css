@@ -162,12 +162,26 @@ html:has(.coloring-dialog[open], .balloon-game-dialog[open]) {
 }
 
 .coloring-board {
+  position: relative;
   min-height: 0;
   min-width: 0;
   background: white;
   border: 1px solid var(--line);
   border-radius: var(--panel-radius, 22px);
   overflow: hidden;
+}
+
+.coloring-loading { grid-column: 1 / -1; margin: 0; }
+
+.coloring-board .coloring-reset {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
+  background: var(--paper);
 }
 
 .coloring-board canvas {
