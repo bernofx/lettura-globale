@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { tracingDigits, tracingGlyphs, tracingLetters } from "../app/domain/tracing-glyphs.ts";
+import { nextTracingGlyph, tracingDigits, tracingGlyphs, tracingLetters } from "../app/domain/tracing-glyphs.ts";
 import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
 
 const horizontal = (y: number) => Array.from({ length: 26 }, (_, index) => ({ x: index * 4, y }));
@@ -11,6 +11,13 @@ test("il gioco include 26 lettere, 10 numeri e le tre direzioni della A", () => 
   assert.equal(new Set([...tracingLetters, ...tracingDigits]).size, Object.keys(tracingGlyphs).length);
   assert.equal(tracingGlyphs.A.length, 3);
   for (const glyph of [...tracingLetters, ...tracingDigits]) assert.ok(tracingGlyphs[glyph].length);
+});
+
+test("il prossimo simbolo resta nella serie scelta, anche dopo Z e 9", () => {
+  assert.equal(nextTracingGlyph("A"), "B");
+  assert.equal(nextTracingGlyph("Z"), "A");
+  assert.equal(nextTracingGlyph("4"), "5");
+  assert.equal(nextTracingGlyph("9"), "0");
 });
 
 test("il ripasso accetta un piccolo scostamento e ignora il dito lontano dalla guida", () => {
@@ -28,6 +35,14 @@ test("un gesto che esce e rientra lascia un'interruzione tra le zone ripassate",
   for (let index = 1; index < drag.length; index++) paintTrace(ink, drag[index - 1], drag[index]);
   assert.equal(traceInkPath(ink).match(/M/g)?.length, 2);
   assert.equal(traceInkCompleted(ink), false);
+});
+
+test("un gesto veloce e preciso ripassa tutto il tratto anche con punti arrotondati", () => {
+  const vertical = Array.from({ length: 72 }, (_, index) => ({ x: 232, y: Math.round((36 + 283 * index / 71) * 10) / 10 }));
+  const ink = createTraceInk([vertical]);
+  paintTrace(ink, { x: 232, y: 36 }, { x: 232, y: 319 });
+  assert.equal(ink[0].paintedCount, vertical.length - 1);
+  assert.equal(traceInkCompleted(ink), true);
 });
 
 test("un singolo tratto non completa un carattere con più tratti", () => {

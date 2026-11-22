@@ -40,3 +40,5 @@ Il Puzzle mostra la guida semitrasparente all’apertura di ogni tabellone. Al c
 ## Ripassa lettere e numeri
 
 Il gioco adotta un foglio a schermo intero con un solo carattere stampato, frecce direzionali, comando per ricominciare e uscita dalla X. Un ditino percorre i tratti per poco più di un secondo, poi sparisce con l’inchiostro della dimostrazione. Con movimento ridotto si mostra brevemente il punto di partenza. Durante la prova i punti vicini sono proiettati sul tracciato e i movimenti lontani lasciano interruzioni. La copertura è verificata per ogni tratto. Le lettere e le cifre si scelgono in Giochi senza passare dalle sessioni degli esercizi.
+
+Al completamento il foglio mostra una spunta verde e dopo un secondo e mezzo avvia la dimostrazione del simbolo seguente nella stessa serie. Dopo Z si torna ad A e dopo 9 si torna a 0. La colonna sonora dei Giochi prosegue durante il passaggio, rispetta il volume generale e si ferma all’uscita.

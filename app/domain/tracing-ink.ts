@@ -19,7 +19,8 @@ function distanceSquared(point: TracePoint, start: TracePoint, end: TracePoint) 
 
 /** Sample the actual pointer movement. Only samples inside the guide's tolerance add ink. */
 export function paintTrace(ink: TraceLeg[], from: TracePoint, to: TracePoint) {
-  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / TRACE_SAMPLE_STEP));
+  // Sample the gesture more densely than the guide so the two grids can't skip alternating segments.
+  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / (TRACE_SAMPLE_STEP / 2)));
   let changed = false;
   for (let step = 0; step <= steps; step++) {
     const point = { x: from.x + (to.x - from.x) * step / steps, y: from.y + (to.y - from.y) * step / steps };

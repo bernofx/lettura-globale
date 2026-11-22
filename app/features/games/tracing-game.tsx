@@ -1,10 +1,12 @@
 "use client";
 
 import { ArrowRight, Check, Pointer, RotateCcw, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
-import { TRACE_HEIGHT, TRACE_WIDTH, tracingDigits, tracingGlyphs, tracingLetters, type TracingGlyph } from "../../domain/tracing-glyphs";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
+import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingDigits, tracingGlyphs, tracingLetters, type TracingGlyph } from "../../domain/tracing-glyphs";
 import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
 import { playFeedbackTone } from "../../shared/audio";
+import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
 import "./tracing-game.css";
@@ -12,6 +14,7 @@ import "./tracing-game.css";
 const viewBox = `0 0 ${TRACE_WIDTH} ${TRACE_HEIGHT}`;
 const demoDuration = 1150;
 const liftDuration = 65;
+const completionPause = 1500;
 type Phase = "demo" | "practice" | "completed";
 
 export function TracingThumbnail() {
@@ -44,7 +47,8 @@ function samplePath(path: SVGPathElement, length: number) {
   });
 }
 
-export function TracingGame({ glyph, soundVolume, onClose }: { glyph: TracingGlyph; soundVolume: number; onClose: () => void }) {
+export function TracingGame({ glyph: startingGlyph, soundVolume, onClose }: { glyph: TracingGlyph; soundVolume: number; onClose: () => void }) {
+  const [glyph, setGlyph] = useState(startingGlyph);
   const paths = tracingGlyphs[glyph];
   const title = `Ripassa ${/^[0-9]$/.test(glyph) ? "il" : "la"} ${glyph}`;
   const [attempt, setAttempt] = useState(0);
@@ -60,6 +64,7 @@ export function TracingGame({ glyph, soundVolume, onClose }: { glyph: TracingGly
   const rotated = useRef(false);
   const pointer = useRef<{ id: number; point: TracePoint } | null>(null);
   const ink = useRef<ReturnType<typeof createTraceInk>>([]);
+  const music = useRef<RewardMusicPlayer | null>(null);
   useKeepDialogOpen(dialog);
 
   const stopPointer = useCallback(() => {
@@ -68,6 +73,26 @@ export function TracingGame({ glyph, soundVolume, onClose }: { glyph: TracingGly
     const surface = sheet.current;
     if (id !== undefined && surface?.hasPointerCapture(id)) surface.releasePointerCapture(id);
   }, []);
+
+  const startRound = useCallback((nextGlyph: TracingGlyph) => {
+    stopPointer();
+    setGlyph(nextGlyph);
+    setPhase("demo");
+    setAttempt(value => value + 1);
+  }, [stopPointer]);
+
+  useEffect(() => {
+    const player = startGameMusic(0);
+    music.current = player;
+    return () => { player.stop(); music.current = null; };
+  }, []);
+  useEffect(() => { music.current?.setVolume(soundVolume * .55); }, [soundVolume]);
+
+  useEffect(() => {
+    if (phase !== "completed") return;
+    const timer = window.setTimeout(() => startRound(nextTracingGlyph(glyph)), completionPause);
+    return () => window.clearTimeout(timer);
+  }, [glyph, phase, startRound]);
 
   useLayoutEffect(() => {
     const element = dialog.current;
@@ -172,17 +197,11 @@ export function TracingGame({ glyph, soundVolume, onClose }: { glyph: TracingGly
     if (pointer.current?.id === event.pointerId) pointer.current = null;
   }
 
-  function restart() {
-    stopPointer();
-    setPhase("demo");
-    setAttempt(value => value + 1);
-  }
-
   return <dialog ref={dialog} className="tracing-dialog" aria-labelledby="tracing-title" data-phase={phase}
-    onCancel={event => event.preventDefault()}>
+    onPointerDown={() => music.current?.retry()} onCancel={event => event.preventDefault()}>
     <header className="tracing-header">
-      <h2 id="tracing-title">{title}{phase === "completed" && <Check className="tracing-completed" aria-hidden="true" />}</h2>
-      <button type="button" className="ghost-button" aria-label="Ricomincia" title="Ricomincia" onClick={restart}><RotateCcw aria-hidden="true" /></button>
+      <h2 id="tracing-title">{title}</h2>
+      <button type="button" className="ghost-button" aria-label="Ricomincia" title="Ricomincia" onClick={() => startRound(glyph)}><RotateCcw aria-hidden="true" /></button>
       <button type="button" className="ghost-button" aria-label="Esci dal ripasso" title="Esci" onClick={onClose}><X aria-hidden="true" /></button>
     </header>
     <p role="status" className="tracing-announcement">
@@ -207,5 +226,6 @@ export function TracingGame({ glyph, soundVolume, onClose }: { glyph: TracingGly
         <Pointer size={30} />
       </g>
     </svg>
+    {phase === "completed" && <span className="tracing-completed" aria-hidden="true"><Check size={42} strokeWidth={3} /></span>}
   </dialog>;
 }

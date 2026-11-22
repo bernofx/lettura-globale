@@ -44,3 +44,8 @@ export const tracingGlyphs = {
 export type TracingGlyph = keyof typeof tracingGlyphs;
 export const tracingLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("") as TracingGlyph[];
 export const tracingDigits = "0123456789".split("") as TracingGlyph[];
+
+export function nextTracingGlyph(glyph: TracingGlyph): TracingGlyph {
+  const group = tracingDigits.includes(glyph) ? tracingDigits : tracingLetters;
+  return group[(group.indexOf(glyph) + 1) % group.length];
+}

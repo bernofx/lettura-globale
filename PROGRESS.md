@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Ripassa lettere e numeri mostra una spunta verde e passa al simbolo seguente dopo una breve pausa. Lettere e cifre scorrono in ordine, con ritorno a A e 0. La colonna sonora dei Giochi continua fra i simboli. Cache PWA v80.
+
 - [x] In Giochi → Ripassa lettere e numeri si scelgono 26 maiuscole e 10 cifre. Una breve dimostrazione mostra i tratti, poi il bambino ripassa sul foglio grande. L’inchiostro segue la guida entro la tolleranza e si interrompe fuori dal tracciato. Cache PWA v79.
 
 - [x] Le miniature di Colorare mostrano i colori del profilo adulto, aggiornano l’anteprima all’uscita dal disegno e ripristinano quella iniziale dopo l’azzeramento. Le bozze locali sono visibili offline e le modifiche cloud sono rilevate per revisione. Cache PWA v78.

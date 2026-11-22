@@ -126,7 +126,19 @@ html:has(.tracing-dialog[open]) { overflow: hidden; }
 .tracing-start { fill: var(--violet); }
 .tracing-finger { color: var(--violet-dark); }
 .tracing-finger svg { fill: var(--paper); }
-.tracing-completed { width: 1em; height: 1em; color: #20834d; }
+.tracing-completed {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  width: clamp(66px, 11vmin, 88px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #17803d;
+  color: #fff;
+  pointer-events: none;
+}
 
 .tracing-announcement {
   position: absolute;
