@@ -196,6 +196,10 @@ try {
   });
   const readDrawing = (key, profile, scope) => request(drawingPath, { headers: drawingHeaders(key, profile, scope) });
   assert.equal((await request(drawingPath)).status, 401);
+  const readDrawingGallery = (key, profile, scope) => request("/api/coloring-drawings?gallery=1", {
+    headers: drawingHeaders(key, profile, scope),
+  });
+  assert.equal((await request("/api/coloring-drawings?gallery=1")).status, 401);
   const initialDrawing = await readDrawing(adminCookie, "adult-a");
   assert.equal(initialDrawing.headers.get("cache-control"), "private, no-store");
   const { scope: drawingScope, drawing: blank } = await initialDrawing.json();
@@ -209,16 +213,29 @@ try {
   assert.equal((await uploadDrawing(drawing, drawingHeaders(adminCookie, "adult-a"))).status, 401);
   assert.equal((await uploadDrawing(drawing, drawingHeaders(secondCookie, "adult-b", drawingScope))).status, 401);
   assert.equal((await uploadDrawing({ ...drawing, areas: [{ index: 100, strokes: [] }] })).status, 400);
-  assert.equal((await uploadDrawing(drawing)).status, 200);
-  assert.deepEqual((await (await readDrawing(adminCookie, "adult-a", drawingScope)).json()).drawing, drawing);
+  const savedDrawing = await uploadDrawing(drawing);
+  assert.equal(savedDrawing.status, 200);
+  const { etag: firstDrawingTag } = await savedDrawing.json();
+  assert.ok(firstDrawingTag);
+  const { drawing: storedDrawing, etag: readDrawingTag } = await (await readDrawing(adminCookie, "adult-a", drawingScope)).json();
+  assert.deepEqual(storedDrawing, drawing);
+  assert.equal(readDrawingTag, firstDrawingTag);
+  const gallery = await readDrawingGallery(adminCookie, "adult-a", drawingScope);
+  assert.equal(gallery.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual((await gallery.json()).drawings, [{ id: "casa", etag: firstDrawingTag }]);
+  assert.equal((await readDrawingGallery(secondCookie, "adult-b", drawingScope)).status, 401);
+  assert.deepEqual((await (await readDrawingGallery(secondCookie, "adult-b")).json()).drawings, []);
   assert.equal((await (await readDrawing(secondCookie, "adult-b")).json()).drawing, null);
   const reset = { ...drawing, editedAt: drawing.editedAt + 2, operation: crypto.randomUUID(), areas: [] };
   const interim = { ...drawing, editedAt: drawing.editedAt + 1, operation: crypto.randomUUID() };
   const concurrent = await Promise.all([uploadDrawing(reset), uploadDrawing(interim)]);
   assert.ok(concurrent.every(response => response.status === 200));
   assert.deepEqual((await (await uploadDrawing(drawing)).json()).drawing, reset, "an old offline edit cannot undo a newer reset");
-  assert.deepEqual((await (await readDrawing(adminCookie, "adult-a")).json()).drawing, reset);
-  console.log("PASS: drafts and resets of coloring drawings, adult isolation, concurrent writes and offline retries on R2.");
+  const latestDrawing = await (await readDrawing(adminCookie, "adult-a")).json();
+  assert.deepEqual(latestDrawing.drawing, reset);
+  assert.notEqual(latestDrawing.etag, firstDrawingTag, "reset invalidates the saved preview across devices");
+  assert.deepEqual((await (await readDrawingGallery(adminCookie, "adult-a")).json()).drawings, [{ id: "casa", etag: latestDrawing.etag }]);
+  console.log("PASS: coloring drawings, gallery isolation and revisions, concurrent resets and offline retries on R2.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

@@ -55,11 +55,15 @@ socket.addEventListener("message", event => {
       const drawingId = url.searchParams.get("drawing");
       const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
       assert.equal(headers["x-coloring-profile"], therapist.id);
-      let data = { scope: drawingScope, drawing: cloudDrawings.get(drawingId) ?? null };
+      const drawing = cloudDrawings.get(drawingId);
+      let data = url.searchParams.has("gallery")
+        ? { scope: drawingScope, drawings: [...cloudDrawings].map(([id, saved]) => ({ id, etag: saved.operation })) }
+        : { scope: drawingScope, drawing: drawing ?? null, etag: drawing?.operation };
       if (request.method === "PUT") {
         assert.equal(headers["x-coloring-scope"], drawingScope);
-        cloudDrawings.set(drawingId, JSON.parse(request.postData));
-        data = { written: true };
+        const saved = JSON.parse(request.postData);
+        cloudDrawings.set(drawingId, saved);
+        data = { written: true, etag: saved.operation };
       }
       void send("Fetch.fulfillRequest", {
         requestId, responseCode: 200,
@@ -233,6 +237,20 @@ async function assertPixel(x, y, expected, message) {
   const actual = await rgb(x, y);
   assert.ok(actual.every((channel, index) => Math.abs(channel - expected[index]) <= 2),
     `${message} (actual ${actual}, expected ${expected})`);
+}
+
+function thumbnailHasColor(title, x, y, color, radius = 0) {
+  return `(() => {
+    const card = [...document.querySelectorAll('.coloring-gallery .coloring-card')].find(item => item.querySelector('span')?.textContent === ${JSON.stringify(title)});
+    const canvas = card?.querySelector('canvas');
+    const pixels = canvas?.getContext('2d')?.getImageData(${Math.round(x / 3) - radius}, ${Math.round(y / 3) - radius}, ${2 * radius + 1}, ${2 * radius + 1}).data;
+    if (!pixels) return false;
+    const color = ${JSON.stringify(color)};
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      if (color.every((value, index) => Math.abs(value - pixels[offset + index]) <= 2)) return true;
+    }
+    return false;
+  })()`;
 }
 
 const white = [255, 255, 255, 255];
@@ -431,6 +449,9 @@ try {
   await wait("!document.querySelector('.coloring-dialog')");
   await wait("!history.state?.lgGameGuard");
   await wait("window.testMusic.stops === 1");
+  await wait(thumbnailHasColor("Casa", 340, 330, green));
+  await wait(thumbnailHasColor("Casa", 600, 420, yellow));
+  await wait(thumbnailHasColor("Casa", 315, 215, red, 4));
   await button("Lumaca");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await button("Esci");
@@ -484,6 +505,8 @@ try {
   if (!await evaluate("Boolean(document.querySelector('.games-page'))")) await button("Apri Giochi");
   await viewport(568, 320);
   await button("Colorare");
+  await wait(thumbnailHasColor("Casa", 340, 330, green));
+  await wait(thumbnailHasColor("Casa", 600, 420, yellow));
   await button("Casa");
   await wait("document.querySelector('.coloring-dialog[open]')");
   await wait(canvasFillsBoard);
@@ -496,6 +519,8 @@ try {
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.coloring-board')).backgroundColor"), "rgb(255, 255, 255)", "the blank paper remains white");
   await button("Esci");
   await wait("!document.querySelector('.coloring-dialog[open]')");
+  await wait(thumbnailHasColor("Casa", 340, 330, white));
+  await wait(thumbnailHasColor("Casa", 600, 420, [0, 0, 0, 0]));
   const resetDeadline = Date.now() + 6000;
   while (cloudDrawings.get("casa")?.areas.length && Date.now() < resetDeadline) await delay(100);
   assert.deepEqual(cloudDrawings.get("casa")?.areas, [], "the cloud stores the reset as a new blank drawing");

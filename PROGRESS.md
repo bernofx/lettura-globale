@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Le miniature di Colorare mostrano i colori del profilo adulto, aggiornano l’anteprima all’uscita dal disegno e ripristinano quella iniziale dopo l’azzeramento. Le bozze locali sono visibili offline e le modifiche cloud sono rilevate per revisione. Cache PWA v78.
+
 - [x] La Coccinella sorridente, ricalcata dal disegno allegato, apre la galleria di Colorare. Guscio, testa e macchie si possono colorare separatamente. Cache PWA v77.
 
 - [x] Puzzle avvia ogni immagine con la guida attiva. A fine round mostra una spunta verde, riproduce il suono di risposta corretta e passa alla prossima immagine utilizzabile con lo stesso formato.

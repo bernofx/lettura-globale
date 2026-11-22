@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from "react";
 import { COLORING_DRAWINGS_URL, MAX_DRAWING_BYTES, compareColoringDrawings, type ColoringArea, type ColoringDrawing } from "../../domain/coloring-drawings";
-import type { ColoringPage } from "../../domain/coloring-pages";
+import { coloringPages, type ColoringPage } from "../../domain/coloring-pages";
 import { fetchWithTimeout } from "../../shared/cloud-client";
 
-type DeviceDrawing = { drawing: ColoringDrawing; pending: boolean };
-type CloudDrawing = { scope: string; drawing?: ColoringDrawing | null };
+type DeviceDrawing = { drawing: ColoringDrawing; pending: boolean; etag?: string };
+type CloudDrawing = { scope: string; drawing?: ColoringDrawing | null; etag?: string; drawings?: Array<{ id: string; etag: string }> };
+export type ColoringPreviews = Partial<Record<string, ColoringArea[]>>;
 
 function createColoringStorage(profileId: string, email: string) {
   const prefix = `lg-coloring:${encodeURIComponent(profileId)}:${encodeURIComponent(email.trim().toLowerCase())}:`;
@@ -42,10 +43,10 @@ function createColoringStorage(profileId: string, email: string) {
     return result;
   }
 
-  async function getCloud(id?: string): Promise<CloudDrawing | undefined> {
+  async function getCloud(query = ""): Promise<CloudDrawing | undefined> {
     if (!navigator.onLine) return undefined;
     try {
-      const response = await fetchWithTimeout(COLORING_DRAWINGS_URL + (id ? "?drawing=" + id : ""), { cache: "no-store", headers: headers() }, 2500);
+      const response = await fetchWithTimeout(COLORING_DRAWINGS_URL + query, { cache: "no-store", headers: headers() }, 2500);
       if (!response.ok) return undefined;
       const data = await response.json() as CloudDrawing;
       if (!data.scope) return undefined;
@@ -55,6 +56,12 @@ function createColoringStorage(profileId: string, email: string) {
     } catch {
       return undefined;
     }
+  }
+
+  async function pullDrawing(id: string) {
+    const cloud = await getCloud("?drawing=" + encodeURIComponent(id));
+    if (cloud?.drawing) writeDevice(id, { drawing: cloud.drawing, pending: false, etag: cloud.etag });
+    return cloud;
   }
 
   async function flushPage(id: string) {
@@ -72,10 +79,10 @@ function createColoringStorage(profileId: string, email: string) {
           method: "PUT", cache: "no-store", headers: requestHeaders, body, keepalive: body.length < 60_000,
         });
         if (!response.ok) return;
-        const data = await response.json() as { written?: true; drawing?: ColoringDrawing };
+        const data = await response.json() as { written?: true; drawing?: ColoringDrawing; etag?: string };
         const drawing = data.written ? entry.drawing : data.drawing;
         if (!drawing) return;
-        writeDevice(id, { drawing, pending: false });
+        writeDevice(id, { drawing, pending: false, etag: data.etag });
         entry = readDevice(id);
       }
     } catch {
@@ -98,9 +105,24 @@ function createColoringStorage(profileId: string, email: string) {
   }
 
   return {
+    async loadGallery(signal: AbortSignal, show: (previews: ColoringPreviews) => void) {
+      const snapshot = (): ColoringPreviews => Object.fromEntries(coloringPages.flatMap(({ id }) => {
+        const areas = readDevice(id)?.drawing.areas;
+        return areas?.length ? [[id, areas]] : [];
+      }));
+      if (signal.aborted) return;
+      show(snapshot());
+      const cloud = await getCloud("?gallery=1");
+      const changed = cloud?.drawings?.filter(({ id, etag }) => readDevice(id)?.etag !== etag) ?? [];
+      // Draw immediately from device storage and fetch only changed cloud drawings.
+      for (let offset = 0; offset < changed.length && !signal.aborted; offset += 4) {
+        await Promise.all(changed.slice(offset, offset + 4).map(({ id }) => pullDrawing(id)));
+        if (!signal.aborted) show(snapshot());
+      }
+    },
+
     async load(page: ColoringPage) {
-      const cloud = await getCloud(page.id);
-      if (cloud?.drawing) writeDevice(page.id, { drawing: cloud.drawing, pending: false });
+      const cloud = await pullDrawing(page.id);
       const device = readDevice(page.id);
       if (device?.pending) void flushPage(page.id);
       if (!cloud || cloud.drawing || device?.pending) return device?.drawing.areas ?? [];

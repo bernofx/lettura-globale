@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, Rotate
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
 import type { ColoringArea } from "../../domain/coloring-drawings";
-import type { ColoringStorage } from "./coloring-storage";
+import type { ColoringPreviews, ColoringStorage } from "./coloring-storage";
 import type { PuzzleImage } from "../../domain/puzzle-library";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import type { LibraryItem } from "../../shared/types";
@@ -54,6 +54,25 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
   const [game, setGame] = useState<ActiveGame | null>(null);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [openingDrawing, setOpeningDrawing] = useState(false);
+  const [previews, setPreviews] = useState<{ storage: ColoringStorage; drawings: ColoringPreviews }>();
+  const viewingColoringGallery = selectedGame?.id === "coloring" && game === null;
+  useEffect(() => {
+    if (!viewingColoringGallery || !coloringStorage) return;
+    let refresh: AbortController | undefined;
+    function updateGallery() {
+      if (!coloringStorage) return;
+      refresh?.abort();
+      refresh = new AbortController();
+      void coloringStorage.loadGallery(refresh.signal, drawings => setPreviews({ storage: coloringStorage, drawings }));
+    }
+    updateGallery();
+    window.addEventListener("online", updateGallery);
+    return () => {
+      refresh?.abort();
+      window.removeEventListener("online", updateGallery);
+    };
+  }, [coloringStorage, viewingColoringGallery]);
+  const previewDrawings = previews?.storage === coloringStorage ? previews?.drawings : undefined;
   const drawingRequest = useRef(0);
   useEffect(() => () => { drawingRequest.current++; }, []);
   const saveDrawing = useCallback((id: string, areas: ColoringArea[]) => {
@@ -110,7 +129,7 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
           {openingDrawing && <p className="coloring-loading" role="status">Caricamento disegno…</p>}
           {coloringPages.map(page => (
             <button className="coloring-card" key={page.id} type="button" disabled={openingDrawing} onClick={() => void openDrawing(page)}>
-              <DrawingThumbnail page={page} />
+              <DrawingThumbnail page={page} areas={previewDrawings?.[page.id]} />
               <span>{page.title}</span>
             </button>
           ))}
@@ -146,13 +165,15 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
   );
 }
 
-function DrawingThumbnail({ page }: { page: ColoringPage }) {
+function DrawingThumbnail({ page, areas }: { page: ColoringPage; areas?: ColoringArea[] }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const context = canvas.current?.getContext("2d");
     if (!context) return;
-    new ColoringCanvas(page).render(context);
-  }, [page]);
+    const thumbnail = new ColoringCanvas(page, areas);
+    thumbnail.render(context);
+    thumbnail.releaseCaches();
+  }, [page, areas]);
 
   return (
     <div className="coloring-card-art" style={{ backgroundColor: page.background }}>

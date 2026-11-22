@@ -13,7 +13,7 @@ async function drawingContext(request: Request) {
   const scope = await ownerStoragePrefix(JSON.stringify([adult.userId, adult.adultProfileId]));
   const requestedScope = request.headers.get("x-coloring-scope");
   if (requestedScope !== null && requestedScope !== scope) return noStoreJson({ error: "profile_changed" }, { status: 401 });
-  return { bucket: env.BUCKET, scope };
+  return { bucket: env.BUCKET, scope, prefix: `coloring-drawings/${scope}/` };
 }
 
 async function readDrawing(request: Request) {
@@ -42,14 +42,29 @@ async function readDrawing(request: Request) {
 export async function GET(request: Request) {
   const context = await drawingContext(request);
   if (context instanceof Response) return context;
-  const id = new URL(request.url).searchParams.get("drawing");
-  if (id === null) return noStoreJson({ scope: context.scope });
+  const params = new URL(request.url).searchParams;
+  const id = params.get("drawing");
+  if (id === null) {
+    if (params.get("gallery") !== "1") return noStoreJson({ scope: context.scope });
+    try {
+      const { objects } = await context.bucket.list({ prefix: context.prefix });
+      const drawings = objects.flatMap(object => {
+        const pageId = object.key.slice(context.prefix.length, -5);
+        return object.key.endsWith(".json") && coloringPages.some(page => page.id === pageId)
+          ? [{ id: pageId, etag: object.etag }]
+          : [];
+      });
+      return noStoreJson({ scope: context.scope, drawings });
+    } catch {
+      return noStoreJson({ error: "drawing_unavailable" }, { status: 503 });
+    }
+  }
   const page = coloringPages.find(item => item.id === id);
   if (!page) return noStoreJson({ error: "invalid_drawing" }, { status: 400 });
   try {
-    const object = await context.bucket.get(`coloring-drawings/${context.scope}/${page.id}.json`);
+    const object = await context.bucket.get(`${context.prefix}${page.id}.json`);
     const drawing = object ? parseColoringDrawing(await object.json(), page.areas.length) : null;
-    return noStoreJson({ scope: context.scope, drawing });
+    return noStoreJson({ scope: context.scope, drawing, etag: object?.etag });
   } catch {
     return noStoreJson({ error: "drawing_unavailable" }, { status: 503 });
   }
@@ -73,17 +88,17 @@ export async function PUT(request: Request) {
   }
   if (!drawing) return noStoreJson({ error: "invalid_drawing" }, { status: 400 });
 
-  const key = `coloring-drawings/${context.scope}/${page.id}.json`;
+  const key = `${context.prefix}${page.id}.json`;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
       const previous = await context.bucket.get(key);
       const current = previous ? parseColoringDrawing(await previous.json(), page.areas.length) : null;
-      if (current && compareColoringDrawings(drawing, current) <= 0) return noStoreJson({ drawing: current });
+      if (previous && current && compareColoringDrawings(drawing, current) <= 0) return noStoreJson({ drawing: current, etag: previous.etag });
       const saved = await context.bucket.put(key, JSON.stringify(drawing), {
         onlyIf: previous ? { etagMatches: previous.etag } : { etagDoesNotMatch: "*" },
         httpMetadata: { contentType: "application/json", cacheControl: "private, no-store" },
       });
-      if (saved) return noStoreJson({ written: true });
+      if (saved) return noStoreJson({ written: true, etag: saved.etag });
     }
     return noStoreJson({ error: "drawing_conflict" }, { status: 409 });
   } catch {
