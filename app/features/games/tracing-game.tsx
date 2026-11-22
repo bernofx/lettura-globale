@@ -3,7 +3,7 @@
 import { ArrowRight, Check, Pointer, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
-import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingDigits, tracingGlyphs, tracingLetters, type TracingGlyph } from "../../domain/tracing-glyphs";
+import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingDigits, tracingGlyphs, tracingLetters, tracingTitle, type TracingGlyph } from "../../domain/tracing-glyphs";
 import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
 import { playFeedbackTone } from "../../shared/audio";
 import { startGameMusic } from "./game-music";
@@ -50,7 +50,7 @@ function samplePath(path: SVGPathElement, length: number) {
 export function TracingGame({ glyph: startingGlyph, soundVolume, onClose }: { glyph: TracingGlyph; soundVolume: number; onClose: () => void }) {
   const [glyph, setGlyph] = useState(startingGlyph);
   const paths = tracingGlyphs[glyph];
-  const title = `Ripassa ${/^[0-9]$/.test(glyph) ? "il" : "la"} ${glyph}`;
+  const title = tracingTitle(glyph);
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<Phase>("demo");
   const dialog = useRef<HTMLDialogElement>(null);

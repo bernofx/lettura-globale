@@ -49,3 +49,31 @@ export function parseColoringDrawing(value: unknown, areaCount: number): Colorin
 export function compareColoringDrawings(left: Pick<ColoringDrawing, "editedAt" | "operation">, right: Pick<ColoringDrawing, "editedAt" | "operation">) {
   return left.editedAt - right.editedAt || (left.operation < right.operation ? -1 : Number(left.operation > right.operation));
 }
+
+/** Characters of already-synced drawing copies kept on the device for offline previews. */
+export const SYNCED_DEVICE_BUDGET = 900_000;
+
+export type DeviceCopy = { key: string; size: number; pending: boolean; editedAt: number };
+
+/**
+ * Keys of synced device copies to evict so they stay within `budget`. Pending
+ * (unsynced) drawings are never evicted; among synced ones the most recently
+ * edited are kept. The cloud remains the source of the evicted drawings, and
+ * the shared ~5 MB browser storage stays free for session recovery and the
+ * cloud save queue.
+ */
+export function deviceEvictions(copies: DeviceCopy[], budget = SYNCED_DEVICE_BUDGET): string[] {
+  let used = 0;
+  return copies
+    .filter((copy) => !copy.pending)
+    .sort((left, right) => right.editedAt - left.editedAt)
+    .flatMap((copy) => {
+      used += copy.size;
+      return used > budget ? [copy.key] : [];
+    });
+}
+
+/** Upload timeout scaled to the body: at least 10 s, about 25 kB/s, at most 60 s. */
+export function drawingUploadTimeout(bodyLength: number) {
+  return Math.min(60_000, 10_000 + Math.ceil(bodyLength / 25));
+}

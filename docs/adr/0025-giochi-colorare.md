@@ -1,6 +1,6 @@
 # ADR 0025 — Colorare nella sezione Giochi
 
-**Stato:** implementato, in attesa di approvazione esplicita per le parti su privacy e licenze (conservazione in R2 di audio caricati dagli adulti, adozione della traccia CC0 di terzi), come richiesto da `AGENTS.md` regola 4.
+**Stato:** implementato, in attesa di approvazione esplicita per le parti su privacy e licenze (conservazione in R2 di audio, immagini dei puzzle e disegni di Colorare salvati per profilo adulto, senza ancora una regola di conservazione o cancellazione; adozione della traccia CC0 di terzi; licenza della Coccinella sorridente ricalcata da un disegno fornito dal titolare), come richiesto da `AGENTS.md` regola 4.
 
 ## Decisione
 
@@ -42,3 +42,7 @@ Il Puzzle mostra la guida semitrasparente all’apertura di ogni tabellone. Al c
 Il gioco adotta un foglio a schermo intero con un solo carattere stampato, frecce direzionali, comando per ricominciare e uscita dalla X. Un ditino percorre i tratti per poco più di un secondo, poi sparisce con l’inchiostro della dimostrazione. Con movimento ridotto si mostra brevemente il punto di partenza. Durante la prova i punti vicini sono proiettati sul tracciato e i movimenti lontani lasciano interruzioni. La copertura è verificata per ogni tratto. Le lettere e le cifre si scelgono in Giochi senza passare dalle sessioni degli esercizi.
 
 Al completamento il foglio mostra una spunta verde e dopo un secondo e mezzo avvia la dimostrazione del simbolo seguente nella stessa serie. Dopo Z si torna ad A e dopo 9 si torna a 0. La colonna sonora dei Giochi prosegue durante il passaggio, rispetta il volume generale e si ferma all’uscita.
+
+### Copie dei disegni sul dispositivo
+
+Le copie locali dei disegni sono indicizzate per lo scope verificato dal server (account e profilo adulto) e ricordate solo per la sessione di accesso che lo ha verificato: due account sullo stesso tablet non vedono i disegni l’uno dell’altro, e uno scope rifiutato (`profile_changed`) viene dimenticato invece di bloccare la sincronizzazione. Le modifiche fatte prima di conoscere lo scope usano una chiave legata alla sessione e vengono spostate appena il cloud lo conferma; delle vecchie chiavi non legate all’account si conservano solo le modifiche non sincronizzate. Le copie già sincronizzate occupano al massimo circa 900 kB (le più recenti), così il disegno non consuma lo spazio del browser che serve al ripristino della sessione e alla coda dei salvataggi; le copie non sincronizzate non vengono mai eliminate. Gli invii sono sequenziali, con un timeout proporzionale alla dimensione (10–60 s); alla chiusura della pagina partono solo gli invii `keepalive` che stanno nei 64 KiB consentiti dal browser. Poiché un disegno non viene mai cancellato dal cloud (l’azzeramento salva un nuovo foglio vuoto), se il cloud non lo ha la copia del dispositivo viene mostrata e ricaricata.

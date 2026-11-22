@@ -19,7 +19,8 @@ async function drawingContext(request: Request) {
 async function readDrawing(request: Request) {
   if (Number(request.headers.get("content-length")) > MAX_DRAWING_BYTES) return null;
   const reader = request.body?.getReader();
-  if (!reader) return null;
+  // undefined: no body (400); null: over the size limit (413).
+  if (!reader) return undefined;
   const decoder = new TextDecoder();
   let bytes = 0;
   let text = "";
@@ -81,6 +82,7 @@ export async function PUT(request: Request) {
   let drawing;
   try {
     const body = await readDrawing(request);
+    if (body === undefined || body === "") return noStoreJson({ error: "invalid_drawing" }, { status: 400 });
     if (body === null) return noStoreJson({ error: "drawing_too_large" }, { status: 413 });
     drawing = parseColoringDrawing(JSON.parse(body), page.areas.length);
   } catch {
