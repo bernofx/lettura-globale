@@ -49,3 +49,13 @@ export function nextTracingGlyph(glyph: TracingGlyph): TracingGlyph {
   const group = tracingDigits.includes(glyph) ? tracingDigits : tracingLetters;
   return group[(group.indexOf(glyph) + 1) % group.length];
 }
+
+// Italian names of letters and digits that start with a vowel sound take the elided article:
+// l’A, l’effe, l’acca, l’elle, l’emme, l’enne, l’erre, l’esse, l’ics, l’uno, l’otto.
+const elided = new Set(["A", "E", "F", "H", "I", "L", "M", "N", "O", "R", "S", "U", "X", "1", "8"]);
+
+/** Heading of the tracing game, e.g. “Ripassa la B”, “Ripassa il 3”, “Ripassa l’8”. */
+export function tracingTitle(glyph: string) {
+  const article = elided.has(glyph) ? "l’" : /^[0-9]$/.test(glyph) ? "il " : "la ";
+  return `Ripassa ${article}${glyph}`;
+}

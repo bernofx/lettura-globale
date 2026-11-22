@@ -21,3 +21,9 @@ test("ogni disegno conserva tutti i suoi dettagli", () => {
     assert.equal(count(strokes.dots) + count(strokes.lines), count(page.details.join(" ")), page.id);
   }
 });
+
+test("la Coccinella sorridente dichiara fonte e licenza", async () => {
+  const { smilingLadybug } = await import("../app/domain/coloring-smiling-ladybug.ts");
+  assert.ok(smilingLadybug.source.length > 0);
+  assert.ok(smilingLadybug.license.length > 0);
+});

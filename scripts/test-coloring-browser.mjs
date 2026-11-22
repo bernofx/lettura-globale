@@ -744,9 +744,9 @@ try {
     await evaluate("document.querySelectorAll('.puzzle-slots button')[" + index + "].click()");
     await wait(`!${piece}`);
   }
-  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Puzzle completato!' && document.querySelector('.puzzle-completion')");
+  await wait("[...document.querySelector('.puzzle-toolbar [role=status]')?.childNodes ?? []].filter(node => !node.classList?.contains('visually-hidden')).map(node => node.textContent).join('') === 'Puzzle completato!' && document.querySelector('.puzzle-completion')");
   await wait(`window.testFeedback === ${feedbackBeforePuzzle} + 1`);
-  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.getAttribute('aria-label') === 'Casa, 0/20 pezzi'");
+  await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === 'Casa, 0/20 pezzi' && !document.querySelector('.puzzle-toolbar [role=status]').hasAttribute('aria-label')");
   assert.equal(await evaluate("document.querySelectorAll('.puzzle-tray button').length"), 20);
   assert.ok(await evaluate("Boolean(document.querySelector('.puzzle-toolbar [aria-pressed=true]'))"), "the next puzzle also starts with the guide");
   assert.ok(await evaluate("document.querySelector('.puzzle-dialog[open]') && history.state?.lgGameGuard"));
@@ -764,7 +764,7 @@ try {
       await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
       await send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [to] });
       await touch("touchEnd");
-      await wait("document.querySelector('.puzzle-toolbar [role=status]')?.textContent === '1/25 pezzi'");
+      await wait("[...document.querySelector('.puzzle-toolbar [role=status]')?.childNodes ?? []].filter(node => !node.classList?.contains('visually-hidden')).map(node => node.textContent).join('') === '1/25 pezzi'");
       await viewport(568, 320);
       await wait("document.querySelector('.puzzle-dialog').dataset.rotated === 'false'");
       await wait("[...document.querySelectorAll('.puzzle-piece')].every(piece => piece.offsetWidth >= 44)");
@@ -920,7 +920,7 @@ try {
   await traceTouch("touchMove", 257, 218);
   await traceTouch("touchEnd");
   await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
-  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa la A", "the check is shown before advancing");
+  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa l’A", "the check is shown before advancing");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa la B'");
   assert.equal(await evaluate(traced), "", "the next letter starts without the previous ink");
   assert.equal(await evaluate("window.testMusic.starts"), tracingMusicStarts + 1, "the soundtrack does not restart at each letter");

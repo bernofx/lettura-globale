@@ -44,6 +44,9 @@ const shapes: Shape[] = [
 export const smilingLadybug = {
   id: "coccinella-sorridente",
   title: "Coccinella sorridente",
+  // Source and licence are mandatory metadata (AGENTS.md); the licence awaits confirmation (ADR 0025).
+  source: "Ricalco di un disegno fornito dal titolare del progetto",
+  license: "Da confermare dal titolare del progetto",
   background: "#fff0e3",
   areas: shapes.map(shape => shape.path),
   areaFills: shapes.map(shape => shape.fill),

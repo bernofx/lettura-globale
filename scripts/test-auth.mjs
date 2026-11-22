@@ -213,6 +213,8 @@ try {
   assert.equal((await uploadDrawing(drawing, drawingHeaders(adminCookie, "adult-a"))).status, 401);
   assert.equal((await uploadDrawing(drawing, drawingHeaders(secondCookie, "adult-b", drawingScope))).status, 401);
   assert.equal((await uploadDrawing({ ...drawing, areas: [{ index: 100, strokes: [] }] })).status, 400);
+  const emptyDrawing = await request(drawingPath, { method: "PUT", headers: { ...drawingHeaders(adminCookie, "adult-a", drawingScope), "content-type": "application/json" } });
+  assert.equal(emptyDrawing.status, 400, "a missing body is invalid, not too large");
   const savedDrawing = await uploadDrawing(drawing);
   assert.equal(savedDrawing.status, 200);
   const { etag: firstDrawingTag } = await savedDrawing.json();

@@ -203,7 +203,9 @@ export function PuzzleGame({ selection, soundVolume, onClose }: { selection: Puz
       onClick={() => music.current?.retry()}
       style={{ "--puzzle-art": pieceArt + "px", "--puzzle-target": target + "px" } as CSSProperties}>
       <header className="puzzle-toolbar">
-        <span role="status" aria-label={selection.sources[round.index].title + ", " + (completed ? "Puzzle completato!" : fitted.size + "/" + pieces.length + " pezzi")}>
+        {/* Live regions announce their text: keep the title in the content, not in aria-label. */}
+        <span role="status">
+          <span className="visually-hidden">{selection.sources[round.index].title + ", "}</span>
           {completed ? "Puzzle completato!" : fitted.size + "/" + pieces.length + " pezzi"}
         </span>
         <button type="button" className="ghost-button" aria-pressed={guide} onClick={() => setGuide(value => !value)}>
