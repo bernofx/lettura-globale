@@ -10,7 +10,7 @@ Il disegno è costituito da contorni chiusi in ordine di sovrapposizione. L’ar
 
 I segni rimangono in memoria durante la visita alla sezione come dati vettoriali (strumento, colore, punti). Per il disegno aperto ogni area dipinta ha una cache grande quanto l’area e alla risoluzione del dispositivo, ricostruita dai vettori quando cambia la scala e liberata all’uscita; se la memoria per il canvas non è disponibile i segni vengono ridisegnati dai vettori, senza andare persi. I dettagli puntiformi (occhi) sono tracciati spessi e le linee sottili, indipendentemente dall’ordine. Questa sezione di giochi è autonoma rispetto ai premi durante o al termine degli esercizi.
 
-Il catalogo comprende 24 disegni originali creati per Lettura Globale. Il riproduttore rispetta l’audio generale, si ferma all’uscita e silenzia la musica quando la scheda va in background.
+Il catalogo comprende 24 disegni originali per Lettura Globale e il ricalco della Coccinella sorridente fornita dall’utente, in prima posizione. Il riproduttore rispetta l’audio generale, si ferma all’uscita e silenzia la musica quando la scheda va in background.
 
 Il dialogo segue dimensioni e posizione di `VisualViewport` e compensa localmente la scala, così pannelli e tasto Esci sono accessibili anche se la pagina è ingrandita. Se il viewport è più alto che largo, l’interfaccia ruota di 90 gradi e il canvas trasforma le coordinate dei tocchi. Il browser gestisce il gesto a due dita sul disegno. Una variazione del viewport conclude l’eventuale tratto in corso prima di adattare la superficie.
 

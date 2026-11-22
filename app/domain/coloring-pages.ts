@@ -1,11 +1,13 @@
 import { extraColoringPages } from "./coloring-extra-pages.ts";
+import { smilingLadybug } from "./coloring-smiling-ladybug.ts";
 
 export const COLORING_WIDTH = 720;
 export const COLORING_HEIGHT = 480;
 
-// Original artwork in paint order. Each closed path is a separately paintable area.
+// Artwork in paint order. Each closed path is a separately paintable area.
 // Areas later in the list cover earlier ones, both visually and in hit testing.
 export const coloringPages = [
+  smilingLadybug,
   {
     id: "cane",
     title: "Cane",

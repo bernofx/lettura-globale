@@ -30,6 +30,7 @@ const frameKey = (frame: ColoringFrame) => `${frame.scale}:${frame.left}:${frame
 export class ColoringCanvas {
   private readonly id: string;
   private readonly areas: Path2D[];
+  private readonly areaFills: readonly (string | undefined)[];
   private readonly dots: Path2D;
   private readonly lines: Path2D;
   private readonly paint = new Map<number, PaintedArea>();
@@ -37,6 +38,7 @@ export class ColoringCanvas {
   constructor(page: ColoringPage, areas: ColoringArea[] = []) {
     this.id = page.id;
     this.areas = page.areas.map(path => new Path2D(path));
+    this.areaFills = "areaFills" in page ? page.areaFills : [];
     const strokes = detailStrokes(page.details);
     this.dots = new Path2D(strokes.dots);
     this.lines = new Path2D(strokes.lines);
@@ -104,7 +106,7 @@ export class ColoringCanvas {
     context.lineJoin = context.lineCap = "round";
     for (const [index, path] of this.areas.entries()) {
       const area = this.paint.get(index);
-      context.fillStyle = area?.fill ?? "#ffffff";
+      context.fillStyle = area?.fill ?? this.areaFills[index] ?? "#ffffff";
       context.fill(path);
       if (area?.strokes.length) this.drawMarks(context, index, area, frame);
       context.strokeStyle = outlineColor;

@@ -819,6 +819,35 @@ try {
   await wait("document.querySelectorAll('.puzzle-library .category-library-card').length === 1");
   assert.equal(puzzleUploads.size, 1);
 
+  await viewport(568, 320);
+  await button("Apri menu");
+  await button("Giochi");
+  await button("Colorare");
+  await wait("document.querySelector('.coloring-gallery .coloring-card span')?.textContent === 'Coccinella sorridente'");
+  await button("Coccinella sorridente");
+  await wait("document.querySelector('.coloring-dialog[open]')?.dataset.rotated === 'false'");
+  await wait(canvasFillsBoard);
+  const ladybugInk = [23, 20, 27, 255];
+  await assertPixel(368, 197, ladybugInk, "the supplied drawing starts with dark spots");
+  await button("Secchio");
+  await button("Rosso");
+  await touch("touchStart", 425, 205);
+  await touch("touchEnd");
+  await assertPixel(425, 205, red, "the shell can be filled");
+  await assertPixel(235, 305, white, "filling the shell leaves the face separate");
+  await assertPixel(368, 197, ladybugInk, "filling the shell leaves the black spots in place");
+  await button("Verde");
+  await touch("touchStart", 368, 197);
+  await touch("touchEnd");
+  await assertPixel(368, 197, green, "a spot can also be recolored separately");
+  await button("Azzera disegno");
+  await assertPixel(425, 205, white, "reset restores the blank shell");
+  await assertPixel(368, 197, ladybugInk, "reset restores the original dark markings");
+  const ladybug = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  writeFileSync("/tmp/lg-coloring-smiling-ladybug.png", Buffer.from(ladybug.data, "base64"));
+  await button("Esci");
+  await wait("!document.querySelector('.coloring-dialog') && !history.state?.lgGameGuard");
+
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
   await send("Page.reload");

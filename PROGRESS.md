@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] La Coccinella sorridente, ricalcata dal disegno allegato, apre la galleria di Colorare. Guscio, testa e macchie si possono colorare separatamente. Cache PWA v77.
+
 - [x] Puzzle avvia ogni immagine con la guida attiva. A fine round mostra una spunta verde, riproduce il suono di risposta corretta e passa alla prossima immagine utilizzabile con lo stesso formato.
 - [x] Colorare conserva tratti, riempimenti e sfondo per disegno e profilo adulto in R2. In assenza di rete riprende la copia del browser e sincronizza gli aggiornamenti in coda alla riconnessione. Azzera disegno è in alto a sinistra e salva una nuova versione bianca.
 - [x] In Palloncini la scia dura 950 ms con le animazioni standard e 160 ms con movimento ridotto. Cache PWA v76.

@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Riprendi i tuoi disegni e gioca nuovi puzzle",
   items: [
+    "La Coccinella sorridente è il primo disegno in Giochi → Colorare.",
     "Colorare salva tratti, riempimenti e sfondo. Riapri lo stesso disegno per continuare o premi Azzera disegno in alto a sinistra.",
     "La guida del Puzzle è visibile da subito. A fine puzzle senti il suono di conferma, vedi una spunta verde e passi all’immagine successiva con lo stesso numero di pezzi.",
     "In Palloncini la scia del dito resta visibile più a lungo.",
