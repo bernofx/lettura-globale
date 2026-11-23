@@ -66,6 +66,7 @@ const elided = new Set(["A", "E", "F", "H", "I", "L", "M", "N", "O", "R", "S", "
 
 /** Heading of the tracing game, e.g. “Ripassa la B”, “Ripassa il 3”, “Ripassa l’8”. */
 export function tracingTitle(glyph: string) {
-  const article = elided.has(glyph) ? "l’" : /^[0-9]$/.test(glyph) ? "il " : "la ";
+  // “lo zero”, “il tre”, “l’otto”; letters are feminine (“la B”, “l’A”).
+  const article = elided.has(glyph) ? "l’" : glyph === "0" ? "lo " : /^[0-9]$/.test(glyph) ? "il " : "la ";
   return `Ripassa ${article}${glyph}`;
 }

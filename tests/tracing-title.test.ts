@@ -9,4 +9,5 @@ test("il titolo del ripasso usa l’articolo italiano corretto", () => {
   assert.equal(tracingTitle("3"), "Ripassa il 3");
   assert.equal(tracingTitle("1"), "Ripassa l’1");
   assert.equal(tracingTitle("8"), "Ripassa l’8");
+  assert.equal(tracingTitle("0"), "Ripassa lo 0");
 });
