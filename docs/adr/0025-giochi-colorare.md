@@ -41,7 +41,7 @@ Il Puzzle mostra la guida semitrasparente all’apertura di ogni tabellone. Al c
 
 Il gioco adotta un foglio a schermo intero con un solo carattere stampato, frecce direzionali, comando per ricominciare e uscita dalla X. Un ditino percorre i tratti per poco più di un secondo, poi sparisce con l’inchiostro della dimostrazione. Con movimento ridotto si mostra brevemente il punto di partenza. Durante la prova i punti vicini sono proiettati sul tracciato e i movimenti lontani lasciano interruzioni. La copertura è verificata per ogni tratto. Le lettere e le cifre si scelgono in Giochi senza passare dalle sessioni degli esercizi.
 
-Il bambino non sceglie il singolo carattere ma la serie: «Lettere» (A–Z) o «Numeri» (0–9), che parte sempre dal primo simbolo e procede in ordine. Al completamento il foglio mostra una spunta verde e dopo un secondo e mezzo avvia la dimostrazione del simbolo seguente; dopo l’ultimo (Z o 9) il gioco si chiude e torna alla scelta tra Lettere e Numeri. La colonna sonora dei Giochi prosegue durante il passaggio, rispetta il volume generale e si ferma all’uscita.
+Il bambino non sceglie il singolo carattere ma la serie: «Lettere» (A–Z) o «Numeri» (da 1 a 9, poi 0), che parte sempre dal primo simbolo e procede in ordine. Al completamento il foglio mostra una spunta verde e dopo un secondo e mezzo avvia la dimostrazione del simbolo seguente; dopo l’ultimo (Z o 0) il gioco si chiude e torna alla scelta tra Lettere e Numeri. La colonna sonora dei Giochi prosegue durante il passaggio, rispetta il volume generale e si ferma all’uscita.
 
 ### Copie dei disegni sul dispositivo
 

@@ -43,7 +43,8 @@ export const tracingGlyphs = {
 
 export type TracingGlyph = keyof typeof tracingGlyphs;
 export const tracingLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("") as TracingGlyph[];
-export const tracingDigits = "0123456789".split("") as TracingGlyph[];
+// Numbers start from 1, as children count; 0 comes last.
+export const tracingDigits = "1234567890".split("") as TracingGlyph[];
 
 /** The two tracing paths the child chooses from: every set is practised in order from its first glyph. */
 export const tracingSets = {

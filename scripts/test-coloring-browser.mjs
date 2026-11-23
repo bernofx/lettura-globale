@@ -952,16 +952,16 @@ try {
   }
   await button("Numeri");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
-  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa il 0", "Numbers start from the first number");
+  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa l’1", "Numbers start from 1");
   const tracedNumber = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync("/tmp/lg-tracing-phone.png", Buffer.from(tracedNumber.data, "base64"));
-  for (const [index, digit] of [..."0123456789"].entries()) {
+  for (const [index, digit] of [..."1234567890"].entries()) {
     await wait(`document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent.endsWith(${JSON.stringify(digit)})`);
     await traceGuides();
     await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
-    if (index === 0) await wait(`document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa l’1'`);
+    if (index === 0) await wait(`document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa il 2'`);
   }
-  // After the last number the game returns to the Letters / Numbers choice.
+  // After the last number (0) the game returns to the Letters / Numbers choice.
   await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
   await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].map(card => card.textContent.trim()).join() === 'Lettere,Numeri'");
   await send("Emulation.setEmulatedMedia", { features: [] });
