@@ -4,7 +4,7 @@ import { ArrowRight, Check, Pointer, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingGlyphs, tracingSets, tracingTitle, type TracingGlyph, type TracingSet } from "../../domain/tracing-glyphs";
-import { createTraceInk, orderedStrokeCompleted, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
+import { createTraceInk, orderedStrokeCompleted, orderedTraceEntry, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
 import { playFeedbackTone } from "../../shared/audio";
 import { CheckLine } from "../../shared/ui/form-controls";
 import { startGameMusic } from "./game-music";
@@ -71,6 +71,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
   const rotated = useRef(false);
   const pointer = useRef<TracingPointer | null>(null);
   const ink = useRef<ReturnType<typeof createTraceInk>>([]);
+  const orderedEntries = useRef<TracePoint[][]>([]);
   const ordered = useRef({ stroke: 0, covered: 0 });
   const committedPath = useRef("");
   const music = useRef<RewardMusicPlayer | null>(null);
@@ -122,7 +123,9 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
   useLayoutEffect(() => {
     const guides = guidePaths.current.slice(0, paths.length).filter(path => path !== null);
     const lengths = guides.map(path => path.getTotalLength());
-    ink.current = createTraceInk(guides.map((path, index) => samplePath(path, lengths[index])));
+    const sampled = guides.map((path, index) => samplePath(path, lengths[index]));
+    ink.current = createTraceInk(sampled);
+    orderedEntries.current = requireOrder ? sampled.map((points, index) => orderedTraceEntry(sampled.slice(0, index), points)) : [];
     ordered.current = { stroke: 0, covered: 0 };
     committedPath.current = "";
     drawnPath.current?.setAttribute("d", "");
@@ -170,7 +173,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     }
     animate(start);
     return () => cancelAnimationFrame(frame);
-  }, [attempt, glyph, paths]);
+  }, [attempt, glyph, paths, requireOrder]);
 
   function coordinates(surface: SVGSVGElement) {
     const bounds = surface.getBoundingClientRect();
@@ -220,7 +223,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     if (!ink.current[stroke]) return;
     const current = {
       id: event.pointerId, point: origin,
-      ordered: requireOrder ? startOrderedTrace(ink.current[stroke].points, covered, origin) : undefined,
+      ordered: requireOrder ? startOrderedTrace(ink.current[stroke].points, covered, origin, orderedEntries.current[stroke]) : undefined,
       rawPath: `M${origin.x.toFixed(1)} ${origin.y.toFixed(1)}L${origin.x.toFixed(1)} ${origin.y.toFixed(1)}`,
     };
     setRetryStroke(false);
@@ -241,12 +244,11 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     renderStroke(current, changed);
   }
 
-  function finishStroke(event: PointerEvent<SVGSVGElement>) {
-    const current = pointer.current;
-    if (current?.id !== event.pointerId) return;
-    moveStroke(event);
+  /** Keep valid progress and recognise a completed symbol, whether the finger was lifted or the gesture was cancelled. */
+  function commitStroke(current: TracingPointer, lifted: boolean) {
     if (current.ordered?.invalid) {
       stopPointer();
+      if (!lifted) return;
       setRetryStroke(true);
       playFeedbackTone("wrong", soundVolume > 0);
       return;
@@ -265,8 +267,17 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     playFeedbackTone("correct", soundVolume > 0);
   }
 
+  function finishStroke(event: PointerEvent<SVGSVGElement>) {
+    const current = pointer.current;
+    if (current?.id !== event.pointerId) return;
+    moveStroke(event);
+    commitStroke(current, true);
+  }
+
   function cancelStroke(event: PointerEvent<SVGSVGElement>) {
-    if (pointer.current?.id === event.pointerId) stopPointer();
+    const current = pointer.current;
+    if (current?.id === event.pointerId && phase === "practice") commitStroke(current, false);
+    else if (current?.id === event.pointerId) stopPointer();
   }
 
   return <dialog ref={dialog} className="tracing-dialog" aria-labelledby="tracing-title" data-phase={phase}
@@ -292,7 +303,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
         <ArrowRight x={-18} y={-18} size={36} strokeWidth={2} />
       </g>)}
       <g className="tracing-start">
-        {paths.map((path, index) => glyph === "A" && index === 2 ? null :
+        {paths.map((path, index) => glyph === "A" && index === 2 && !requireOrder ? null :
           <circle key={path} r="8" ref={element => { startDots.current[index] = element; }} />)}
       </g>
       <g ref={finger} className="tracing-finger" visibility={phase === "demo" ? "visible" : "hidden"}>

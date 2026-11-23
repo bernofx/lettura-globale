@@ -894,6 +894,7 @@ try {
   await wait(`document.querySelector('.tracing-finger[visibility=visible]')?.getAttribute('transform') !== ${JSON.stringify(demoStart)}`);
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
   assert.equal(await evaluate("document.querySelectorAll('.tracing-sheet .tracing-arrow').length"), 3);
+  assert.equal(await evaluate("document.querySelectorAll('.tracing-start circle').length"), 2, "the free A hides the crossbar start");
 
   async function traceTouch(type, x, y) {
     const touchPoints = type === "touchEnd" ? [] : [await evaluate(`(() => {
@@ -903,6 +904,17 @@ try {
     await send("Input.dispatchTouchEvent", { type, touchPoints });
   }
   const traced = "document.querySelector('.tracing-sheet > .tracing-ink').getAttribute('d')";
+  function guidePoints() {
+    return evaluate(`[...document.querySelectorAll('.tracing-sheet .tracing-guide')].map(path => {
+      const length = path.getTotalLength(), steps = Math.max(2, Math.ceil(length / 8));
+      return Array.from({ length: steps + 1 }, (_, index) => { const { x, y } = path.getPointAtLength(length * index / steps); return [x, y]; });
+    })`);
+  }
+  async function tracePoints(points) {
+    await traceTouch("touchStart", ...points[0]);
+    for (const point of points.slice(1)) await traceTouch("touchMove", ...point);
+    await traceTouch("touchEnd");
+  }
   await traceTouch("touchStart", 4, 60);
   await traceTouch("touchMove", 4, 160);
   await traceTouch("touchEnd");
@@ -953,11 +965,16 @@ try {
   assert.equal(state.tracingOrderRequired, true, "the tracing preference is sent to the cloud");
   await button("Lettere");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
+  assert.equal(await evaluate("document.querySelectorAll('.tracing-start circle').length"), 3, "with the required order every stroke shows its start");
+  const rejectedStroke = "document.querySelector('.tracing-ink-error').getAttribute('d')";
+  const beforeLambda = await evaluate("window.testFeedback");
   await traceTouch("touchStart", 35, 319);
   await traceTouch("touchMove", 170, 34);
+  await traceTouch("touchMove", 305, 319);
+  assert.equal(await evaluate(rejectedStroke), "", "going on past a completed stroke is not an error");
   await traceTouch("touchEnd");
   assert.equal(await evaluate(traced), "M35 319 L170 34", "a fast valid stroke is continuous");
-  const rejectedStroke = "document.querySelector('.tracing-ink-error').getAttribute('d')";
+  assert.equal(await evaluate("window.testFeedback"), beforeLambda);
   const beforeWrong = await evaluate("window.testFeedback");
   await traceTouch("touchStart", 83, 218);
   await traceTouch("touchMove", 257, 218);
@@ -969,23 +986,32 @@ try {
   await traceTouch("touchStart", 170, 34);
   await traceTouch("touchMove", 305, 319);
   await traceTouch("touchEnd");
+  const beforeCancel = await evaluate("window.testFeedback");
   await traceTouch("touchStart", 83, 218);
   await traceTouch("touchMove", 257, 218);
+  await send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+  await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')", "a cancelled gesture keeps its progress and completes the glyph");
+  assert.equal(await evaluate("window.testFeedback"), beforeCancel + 1, "only the success tone plays");
+  await wait("document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa la B'");
+  const [stem, topCurve, bottomCurve] = await guidePoints();
+  await tracePoints(stem);
+  await tracePoints(topCurve);
+  const acceptedB = await evaluate(traced);
+  const beforeJoin = await evaluate("window.testFeedback");
+  await traceTouch("touchStart", ...topCurve.at(-1));
+  assert.equal(await evaluate(rejectedStroke), "");
+  await traceTouch("touchMove", 140, 168);
+  assert.equal(await evaluate(traced), acceptedB, "the approach leaves the accepted strokes intact");
+  for (const next of bottomCurve) await traceTouch("touchMove", ...next);
+  assert.equal(await evaluate(rejectedStroke), "");
+  assert.equal(await evaluate("window.testFeedback"), beforeJoin);
   await traceTouch("touchEnd");
   await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
   await button("Esci dal ripasso");
   await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
   // Trace every guide of the current glyph along its real geometry, in drawing order.
   async function traceGuides() {
-    const strokes = await evaluate(`[...document.querySelectorAll('.tracing-sheet .tracing-guide')].map(path => {
-      const length = path.getTotalLength(), steps = Math.max(2, Math.ceil(length / 8));
-      return Array.from({ length: steps + 1 }, (_, index) => { const { x, y } = path.getPointAtLength(length * index / steps); return [x, y]; });
-    })`);
-    for (const points of strokes) {
-      await traceTouch("touchStart", ...points[0]);
-      for (const point of points.slice(1)) await traceTouch("touchMove", ...point);
-      await traceTouch("touchEnd");
-    }
+    for (const points of await guidePoints()) await tracePoints(points);
   }
   await button("Numeri");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");

@@ -122,6 +122,7 @@ export async function PUT(request: Request) {
     if (!("tracingOrderRequired" in state) && typeof currentState.tracingOrderRequired === "boolean") {
       state = { ...state, tracingOrderRequired: currentState.tracingOrderRequired };
       raw = JSON.stringify(state);
+      if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
     }
     if (adultRoleInState(currentState, user.adultProfileId) !== "Amministratore") return Response.json({ error: "full_state_replacement_forbidden" }, { status: 403 });
     const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
