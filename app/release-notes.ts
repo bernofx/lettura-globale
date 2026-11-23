@@ -2,10 +2,9 @@
 export const RELEASE_NOTES = {
   title: "Ripassa lettere e numeri",
   items: [
-    "Con l’ordine obbligatorio puoi fare le due pance della B, la gamba della R e la A a «Λ» senza staccare il dito.",
+    "Con l’ordine obbligatorio stacchi il dito solo quando serve: se il tratto seguente parte da una linea già fatta, scorri lungo di essa e continua (E, T, B, R, A…).",
     "Ripassa è più permissivo: puoi allontanarti un po’ di più dalla guida senza che il tratto diventi rosso.",
     "Con l’ordine obbligatorio non è un errore proseguire oltre un tratto finito o smussare gli angoli; i progressi restano anche se il gesto viene interrotto. La traversa della A mostra il pallino di partenza.",
-    "Con l’ordine obbligatorio puoi ripartire da un raccordo già tracciato, come la barra centrale della B.",
     "In Ripassa lettere e numeri puoi rendere obbligatori l’ordine e il verso dei tratti. I gesti fuori ordine appaiono in rosso e spariscono quando sollevi il dito.",
     "I gesti veloci lungo la guida lasciano un tratto continuo e il simbolo completato viene mostrato per intero.",
     "In Giochi trovi Ripassa lettere e numeri: scegli Lettere (dalla A) o Numeri (dall’1 al 9, poi lo 0) e si procede in ordine. Guarda il ditino e segui con il dito la guida.",
