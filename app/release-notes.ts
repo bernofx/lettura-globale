@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Ripassa lettere e numeri",
   items: [
+    "Con l’ordine obbligatorio non è un errore proseguire oltre un tratto finito o smussare gli angoli; i progressi restano anche se il gesto viene interrotto. La traversa della A mostra il pallino di partenza.",
     "Con l’ordine obbligatorio puoi ripartire da un raccordo già tracciato, come la barra centrale della B.",
     "In Ripassa lettere e numeri puoi rendere obbligatori l’ordine e il verso dei tratti. I gesti fuori ordine appaiono in rosso e spariscono quando sollevi il dito.",
     "I gesti veloci lungo la guida lasciano un tratto continuo e il simbolo completato viene mostrato per intero.",

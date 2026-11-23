@@ -125,7 +125,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     const lengths = guides.map(path => path.getTotalLength());
     const sampled = guides.map((path, index) => samplePath(path, lengths[index]));
     ink.current = createTraceInk(sampled);
-    orderedEntries.current = requireOrder ? sampled.map((points, index) => orderedTraceEntry(sampled[index - 1], points[0])) : [];
+    orderedEntries.current = requireOrder ? sampled.map((points, index) => orderedTraceEntry(sampled.slice(0, index), points)) : [];
     ordered.current = { stroke: 0, covered: 0 };
     committedPath.current = "";
     drawnPath.current?.setAttribute("d", "");
@@ -244,12 +244,11 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     renderStroke(current, changed);
   }
 
-  function finishStroke(event: PointerEvent<SVGSVGElement>) {
-    const current = pointer.current;
-    if (current?.id !== event.pointerId) return;
-    moveStroke(event);
+  /** Keep valid progress and recognise a completed symbol, whether the finger was lifted or the gesture was cancelled. */
+  function commitStroke(current: TracingPointer, lifted: boolean) {
     if (current.ordered?.invalid) {
       stopPointer();
+      if (!lifted) return;
       setRetryStroke(true);
       playFeedbackTone("wrong", soundVolume > 0);
       return;
@@ -268,8 +267,17 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
     playFeedbackTone("correct", soundVolume > 0);
   }
 
+  function finishStroke(event: PointerEvent<SVGSVGElement>) {
+    const current = pointer.current;
+    if (current?.id !== event.pointerId) return;
+    moveStroke(event);
+    commitStroke(current, true);
+  }
+
   function cancelStroke(event: PointerEvent<SVGSVGElement>) {
-    if (pointer.current?.id === event.pointerId) stopPointer();
+    const current = pointer.current;
+    if (current?.id === event.pointerId && phase === "practice") commitStroke(current, false);
+    else if (current?.id === event.pointerId) stopPointer();
   }
 
   return <dialog ref={dialog} className="tracing-dialog" aria-labelledby="tracing-title" data-phase={phase}
@@ -295,7 +303,7 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
         <ArrowRight x={-18} y={-18} size={36} strokeWidth={2} />
       </g>)}
       <g className="tracing-start">
-        {paths.map((path, index) => glyph === "A" && index === 2 ? null :
+        {paths.map((path, index) => glyph === "A" && index === 2 && !requireOrder ? null :
           <circle key={path} r="8" ref={element => { startDots.current[index] = element; }} />)}
       </g>
       <g ref={finger} className="tracing-finger" visibility={phase === "demo" ? "visible" : "hidden"}>

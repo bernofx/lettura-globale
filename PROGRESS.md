@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Correzioni dalla revisione di Ripassa con ordine obbligatorio (PR #40/#41): proseguire oltre un tratto completato non lo annulla (A a «Λ», anelli); ripresa a metà dalla tolleranza; angoli smussati di N, M, Z, 7, 1 accettati, scegliendo i segmenti nel verso del dito (senza salti sulla cuspide del 3); `pointercancel` conserva i progressi e riconosce il completamento senza suono di errore; raccordo solo su B e R (non T, I, K); pallino della traversa della A con l’ordine obbligatorio; limite `MAX_STATE_BYTES` ricontrollato dopo l’aggiunta di `tracingOrderRequired`. Test di dominio su tutte le 36 guide reali (esatte e con angoli smussati), sulla N, sulla «Λ», sulla ripresa e sui raccordi; test browser per «Λ», annullamento e pallini. Cache PWA v83.
 - [x] Ripassa con ordine obbligatorio accetta la ripartenza da un raccordo già tracciato, come la barra centrale della B. Il raccordo porta all’inizio della guida successiva e non conta nella copertura del nuovo tratto.
 
 - [x] Ripassa lettere e numeri offre «Ordine dei tratti obbligatorio» prima dell’avvio. La preferenza è sincronizzata con le impostazioni dell’account e parte disattivata. In modalità guidata il gesto errato diventa rosso finché si tiene il dito premuto e al rilascio sparisce con il suono di errore. Entrambe le modalità collegano i campioni vicini e mostrano l’intero simbolo quando il ripasso è completato.
