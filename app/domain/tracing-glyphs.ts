@@ -43,11 +43,21 @@ export const tracingGlyphs = {
 
 export type TracingGlyph = keyof typeof tracingGlyphs;
 export const tracingLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("") as TracingGlyph[];
-export const tracingDigits = "0123456789".split("") as TracingGlyph[];
+// Numbers start from 1, as children count; 0 comes last.
+export const tracingDigits = "1234567890".split("") as TracingGlyph[];
 
-export function nextTracingGlyph(glyph: TracingGlyph): TracingGlyph {
-  const group = tracingDigits.includes(glyph) ? tracingDigits : tracingLetters;
-  return group[(group.indexOf(glyph) + 1) % group.length];
+/** The two tracing paths the child chooses from: every set is practised in order from its first glyph. */
+export const tracingSets = {
+  letters: { title: "Lettere", glyphs: tracingLetters },
+  digits: { title: "Numeri", glyphs: tracingDigits },
+} as const;
+export type TracingSet = keyof typeof tracingSets;
+
+/** The glyph after `glyph` in its set, or `null` once the set is finished. */
+export function nextTracingGlyph(set: TracingSet, glyph: TracingGlyph): TracingGlyph | null {
+  const glyphs = tracingSets[set].glyphs;
+  const index = glyphs.indexOf(glyph);
+  return index >= 0 && index + 1 < glyphs.length ? glyphs[index + 1] : null;
 }
 
 // Italian names of letters and digits that start with a vowel sound take the elided article:

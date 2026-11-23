@@ -13,11 +13,14 @@ test("il gioco include 26 lettere, 10 numeri e le tre direzioni della A", () => 
   for (const glyph of [...tracingLetters, ...tracingDigits]) assert.ok(tracingGlyphs[glyph].length);
 });
 
-test("il prossimo simbolo resta nella serie scelta, anche dopo Z e 9", () => {
-  assert.equal(nextTracingGlyph("A"), "B");
-  assert.equal(nextTracingGlyph("Z"), "A");
-  assert.equal(nextTracingGlyph("4"), "5");
-  assert.equal(nextTracingGlyph("9"), "0");
+test("il ripasso procede in ordine nella serie scelta e termina all’ultimo simbolo", () => {
+  assert.equal(nextTracingGlyph("letters", "A"), "B");
+  assert.equal(nextTracingGlyph("letters", "Z"), null, "the letters end with Z");
+  assert.equal(nextTracingGlyph("digits", "4"), "5");
+  assert.equal(nextTracingGlyph("digits", "9"), "0", "0 comes after 9");
+  assert.equal(nextTracingGlyph("digits", "0"), null, "the numbers end with 0");
+  assert.equal(tracingDigits[0], "1", "the numbers start from 1");
+  assert.equal(nextTracingGlyph("digits", "A"), null, "a glyph outside the set does not continue");
 });
 
 test("il ripasso accetta un piccolo scostamento e ignora il dito lontano dalla guida", () => {

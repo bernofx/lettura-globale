@@ -876,11 +876,12 @@ try {
   await viewport(1501, 1048);
   await button("Torna ai giochi");
   await button("Ripassa lettere e numeri");
-  await wait("document.querySelectorAll('.tracing-picker [aria-label=Lettere] button').length === 26 && document.querySelectorAll('.tracing-picker [aria-label=Numeri] button').length === 10");
+  await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].map(card => card.textContent.trim()).join() === 'Lettere,Numeri'");
   const tracingMusicStarts = await evaluate("window.testMusic.starts");
   const tracingMusicStops = await evaluate("window.testMusic.stops");
-  await button("A");
+  await button("Lettere");
   await wait("document.querySelector('.tracing-dialog[open][data-phase=demo] .tracing-finger[transform]')");
+  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa l’A", "Letters start from the first letter");
   const demoStart = await evaluate("document.querySelector('.tracing-finger').getAttribute('transform')");
   await wait(`document.querySelector('.tracing-finger[visibility=visible]')?.getAttribute('transform') !== ${JSON.stringify(demoStart)}`);
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
@@ -935,26 +936,36 @@ try {
   await button("Esci dal ripasso");
   await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
   await wait(`window.testMusic.stops === ${tracingMusicStops} + 1`);
+  await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].length === 2", "Exit returns to the Letters / Numbers choice");
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-  await button("4");
+  // Trace every guide of the current glyph along its real geometry, in drawing order.
+  async function traceGuides() {
+    const strokes = await evaluate(`[...document.querySelectorAll('.tracing-sheet .tracing-guide')].map(path => {
+      const length = path.getTotalLength(), steps = Math.max(2, Math.ceil(length / 8));
+      return Array.from({ length: steps + 1 }, (_, index) => { const { x, y } = path.getPointAtLength(length * index / steps); return [x, y]; });
+    })`);
+    for (const points of strokes) {
+      await traceTouch("touchStart", ...points[0]);
+      for (const point of points.slice(1)) await traceTouch("touchMove", ...point);
+      await traceTouch("touchEnd");
+    }
+  }
+  await button("Numeri");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
-  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa il 4");
+  assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa l’1", "Numbers start from 1");
   const tracedNumber = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync("/tmp/lg-tracing-phone.png", Buffer.from(tracedNumber.data, "base64"));
-  await traceTouch("touchStart", 183, 34);
-  await traceTouch("touchMove", 61, 224);
-  await traceTouch("touchMove", 286, 224);
-  await traceTouch("touchEnd");
-  await traceTouch("touchStart", 232, 36);
-  await traceTouch("touchMove", 232, 319);
-  await traceTouch("touchEnd");
-  await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
-  await wait("document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa il 5'");
-  assert.equal(await evaluate(traced), "");
-  await button("Esci dal ripasso");
+  for (const [index, digit] of [..."1234567890"].entries()) {
+    await wait(`document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent.endsWith(${JSON.stringify(digit)})`);
+    await traceGuides();
+    await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
+    if (index === 0) await wait(`document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa il 2'`);
+  }
+  // After the last number (0) the game returns to the Letters / Numbers choice.
   await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
+  await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].map(card => card.textContent.trim()).join() === 'Lettere,Numeri'");
   await send("Emulation.setEmulatedMedia", { features: [] });
-  console.log("PASS Ripassa lettere e numeri: demo, path tolerance, green check, automatic letter and number progression, music and exit.");
+  console.log("PASS Ripassa lettere e numeri: Lettere/Numeri choice, demo, path tolerance, green check, ordered progression, return to the choice after the last number, music and exit.");
 
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
