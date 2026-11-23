@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { nextTracingGlyph, tracingDigits, tracingGlyphs, tracingLetters } from "../app/domain/tracing-glyphs.ts";
-import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
+import { createTraceInk, orderedStrokeCompleted, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
 
 const horizontal = (y: number) => Array.from({ length: 26 }, (_, index) => ({ x: index * 4, y }));
 
@@ -54,4 +54,42 @@ test("un singolo tratto non completa un carattere con più tratti", () => {
   assert.equal(traceInkCompleted(ink), false);
   paintTrace(ink, { x: 0, y: 100 }, { x: 100, y: 100 });
   assert.equal(traceInkCompleted(ink), true);
+});
+
+test("il ripasso libero collega i segmenti saltati da un gesto veloce senza salti verso una zona distante", () => {
+  const points = [0, 4, 8, 8.1, 8.2, 12, 16, 20].map(x => ({ x, y: 0 }));
+  const ink = createTraceInk([points, horizontal(100)]);
+  paintTrace(ink, { x: 20, y: 3 }, { x: 0, y: 3 });
+  assert.equal(traceInkPath(ink), "M0 0L4 0L8 0L8.1 0L8.2 0L12 0L16 0L20 0");
+  assert.equal(ink[1].paintedCount, 0);
+});
+
+test("con ordine obbligatorio un tratto parziale si può riprendere dal punto raggiunto", () => {
+  const points = horizontal(0);
+  const origin = { x: 0, y: 0 };
+  const middle = { x: 48, y: 0 };
+  const first = startOrderedTrace(points, 0, origin);
+  paintOrderedTrace(points, first, origin, middle);
+  assert.equal(first.invalid, false);
+  assert.equal(orderedStrokeCompleted(points, first.covered), false);
+  const last = startOrderedTrace(points, first.covered, middle);
+  paintOrderedTrace(points, last, middle, { x: 100, y: 0 });
+  assert.equal(last.invalid, false);
+  assert.equal(last.covered, points.length - 1);
+  assert.equal(orderedStrokeCompleted(points, last.covered), true);
+  assert.equal(tracePrefixPath(points, last.covered), "M0 0" + points.slice(1).map(point => `L${point.x} 0`).join(""));
+});
+
+test("con ordine obbligatorio vengono rifiutati un altro tratto, il verso inverso e una vera uscita", () => {
+  const points = horizontal(0);
+  const origin = points[0];
+  assert.equal(startOrderedTrace(points, 0, { x: 0, y: 100 }).invalid, true);
+  assert.equal(startOrderedTrace(points, 0, points.at(-1)!).invalid, true);
+  const backward = startOrderedTrace(points, 0, origin);
+  paintOrderedTrace(points, backward, origin, points[15]);
+  paintOrderedTrace(points, backward, points[15], points[7]);
+  assert.equal(backward.invalid, true);
+  const outside = startOrderedTrace(points, 0, origin);
+  paintOrderedTrace(points, outside, origin, { x: 25, y: TRACE_TOLERANCE + 2 });
+  assert.equal(outside.invalid, true);
 });

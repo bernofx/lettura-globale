@@ -42,6 +42,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   const [appearance, setAppearance, appearanceLoaded] = useStoredState<AppearanceSettings>("lg-appearance", defaultAppearance, hydrateAppearance);
   const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
+  const [tracingOrderRequired, setTracingOrderRequired, tracingOrderLoaded] = useStoredState<boolean>("lg-tracing-order-required", false, saved => saved === true);
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
 
   useEffect(() => {
@@ -63,12 +64,12 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     return () => { cancelled = true; };
   }, [library, notify, setLibrary]);
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded;
-  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols });
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded && tracingOrderLoaded;
+  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired });
 
   useEffect(() => {
-    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols };
-  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols]);
+    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired };
+  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired]);
 
   useEffect(() => {
     if (allLocalDataLoaded) return;
@@ -97,15 +98,16 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     setHelps(state.helps ?? []);
     setSessionHistory(state.sessionHistory ?? []);
     setAppearance(hydrateAppearance(state.appearance));
+    setTracingOrderRequired(state.tracingOrderRequired === true);
     setCategorySymbols(seedDefaultCategorySymbols(state.categorySymbols ?? {}, state.library ?? []));
     if (options.soundPreferences !== null) setSoundPreferences(options.soundPreferences ?? hydrateSoundPreferences(state.soundPreferences));
-  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setCategorySymbols, setSoundPreferences]);
+  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setCategorySymbols, setSoundPreferences, setTracingOrderRequired]);
 
   return {
     therapists, setTherapists, children, setChildren, activeChildId, setActiveChildId,
     library, setLibrary, exercises, setExercises, sequences, setSequences, activeSequenceId, setActiveSequenceId,
     attempts, setAttempts, helps, setHelps, sessionHistory, setSessionHistory, appearance, setAppearance,
-    categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences,
+    categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, tracingOrderRequired, setTracingOrderRequired,
     allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, applyBackendState,
   };
 }

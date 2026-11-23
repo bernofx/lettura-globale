@@ -2,6 +2,8 @@
 export const RELEASE_NOTES = {
   title: "Ripassa lettere e numeri",
   items: [
+    "In Ripassa lettere e numeri puoi rendere obbligatori l’ordine e il verso dei tratti. I gesti fuori ordine appaiono in rosso e spariscono quando sollevi il dito.",
+    "I gesti veloci lungo la guida lasciano un tratto continuo e il simbolo completato viene mostrato per intero.",
     "In Giochi trovi Ripassa lettere e numeri: scegli Lettere (dalla A) o Numeri (dall’1 al 9, poi lo 0) e si procede in ordine. Guarda il ditino e segui con il dito la guida.",
     "Dopo la spunta verde parte il simbolo successivo; finita la serie si torna alla scelta tra Lettere e Numeri. La musica di Giochi continua durante la serie.",
     "La galleria di Colorare mostra i progressi nei disegni direttamente nelle miniature.",

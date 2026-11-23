@@ -12,21 +12,8 @@
   gap: 16px;
 }
 
-.tracing-picker h2 { margin: 0 0 12px; }
-
-.tracing-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
-  gap: 8px;
-}
-
-.tracing-picker-grid button {
-  min-height: 48px;
-  padding: 4px;
-  font-size: 23px;
-  font-weight: 800;
-  justify-content: center;
-}
+.tracing-options { margin-block: 16px; }
+.tracing-options .check-line { margin: 0; align-items: center; min-height: 44px; }
 
 html:has(.tracing-dialog[open]) { overflow: hidden; }
 
@@ -122,6 +109,7 @@ html:has(.tracing-dialog[open]) { overflow: hidden; }
 }
 
 .tracing-ink { stroke: #00a99e; stroke-width: 16px; }
+.tracing-ink-error { stroke: #c72538; }
 .tracing-arrow { color: var(--violet-dark); }
 .tracing-start { fill: var(--violet); }
 .tracing-finger { color: var(--violet-dark); }

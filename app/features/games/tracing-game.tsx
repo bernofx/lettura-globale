@@ -4,8 +4,9 @@ import { ArrowRight, Check, Pointer, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
 import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingGlyphs, tracingSets, tracingTitle, type TracingGlyph, type TracingSet } from "../../domain/tracing-glyphs";
-import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
+import { createTraceInk, orderedStrokeCompleted, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
 import { playFeedbackTone } from "../../shared/audio";
+import { CheckLine } from "../../shared/ui/form-controls";
 import { startGameMusic } from "./game-music";
 import { landscapePoint, mountLandscapeDialog } from "./landscape-dialog";
 import { useKeepDialogOpen } from "./use-keep-dialog-open";
@@ -16,6 +17,7 @@ const demoDuration = 1150;
 const liftDuration = 65;
 const completionPause = 1500;
 type Phase = "demo" | "practice" | "completed";
+type TracingPointer = { id: number; point: TracePoint; ordered?: ReturnType<typeof startOrderedTrace>; rawPath: string };
 
 export function TracingThumbnail({ glyph = "A" }: { glyph?: TracingGlyph }) {
   return <div className="coloring-card-art tracing-thumbnail" aria-hidden="true">
@@ -27,16 +29,19 @@ export function TracingThumbnail({ glyph = "A" }: { glyph?: TracingGlyph }) {
 }
 
 /** The child chooses Letters or Numbers; the game then goes through the set in order. */
-export function TracingPicker({ onStart }: { onStart: (set: TracingSet) => void }) {
-  return <div className="game-picker tracing-picker">
-    {(Object.keys(tracingSets) as TracingSet[]).map(set => {
+export function TracingPicker({ requireOrder, onOrderChange, onStart }: { requireOrder: boolean; onOrderChange: (required: boolean) => void; onStart: (set: TracingSet) => void }) {
+  return <>
+    <div className="panel tracing-options">
+      <CheckLine checked={requireOrder} onChange={onOrderChange} title="Ordine dei tratti obbligatorio" detail="Segui l’ordine e il verso mostrati dal ditino. Se disattivato, basta completare il simbolo." />
+    </div>
+    <div className="game-picker tracing-picker">{(Object.keys(tracingSets) as TracingSet[]).map(set => {
       const { title, glyphs } = tracingSets[set];
       return <button className="coloring-card" key={set} type="button" onClick={() => onStart(set)}>
         <TracingThumbnail glyph={glyphs[0]} />
         <span>{title}</span>
       </button>;
-    })}
-  </div>;
+    })}</div>
+  </>;
 }
 
 function samplePath(path: SVGPathElement, length: number) {
@@ -47,12 +52,13 @@ function samplePath(path: SVGPathElement, length: number) {
   });
 }
 
-export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; soundVolume: number; onClose: () => void }) {
+export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: TracingSet; requireOrder: boolean; soundVolume: number; onClose: () => void }) {
   const [glyph, setGlyph] = useState<TracingGlyph>(tracingSets[set].glyphs[0]);
   const paths = tracingGlyphs[glyph];
   const title = tracingTitle(glyph);
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<Phase>("demo");
+  const [retryStroke, setRetryStroke] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const sheet = useRef<SVGSVGElement>(null);
   const guidePaths = useRef<Array<SVGPathElement | null>>([]);
@@ -61,21 +67,27 @@ export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; so
   const startDots = useRef<Array<SVGCircleElement | null>>([]);
   const finger = useRef<SVGGElement>(null);
   const drawnPath = useRef<SVGPathElement>(null);
+  const errorPath = useRef<SVGPathElement>(null);
   const rotated = useRef(false);
-  const pointer = useRef<{ id: number; point: TracePoint } | null>(null);
+  const pointer = useRef<TracingPointer | null>(null);
   const ink = useRef<ReturnType<typeof createTraceInk>>([]);
+  const ordered = useRef({ stroke: 0, covered: 0 });
+  const committedPath = useRef("");
   const music = useRef<RewardMusicPlayer | null>(null);
   useKeepDialogOpen(dialog);
 
   const stopPointer = useCallback(() => {
     const id = pointer.current?.id;
     pointer.current = null;
+    errorPath.current?.setAttribute("d", "");
+    drawnPath.current?.setAttribute("d", committedPath.current);
     const surface = sheet.current;
     if (id !== undefined && surface?.hasPointerCapture(id)) surface.releasePointerCapture(id);
   }, []);
 
   const startRound = useCallback((nextGlyph: TracingGlyph) => {
     stopPointer();
+    setRetryStroke(false);
     setGlyph(nextGlyph);
     setPhase("demo");
     setAttempt(value => value + 1);
@@ -111,6 +123,8 @@ export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; so
     const guides = guidePaths.current.slice(0, paths.length).filter(path => path !== null);
     const lengths = guides.map(path => path.getTotalLength());
     ink.current = createTraceInk(guides.map((path, index) => samplePath(path, lengths[index])));
+    ordered.current = { stroke: 0, covered: 0 };
+    committedPath.current = "";
     drawnPath.current?.setAttribute("d", "");
     guides.forEach((path, index) => {
       const length = lengths[index];
@@ -158,48 +172,101 @@ export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; so
     return () => cancelAnimationFrame(frame);
   }, [attempt, glyph, paths]);
 
-  function point(event: Pick<PointerEvent, "clientX" | "clientY">, surface: SVGSVGElement) {
+  function coordinates(surface: SVGSVGElement) {
     const bounds = surface.getBoundingClientRect();
-    const { x, y } = landscapePoint(bounds, event.clientX, event.clientY, rotated.current);
-    const scale = Math.min(surface.clientWidth / TRACE_WIDTH, surface.clientHeight / TRACE_HEIGHT);
-    return {
-      x: (x * surface.clientWidth - (surface.clientWidth - TRACE_WIDTH * scale) / 2) / scale,
-      y: (y * surface.clientHeight - (surface.clientHeight - TRACE_HEIGHT * scale) / 2) / scale,
+    const { clientWidth: width, clientHeight: height } = surface;
+    const scale = Math.min(width / TRACE_WIDTH, height / TRACE_HEIGHT);
+    return (event: Pick<PointerEvent, "clientX" | "clientY">): TracePoint => {
+      const { x, y } = landscapePoint(bounds, event.clientX, event.clientY, rotated.current);
+      return {
+        x: (x * width - (width - TRACE_WIDTH * scale) / 2) / scale,
+        y: (y * height - (height - TRACE_HEIGHT * scale) / 2) / scale,
+      };
     };
   }
 
-  function draw(from: TracePoint, to: TracePoint) {
-    if (!paintTrace(ink.current, from, to)) return;
-    drawnPath.current?.setAttribute("d", traceInkPath(ink.current));
-    if (traceInkCompleted(ink.current)) {
-      stopPointer();
-      setPhase("completed");
-      playFeedbackTone("correct", soundVolume > 0);
+  function orderedPath(covered: number) {
+    const index = ordered.current.stroke;
+    const points = ink.current[index]?.points ?? [];
+    return paths.slice(0, index).join(" ") + tracePrefixPath(points, covered);
+  }
+
+  function movePointer(current: TracingPointer, destination: TracePoint) {
+    let changed = false;
+    if (current.ordered) {
+      paintOrderedTrace(ink.current[ordered.current.stroke].points, current.ordered, current.point, destination);
+      if (current.point.x !== destination.x || current.point.y !== destination.y) current.rawPath += `L${destination.x.toFixed(1)} ${destination.y.toFixed(1)}`;
+    } else {
+      changed = paintTrace(ink.current, current.point, destination);
+    }
+    current.point = destination;
+    return changed;
+  }
+
+  function renderStroke(current: TracingPointer, changed: boolean) {
+    if (current.ordered) {
+      drawnPath.current?.setAttribute("d", current.ordered.invalid ? committedPath.current : orderedPath(current.ordered.covered));
+      errorPath.current?.setAttribute("d", current.ordered.invalid ? current.rawPath : "");
+    } else if (changed) {
+      committedPath.current = traceInkPath(ink.current);
+      drawnPath.current?.setAttribute("d", committedPath.current);
     }
   }
 
   function startStroke(event: PointerEvent<SVGSVGElement>) {
     if (phase !== "practice" || event.button !== 0 || pointer.current) return;
-    const origin = point(event, event.currentTarget);
-    pointer.current = { id: event.pointerId, point: origin };
+    const origin = coordinates(event.currentTarget)(event);
+    const { stroke, covered } = ordered.current;
+    if (!ink.current[stroke]) return;
+    const current = {
+      id: event.pointerId, point: origin,
+      ordered: requireOrder ? startOrderedTrace(ink.current[stroke].points, covered, origin) : undefined,
+      rawPath: `M${origin.x.toFixed(1)} ${origin.y.toFixed(1)}L${origin.x.toFixed(1)} ${origin.y.toFixed(1)}`,
+    };
+    setRetryStroke(false);
+    pointer.current = current;
     event.currentTarget.setPointerCapture(event.pointerId);
-    draw(origin, origin);
+    renderStroke(current, movePointer(current, origin));
   }
 
   function moveStroke(event: PointerEvent<SVGSVGElement>) {
-    if (phase !== "practice" || pointer.current?.id !== event.pointerId) return;
+    const current = pointer.current;
+    if (phase !== "practice" || current?.id !== event.pointerId) return;
+    const point = coordinates(event.currentTarget);
     const coalesced = event.nativeEvent.getCoalescedEvents?.();
-    for (const sample of coalesced?.length ? coalesced : [event]) {
-      const current = pointer.current;
-      if (!current) break;
-      const destination = point(sample, event.currentTarget);
-      draw(current.point, destination);
-      current.point = destination;
-    }
+    let changed = false;
+    for (const sample of coalesced ?? []) changed = movePointer(current, point(sample)) || changed;
+    const end = point(event);
+    if (current.point.x !== end.x || current.point.y !== end.y) changed = movePointer(current, end) || changed;
+    renderStroke(current, changed);
   }
 
-  function endStroke(event: PointerEvent<SVGSVGElement>) {
-    if (pointer.current?.id === event.pointerId) pointer.current = null;
+  function finishStroke(event: PointerEvent<SVGSVGElement>) {
+    const current = pointer.current;
+    if (current?.id !== event.pointerId) return;
+    moveStroke(event);
+    if (current.ordered?.invalid) {
+      stopPointer();
+      setRetryStroke(true);
+      playFeedbackTone("wrong", soundVolume > 0);
+      return;
+    }
+    if (current.ordered) {
+      const points = ink.current[ordered.current.stroke].points;
+      ordered.current.covered = current.ordered.covered;
+      if (orderedStrokeCompleted(points, ordered.current.covered)) ordered.current = { stroke: ordered.current.stroke + 1, covered: 0 };
+      committedPath.current = orderedPath(ordered.current.covered);
+    }
+    const complete = current.ordered ? ordered.current.stroke === paths.length : traceInkCompleted(ink.current);
+    if (complete) committedPath.current = paths.join(" ");
+    stopPointer();
+    if (!complete) return;
+    setPhase("completed");
+    playFeedbackTone("correct", soundVolume > 0);
+  }
+
+  function cancelStroke(event: PointerEvent<SVGSVGElement>) {
+    if (pointer.current?.id === event.pointerId) stopPointer();
   }
 
   return <dialog ref={dialog} className="tracing-dialog" aria-labelledby="tracing-title" data-phase={phase}
@@ -210,13 +277,14 @@ export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; so
       <button type="button" className="ghost-button" aria-label="Esci dal ripasso" title="Esci" onClick={onClose}><X aria-hidden="true" /></button>
     </header>
     <p role="status" className="tracing-announcement">
-      {phase === "demo" ? "Guarda il ditino." : phase === "practice" ? "Adesso ripassa con il dito." : "Ripasso completato!"}
+      {phase === "demo" ? "Guarda il ditino." : phase === "completed" ? "Ripasso completato!" : retryStroke ? "Riprova seguendo il tratto mostrato dal ditino." : "Adesso ripassa con il dito."}
     </p>
     <svg ref={sheet} className="tracing-sheet tracing-art" viewBox={viewBox} aria-hidden="true"
-      onPointerDown={startStroke} onPointerMove={moveStroke} onPointerUp={event => { moveStroke(event); endStroke(event); }}
-      onPointerCancel={endStroke} onLostPointerCapture={endStroke} onContextMenu={event => event.preventDefault()}>
+      onPointerDown={startStroke} onPointerMove={moveStroke} onPointerUp={finishStroke}
+      onPointerCancel={cancelStroke} onLostPointerCapture={cancelStroke} onContextMenu={event => event.preventDefault()}>
       {paths.map((path, index) => <path key={path} className="tracing-guide" d={path} ref={element => { guidePaths.current[index] = element; }} />)}
       <path className="tracing-ink" ref={drawnPath} />
+      <path className="tracing-ink tracing-ink-error" ref={errorPath} />
       <g visibility={phase === "demo" ? "visible" : "hidden"}>
         {paths.map((path, index) => <path key={path} className="tracing-ink" d={path} ref={element => { demonstrationPaths.current[index] = element; }} />)}
       </g>

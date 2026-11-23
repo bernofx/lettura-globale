@@ -104,6 +104,18 @@ try {
   assert.equal(recovered.status, 200);
   assert.equal((await recovered.json()).therapistId, "adult-old");
   assert.equal((await read(cookie(recovered))).status, 200);
+  // The standalone game flag round-trips through the usual account state, even on a relational read.
+  const saveTracingOrder = async (required) => {
+    const current = await (await read(secondCookie)).json();
+    const change = buildStateChange(current.state, { ...current.state, tracingOrderRequired: required }, crypto.randomUUID(), current.revision);
+    const response = await request("/api/state/changes", { method: "PATCH", headers: { cookie: secondCookie, "content-type": "application/json" }, body: JSON.stringify(change) });
+    assert.equal(response.status, 200);
+    const loaded = await (await read(adminCookie)).json();
+    assert.equal(loaded.dataSource, "relational");
+    assert.equal(loaded.state.tracingOrderRequired, required);
+  };
+  await saveTracingOrder(true);
+  await saveTracingOrder(false);
   const soundtrackPath = "/api/game-soundtrack";
   const mp3 = readFileSync("public/audio/coloring-calypso.mp3");
   const uploadHeaders = { "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3"), "x-soundtrack-source": encodeURIComponent("Autore di prova"), "x-soundtrack-license": "CC0", "x-soundtrack-rights": "confirmed" };

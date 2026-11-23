@@ -59,6 +59,8 @@ export async function GET(request: Request) {
           // it with relational defaults.
           if (!(state && typeof state === "object" && "soundPreferences" in state)) delete rebuilt.soundPreferences;
           if (state && typeof state === "object" && "categorySymbols" in state && !rebuilt.categorySymbols) rebuilt.categorySymbols = {};
+          // Standalone game preference lives in the cloud snapshot alongside the relational data.
+          rebuilt.tracingOrderRequired = Boolean(state && typeof state === "object" && "tracingOrderRequired" in state && state.tracingOrderRequired === true);
           responseState = rebuilt;
           dataSource = "relational";
         }
@@ -85,12 +87,13 @@ export async function PUT(request: Request) {
   if (!env.DB) return Response.json({ error: "database_unavailable" }, { status: 503 });
   const database = env.DB;
 
-  const raw = await request.text();
+  let raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
 
   let state: unknown;
   try { state = JSON.parse(raw); } catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
   if (!state || typeof state !== "object" || (state as { schemaVersion?: unknown }).schemaVersion !== 1) return Response.json({ error: "invalid_state" }, { status: 400 });
+  if ("tracingOrderRequired" in state && typeof state.tracingOrderRequired !== "boolean") return Response.json({ error: "invalid_tracing_order" }, { status: 400 });
 
   const now = Date.now();
   const db = getDb();
@@ -116,6 +119,10 @@ export async function PUT(request: Request) {
   if (currentRevision > 0 && !user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
   if (existing[0]?.payload && user.adultProfileId) {
     const currentState = JSON.parse(existing[0].payload);
+    if (!("tracingOrderRequired" in state) && typeof currentState.tracingOrderRequired === "boolean") {
+      state = { ...state, tracingOrderRequired: currentState.tracingOrderRequired };
+      raw = JSON.stringify(state);
+    }
     if (adultRoleInState(currentState, user.adultProfileId) !== "Amministratore") return Response.json({ error: "full_state_replacement_forbidden" }, { status: 403 });
     const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
     if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
