@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { nextTracingGlyph, tracingDigits, tracingGlyphs, tracingLetters } from "../app/domain/tracing-glyphs.ts";
-import { createTraceInk, orderedStrokeCompleted, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
+import { createTraceInk, orderedStrokeCompleted, orderedTraceEntry, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
 
 const horizontal = (y: number) => Array.from({ length: 26 }, (_, index) => ({ x: index * 4, y }));
 
@@ -92,4 +92,35 @@ test("con ordine obbligatorio vengono rifiutati un altro tratto, il verso invers
   const outside = startOrderedTrace(points, 0, origin);
   paintOrderedTrace(points, outside, origin, { x: 25, y: TRACE_TOLERANCE + 2 });
   assert.equal(outside.invalid, true);
+});
+
+test("un raccordo già tracciato consente di raggiungere l’inizio senza avanzare sul tratto successivo", () => {
+  const junction = { x: 100, y: 80 };
+  const previous = [
+    ...Array.from({ length: 20 }, (_, i) => ({ x: 100, y: i * 4 })),
+    ...horizontal(80).reverse(),
+  ];
+  const points = horizontal(80).map(point => ({ ...point, x: point.x + junction.x }));
+  const entry = orderedTraceEntry(previous, junction);
+  const origin = { x: 0, y: 80 };
+  assert.deepEqual(entry[0], origin);
+  const gesture = startOrderedTrace(points, 0, origin, entry);
+  paintOrderedTrace(points, gesture, origin, { x: 60, y: 80 });
+  assert.equal(gesture.invalid, false);
+  assert.equal(gesture.covered, 0);
+  paintOrderedTrace(points, gesture, { x: 60, y: 80 }, points.at(-1)!);
+  assert.equal(gesture.invalid, false);
+  assert.equal(orderedStrokeCompleted(points, gesture.covered), true);
+
+  assert.equal(startOrderedTrace(points, 0, points.at(-1)!, entry).invalid, true);
+  assert.equal(startOrderedTrace(points, 10, origin, entry).invalid, true);
+  const shortcut = startOrderedTrace(points, 0, origin, entry);
+  paintOrderedTrace(points, shortcut, origin, { x: 60, y: 40 });
+  assert.equal(shortcut.invalid, true);
+});
+
+test("un incrocio lontano dall’inizio o un intero tratto al contrario non creano un raccordo", () => {
+  const previous = horizontal(80);
+  assert.deepEqual(orderedTraceEntry(previous, { x: 0, y: 80 }), []);
+  assert.deepEqual(orderedTraceEntry(previous, { x: 50, y: 0 }), []);
 });

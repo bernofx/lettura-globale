@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Ripassa con ordine obbligatorio accetta la ripartenza da un raccordo già tracciato, come la barra centrale della B. Il raccordo porta all’inizio della guida successiva e non conta nella copertura del nuovo tratto.
+
 - [x] Ripassa lettere e numeri offre «Ordine dei tratti obbligatorio» prima dell’avvio. La preferenza è sincronizzata con le impostazioni dell’account e parte disattivata. In modalità guidata il gesto errato diventa rosso finché si tiene il dito premuto e al rilascio sparisce con il suono di errore. Entrambe le modalità collegano i campioni vicini e mostrano l’intero simbolo quando il ripasso è completato.
 
 - [x] Correzioni dalla revisione dei miei commit (PR #37/#38). Disegni salvati sul dispositivo solo sotto lo scope verificato: nessuna copia prima della verifica (memoria, poi salvataggio solo nello stesso accesso), memoria svuotata al cambio di scope, scope rifiutato dimenticato senza spostare le copie in un altro account, vecchie copie migrate solo se lo scope registrato coincide e sorgente cancellata solo dopo una scrittura riuscita. Pulizia delle copie sincronizzate sull’intero dispositivo, e totale se lo spazio è pieno; `keepalive` alla chiusura anche per gli invii in corso. «Ripassa lo 0». Sette test di scenario (`tests/coloring-storage.test.ts`, con un hook che risolve gli import `.ts` dei moduli UI): falliscono tutti con la versione precedente e passano con la nuova. Verificati anche 301 test, build, `test:auth`, test browser dei giochi e lo scenario end-to-end del tablet condiviso.

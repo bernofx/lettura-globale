@@ -1,6 +1,11 @@
 export type TracePoint = { x: number; y: number };
 
 type TraceLeg = { points: readonly TracePoint[]; painted: Uint8Array; paintedCount: number };
+type OrderedTrace = {
+  covered: number;
+  invalid: boolean;
+  entry?: { points: TracePoint[]; segments: number; position: number };
+};
 export const TRACE_TOLERANCE = 25;
 export const TRACE_SAMPLE_STEP = 4;
 const COMPLETE_FRACTION = 0.88;
@@ -64,24 +69,58 @@ export function paintTrace(ink: TraceLeg[], from: TracePoint, to: TracePoint) {
   return changed;
 }
 
-export function startOrderedTrace(points: readonly TracePoint[], covered: number, origin: TracePoint) {
+/** Some strokes share a straight tail with the next start, for example the middle bar of B. */
+export function orderedTraceEntry(previous: readonly TracePoint[] | undefined, start: TracePoint): TracePoint[] {
+  const end = previous?.at(-1);
+  if (!previous || !end) return [];
+  const length = Math.hypot(start.x - end.x, start.y - end.y);
+  if (length <= TRACE_TOLERANCE) return [];
+
+  // Only allow the final part of the previous stroke. A whole stroke in reverse is a different gesture.
+  for (let index = previous.length - 2; index >= ORDER_SEARCH_RADIUS; index--) {
+    const point = previous[index];
+    if (distanceSquared(point, end, start) > TRACE_SAMPLE_STEP ** 2) break;
+    if (Math.hypot(point.x - start.x, point.y - start.y) <= TRACE_SAMPLE_STEP) {
+      const steps = Math.ceil(length / TRACE_SAMPLE_STEP);
+      // The start of the new stroke is added when the guide is joined to this approach.
+      return Array.from({ length: steps }, (_, i) => ({
+        x: end.x + (start.x - end.x) * i / steps,
+        y: end.y + (start.y - end.y) * i / steps,
+      }));
+    }
+  }
+  return [];
+}
+
+export function startOrderedTrace(points: readonly TracePoint[], covered: number, origin: TracePoint, entry: readonly TracePoint[] = []): OrderedTrace {
   const start = points[covered];
-  return { covered, invalid: Math.hypot(origin.x - start.x, origin.y - start.y) > TRACE_TOLERANCE };
+  if (Math.hypot(origin.x - start.x, origin.y - start.y) <= TRACE_TOLERANCE) return { covered, invalid: false };
+  if (covered || !entry.length) return { covered, invalid: true };
+  const approach = [...entry, ...points];
+  const hit = nearestSegment(origin, approach, 0, entry.length - 1);
+  return hit
+    ? { covered, invalid: false, entry: { points: approach, segments: entry.length, position: hit.index } }
+    : { covered, invalid: true };
 }
 
 /** Evaluate forward progress on the current directed stroke, locally even on a loop or crossing. */
-export function paintOrderedTrace(points: readonly TracePoint[], gesture: ReturnType<typeof startOrderedTrace>, from: TracePoint, to: TracePoint) {
+export function paintOrderedTrace(points: readonly TracePoint[], gesture: OrderedTrace, from: TracePoint, to: TracePoint) {
   if (gesture.invalid) return;
+  const guide = gesture.entry?.points ?? points;
+  const entrySegments = gesture.entry?.segments ?? 0;
+  let position = gesture.entry?.position ?? gesture.covered;
   for (const sample of traceSamples(from, to)) {
-    const hit = nearestSegment(sample, points,
-      Math.max(0, gesture.covered - ORDER_SEARCH_RADIUS),
-      Math.min(points.length - 2, gesture.covered + ORDER_SEARCH_RADIUS - 1));
-    if (!hit || hit.index + 1 < gesture.covered - ORDER_BACKTRACK) {
+    const hit = nearestSegment(sample, guide,
+      Math.max(0, position - ORDER_SEARCH_RADIUS),
+      Math.min(guide.length - 2, position + ORDER_SEARCH_RADIUS - 1));
+    if (!hit || hit.index + 1 < position - ORDER_BACKTRACK) {
       gesture.invalid = true;
       return;
     }
-    gesture.covered = Math.max(gesture.covered, hit.index + 1);
+    position = Math.max(position, hit.index + 1);
   }
+  if (gesture.entry) gesture.entry.position = position;
+  gesture.covered = Math.max(0, position - entrySegments);
 }
 
 export function orderedStrokeCompleted(points: readonly TracePoint[], covered: number) {
