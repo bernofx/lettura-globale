@@ -11,11 +11,15 @@ export type OrderedTrace = {
   done: boolean;
   entry?: { points: TracePoint[]; segments: number };
 };
-export const TRACE_TOLERANCE = 25;
+/** Free tracing: how far from the guide (half wide 18 units) the finger still leaves ink. */
+export const TRACE_TOLERANCE = 32;
+/** Required order: how far from the current stroke the finger may wander before the gesture turns red. */
+export const ORDER_TOLERANCE = 45;
 export const TRACE_SAMPLE_STEP = 4;
 const COMPLETE_FRACTION = 0.88;
-const ORDER_SEARCH_RADIUS = Math.ceil(TRACE_TOLERANCE / TRACE_SAMPLE_STEP) + 1;
-const ORDER_BACKTRACK = 3;
+/** Segments examined around the reached point (about 32 units along the guide). */
+const ORDER_SEARCH_RADIUS = 8;
+const ORDER_BACKTRACK = 6;
 /** An approach must continue into the next stroke, as on B and R, not turn sharply as on T, I or K. */
 const ENTRY_MIN_COSINE = Math.cos(Math.PI / 3);
 
@@ -38,9 +42,9 @@ function* traceSamples(from: TracePoint, to: TracePoint) {
   }
 }
 
-function nearestSegment(point: TracePoint, points: readonly TracePoint[], start = 0, end = points.length - 2) {
+function nearestSegment(point: TracePoint, points: readonly TracePoint[], start = 0, end = points.length - 2, tolerance = TRACE_TOLERANCE) {
   let nearest = -1;
-  let closest = TRACE_TOLERANCE ** 2;
+  let closest = tolerance ** 2;
   for (let index = start; index <= end; index++) {
     const distance = distanceSquared(point, points[index], points[index + 1]);
     if (distance <= closest) {
@@ -119,11 +123,11 @@ function orderedSegment(point: TracePoint, guide: readonly TracePoint[], positio
   const end = Math.min(guide.length - 2, position + ORDER_SEARCH_RADIUS - 1);
   let nearest: number | undefined;
   let along: number | undefined;
-  let closest = TRACE_TOLERANCE ** 2;
+  let closest = ORDER_TOLERANCE ** 2;
   let closestAlong = closest;
   for (let index = start; index <= end; index++) {
     const distance = distanceSquared(point, guide[index], guide[index + 1]);
-    if (distance > TRACE_TOLERANCE ** 2) continue;
+    if (distance > ORDER_TOLERANCE ** 2) continue;
     if (distance <= closest) [closest, nearest] = [distance, index];
     const forward = motion && (guide[index + 1].x - guide[index].x) * motion.x + (guide[index + 1].y - guide[index].y) * motion.y > 0;
     if (forward && distance <= closestAlong) [closestAlong, along] = [distance, index];
@@ -133,14 +137,14 @@ function orderedSegment(point: TracePoint, guide: readonly TracePoint[], positio
 
 export function startOrderedTrace(points: readonly TracePoint[], covered: number, origin: TracePoint, entry: readonly TracePoint[] = []): OrderedTrace {
   const start = points[covered];
-  if (Math.hypot(origin.x - start.x, origin.y - start.y) <= TRACE_TOLERANCE) {
+  if (Math.hypot(origin.x - start.x, origin.y - start.y) <= ORDER_TOLERANCE) {
     // Resuming a little behind the reached point is fine: progress is kept and evaluated from the touch.
     const reached = orderedSegment(origin, points, covered);
     return { covered, position: Math.min(covered, reached ?? covered), invalid: false, done: false };
   }
   if (covered || !entry.length) return { covered, position: covered, invalid: true, done: false };
   const approach = [...entry, ...points];
-  const hit = nearestSegment(origin, approach, 0, entry.length - 1);
+  const hit = nearestSegment(origin, approach, 0, entry.length - 1, ORDER_TOLERANCE);
   return hit
     ? { covered, position: hit.index, invalid: false, done: false, entry: { points: approach, segments: entry.length } }
     : { covered, position: covered, invalid: true, done: false };

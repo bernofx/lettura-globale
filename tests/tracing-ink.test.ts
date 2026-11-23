@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sampleGlyphPath } from "./helpers/glyph-sampler.ts";
 import { nextTracingGlyph, tracingDigits, tracingGlyphs, tracingLetters } from "../app/domain/tracing-glyphs.ts";
-import { createTraceInk, orderedStrokeCompleted, orderedTraceEntry, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
+import { createTraceInk, orderedStrokeCompleted, orderedTraceEntry, paintOrderedTrace, paintTrace, startOrderedTrace, traceInkCompleted, traceInkPath, tracePrefixPath, ORDER_TOLERANCE, TRACE_TOLERANCE } from "../app/domain/tracing-ink.ts";
 
 const horizontal = (y: number) => Array.from({ length: 26 }, (_, index) => ({ x: index * 4, y }));
 
@@ -91,7 +91,7 @@ test("con ordine obbligatorio vengono rifiutati un altro tratto, il verso invers
   paintOrderedTrace(points, backward, points[15], points[7]);
   assert.equal(backward.invalid, true);
   const outside = startOrderedTrace(points, 0, origin);
-  paintOrderedTrace(points, outside, origin, { x: 25, y: TRACE_TOLERANCE + 2 });
+  paintOrderedTrace(points, outside, origin, { x: 25, y: ORDER_TOLERANCE + 2 });
   assert.equal(outside.invalid, true);
 });
 
@@ -117,7 +117,7 @@ test("un raccordo già tracciato consente di raggiungere l’inizio senza avanza
   assert.equal(startOrderedTrace(points, 0, points.at(-1)!, entry).invalid, true);
   assert.equal(startOrderedTrace(points, 10, origin, entry).invalid, true);
   const shortcut = startOrderedTrace(points, 0, origin, entry);
-  paintOrderedTrace(points, shortcut, origin, { x: 60, y: 40 });
+  paintOrderedTrace(points, shortcut, origin, { x: 60, y: 20 });
   assert.equal(shortcut.invalid, true);
 });
 
@@ -191,4 +191,32 @@ test("il raccordo vale solo dove il tratto precedente porta nel successivo (B e 
     return [glyph, strokes.flatMap((points, index) => orderedTraceEntry(strokes.slice(0, index), points).length ? [index] : [])];
   }).filter(([, indexes]) => indexes.length));
   assert.deepEqual(entries, { B: [2], R: [2] });
+});
+
+test("con ordine obbligatorio si accetta un dito che resta a lato della guida, non uno lontano", () => {
+  const sideways = (points: readonly { x: number; y: number }[], offset: number) => points.map((point, index) => {
+    const before = points[Math.max(0, index - 1)];
+    const after = points[Math.min(points.length - 1, index + 1)];
+    const length = Math.hypot(after.x - before.x, after.y - before.y) || 1;
+    return { x: point.x - (after.y - before.y) / length * offset, y: point.y + (after.x - before.x) / length * offset };
+  });
+  for (const glyph of [...tracingLetters, ...tracingDigits]) {
+    for (const [index, points] of glyphStrokes(glyph).entries()) {
+      for (const offset of [-35, 35]) {
+        // Inside a sharp corner a parallel line folds back on itself; a real finger skips that fold.
+        const route: { x: number; y: number }[] = [];
+        for (const [at, point] of sideways(points, offset).entries()) {
+          const last = route.at(-1);
+          const ahead = points[Math.min(points.length - 1, at + 1)], behind = points[Math.max(0, at - 1)];
+          if (!last || (point.x - last.x) * (ahead.x - behind.x) + (point.y - last.y) * (ahead.y - behind.y) >= 0) route.push(point);
+        }
+        const gesture = traceAlong(points, route);
+        assert.equal(gesture.invalid, false, `${glyph} stroke ${index}, ${offset} units aside`);
+        assert.ok(orderedStrokeCompleted(points, gesture.covered), `${glyph} stroke ${index}, ${offset} units aside`);
+      }
+    }
+  }
+  const line = horizontal(0);
+  assert.equal(traceAlong(line, line.map(point => ({ ...point, y: 40 }))).invalid, false, "about 22 units beyond the visible guide edge");
+  assert.equal(traceAlong(line, [line[0], ...line.slice(1).map(point => ({ ...point, y: 60 }))]).invalid, true, "well outside the guide");
 });
