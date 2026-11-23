@@ -1,6 +1,8 @@
 export const STATE_COLLECTIONS = [
   "therapists", "children", "library", "exercises", "sequences", "attempts", "helps", "sessionHistory",
 ] as const;
+const STATE_VALUES = ["activeChildId", "activeSequenceId", "appearance", "soundPreferences", "categorySymbols", "tracingOrderRequired"] as const;
+type StateValueName = (typeof STATE_VALUES)[number];
 
 export type StateCollectionName = typeof STATE_COLLECTIONS[number];
 type Entity = Record<string, unknown> & { id: string };
@@ -16,7 +18,7 @@ export type StateChangeRequest = {
   operationId: string;
   baseRevision: number;
   collections: Partial<Record<StateCollectionName, CollectionChange>>;
-  values: Partial<Record<"activeChildId" | "activeSequenceId" | "appearance" | "soundPreferences" | "categorySymbols", unknown>>;
+  values: Partial<Record<StateValueName, unknown>>;
 };
 
 function document(value: unknown): Record<string, unknown> {
@@ -78,7 +80,11 @@ export function buildStateChange(previousValue: unknown, nextValue: unknown, ope
   }
 
   const values: StateChangeRequest["values"] = {};
-  for (const key of ["activeChildId", "activeSequenceId", "appearance", "soundPreferences", "categorySymbols"] as const) {
+  for (const key of STATE_VALUES) {
+    if (key === "tracingOrderRequired") {
+      if ((previous[key] === true) !== (next[key] === true)) values[key] = next[key] === true;
+      continue;
+    }
     if (!sameValue(previous[key], next[key])) values[key] = next[key] ?? null;
   }
   if (!Object.keys(collections).length && !Object.keys(values).length) return null;
@@ -100,11 +106,12 @@ export function parseStateChangeRequest(value: unknown): StateChangeRequest {
     collections[key as StateCollectionName] = { upserts, removedIds, order };
   }
   const rawValues = document(request.values ?? {});
-  if (Object.keys(rawValues).some((key) => !["activeChildId", "activeSequenceId", "appearance", "soundPreferences", "categorySymbols"].includes(key))) throw new Error("invalid_state_value");
+  if (Object.keys(rawValues).some((key) => !STATE_VALUES.includes(key as StateValueName))) throw new Error("invalid_state_value");
   if ("activeChildId" in rawValues && (typeof rawValues.activeChildId !== "string" || !rawValues.activeChildId)) throw new Error("invalid_active_child");
   if ("activeSequenceId" in rawValues && rawValues.activeSequenceId !== null && typeof rawValues.activeSequenceId !== "string") throw new Error("invalid_active_sequence");
   if ("appearance" in rawValues && rawValues.appearance !== null && (!rawValues.appearance || typeof rawValues.appearance !== "object" || Array.isArray(rawValues.appearance))) throw new Error("invalid_appearance");
   if ("soundPreferences" in rawValues && rawValues.soundPreferences !== null && (!rawValues.soundPreferences || typeof rawValues.soundPreferences !== "object" || Array.isArray(rawValues.soundPreferences))) throw new Error("invalid_sound_preferences");
+  if ("tracingOrderRequired" in rawValues && typeof rawValues.tracingOrderRequired !== "boolean") throw new Error("invalid_tracing_order");
   if ("categorySymbols" in rawValues && rawValues.categorySymbols !== null) {
     const symbols = document(rawValues.categorySymbols);
     if (Object.entries(symbols).some(([name, id]) => !name.trim() || name.length > 200 || typeof id !== "string" || !id || id.length > 200)) throw new Error("invalid_category_symbols");

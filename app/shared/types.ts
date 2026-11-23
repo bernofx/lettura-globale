@@ -38,7 +38,7 @@ export type Therapist = { id: string; firstName: string; lastName: string; email
 
 export type ChildProfile = { id: string; firstName: string; lastName: string; birthYear: string; notes: string; avatarColor: string };
 
-export type BackendState = { categorySymbols?: CategorySymbols; schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings; soundPreferences?: SoundPreferences };
+export type BackendState = { categorySymbols?: CategorySymbols; schemaVersion: 1; therapists: Therapist[]; children: ChildProfile[]; activeChildId: string; activeSequenceId?: string; library: LibraryItem[]; exercises: Exercise[]; sequences: Sequence[]; attempts: Attempt[]; helps: HelpEvent[]; sessionHistory: SessionHistoryRecord[]; appearance?: AppearanceSettings; soundPreferences?: SoundPreferences; tracingOrderRequired?: boolean };
 
 export type BackendStatus = "loading" | "migrating" | "ready" | "syncing" | "local" | "error";
 

@@ -27,6 +27,21 @@ test("persists audio preferences as an account-level value", () => {
   assert.deepEqual(applyStateChange(previous, change), { ...previous, soundPreferences });
 });
 
+test("il server salva entrambi i valori dell’ordine dei tratti e tratta le vecchie impostazioni come disattivate", () => {
+  const legacy = { schemaVersion: 1 };
+  const on = { ...legacy, tracingOrderRequired: true };
+  const off = { ...legacy, tracingOrderRequired: false };
+  const operation = "12345678-1234-1234-1234-123456789abc";
+  assert.equal(buildStateChange(legacy, off, operation, 3), null);
+  const enable = buildStateChange(legacy, on, operation, 3);
+  assert.ok(enable);
+  assert.deepEqual(applyStateChange(legacy, enable), on);
+  const disable = buildStateChange(on, off, operation, 4);
+  assert.ok(disable);
+  assert.deepEqual(applyStateChange(on, disable), off);
+  assert.throws(() => parseStateChangeRequest({ ...enable, values: { tracingOrderRequired: "true" } }), /invalid_tracing_order/);
+});
+
 test("persists sequence creation, title and exercise order", () => {
   const previous = { schemaVersion: 1, therapists: [], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
   const sequence = { id: "sequence-1", title: "Mattina", exerciseIds: ["exercise-2", "exercise-1"], therapistId: "adult-1", updatedAt: "2026-10-20T10:00:00.000Z", deleted: false };

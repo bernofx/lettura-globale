@@ -43,13 +43,15 @@ const games = [
 ] as const;
 type Game = (typeof games)[number];
 type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
-  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection } | { id: "tracing"; set: TracingSet };
+  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection } | { id: "tracing"; set: TracingSet; requireOrder: boolean };
 
-export function GamesView({ library, puzzleImages, soundVolume, coloringStorage, notify, onPlayingChange }: {
+export function GamesView({ library, puzzleImages, soundVolume, coloringStorage, tracingOrderRequired, onTracingOrderChange, notify, onPlayingChange }: {
   library: LibraryItem[];
   puzzleImages: PuzzleImage[];
   soundVolume: number;
   coloringStorage: ColoringStorage | null;
+  tracingOrderRequired: boolean;
+  onTracingOrderChange: (required: boolean) => void;
   notify: (message: string) => void;
   onPlayingChange: (playing: boolean) => void;
 }) {
@@ -152,8 +154,8 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {selectedGame?.id === "puzzle" && <PuzzleGallery library={library} puzzleImages={puzzleImages} onStart={selection => setGame({ id: "puzzle", selection })} />}
       {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
-      {selectedGame?.id === "tracing" && <TracingPicker onStart={set => setGame({ id: "tracing", set })} />}
-      {game?.id === "tracing" && <TracingGame key={game.set} set={game.set} soundVolume={soundVolume} onClose={closeGame} />}
+      {selectedGame?.id === "tracing" && <TracingPicker requireOrder={tracingOrderRequired} onOrderChange={onTracingOrderChange} onStart={set => setGame({ id: "tracing", set, requireOrder: tracingOrderRequired })} />}
+      {game?.id === "tracing" && <TracingGame key={game.set} set={game.set} requireOrder={game.requireOrder} soundVolume={soundVolume} onClose={closeGame} />}
       {game?.id === "coloring" && (
         <ColoringGame
           page={game.page}

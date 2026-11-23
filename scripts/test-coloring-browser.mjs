@@ -14,6 +14,7 @@ await new Promise((resolve, reject) => {
 
 const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Giochi", email: "games@example.test", role: "Terapista", childIds: [] };
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
+let stateRevision = 1;
 const pending = new Map();
 let id = 0;
 let availableVersion = null;
@@ -123,7 +124,12 @@ socket.addEventListener("message", event => {
       });
       return;
     }
-    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: 1 };
+    if (url.pathname === "/api/state/changes" && request.method === "PATCH") {
+      const { values } = JSON.parse(request.postData);
+      if (typeof values.tracingOrderRequired === "boolean") state.tracingOrderRequired = values.tracingOrderRequired;
+      stateRevision++;
+    }
+    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: stateRevision };
     void send("Fetch.fulfillRequest", {
       requestId, responseCode: 200,
       responseHeaders: [{ name: "Content-Type", value: "application/json" }],
@@ -274,7 +280,7 @@ try {
     const nativeConnect = AudioBufferSourceNode.prototype.connect;
     const nativePlay = HTMLMediaElement.prototype.play;
     HTMLMediaElement.prototype.play = function (...args) {
-      if (this.src.endsWith("/correct.mp3")) window.testFeedback++;
+      if (this.src.endsWith("/correct.mp3") || this.src.endsWith("/wrong.mp3")) window.testFeedback++;
       return nativePlay.apply(this, args);
     };
     AudioBufferSourceNode.prototype.start = function (...args) {
@@ -877,6 +883,8 @@ try {
   await button("Torna ai giochi");
   await button("Ripassa lettere e numeri");
   await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].map(card => card.textContent.trim()).join() === 'Lettere,Numeri'");
+  const orderCheckbox = "document.querySelector('.tracing-options input')";
+  assert.equal(await evaluate(`${orderCheckbox}.checked`), false, "free order is the default");
   const tracingMusicStarts = await evaluate("window.testMusic.starts");
   const tracingMusicStops = await evaluate("window.testMusic.stops");
   await button("Lettere");
@@ -914,13 +922,14 @@ try {
   await wait(`window.testMusic.starts === ${tracingMusicStarts} + 1 && window.testMusic.gain?.value > 0`);
   assert.ok(Math.abs(await evaluate("window.testMusic.duration") - 64) < 0.1, "tracing uses the default game soundtrack after the custom track is removed");
   await assertGameIgnoresBack(".tracing-dialog[open]");
-  await traceTouch("touchStart", 170, 34);
-  await traceTouch("touchMove", 305, 319);
-  await traceTouch("touchEnd");
   await traceTouch("touchStart", 83, 218);
   await traceTouch("touchMove", 257, 218);
   await traceTouch("touchEnd");
+  await traceTouch("touchStart", 305, 319);
+  await traceTouch("touchMove", 170, 34);
+  await traceTouch("touchEnd");
   await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
+  assert.equal(await evaluate(traced), "M35 319 L170 34 M170 34 L305 319 M83 218 H257", "a completed glyph has no visual gaps");
   assert.equal(await evaluate("document.querySelector('#tracing-title').textContent"), "Ripassa l’A", "the check is shown before advancing");
   await wait("document.querySelector('.tracing-dialog[data-phase=practice] #tracing-title')?.textContent === 'Ripassa la B'");
   assert.equal(await evaluate(traced), "", "the next letter starts without the previous ink");
@@ -938,6 +947,34 @@ try {
   await wait(`window.testMusic.stops === ${tracingMusicStops} + 1`);
   await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].length === 2", "Exit returns to the Letters / Numbers choice");
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await evaluate(`${orderCheckbox}.click()`);
+  const preferenceDeadline = Date.now() + 6000;
+  while (state.tracingOrderRequired !== true && Date.now() < preferenceDeadline) await delay(100);
+  assert.equal(state.tracingOrderRequired, true, "the tracing preference is sent to the cloud");
+  await button("Lettere");
+  await wait("document.querySelector('.tracing-dialog[data-phase=practice]')");
+  await traceTouch("touchStart", 35, 319);
+  await traceTouch("touchMove", 170, 34);
+  await traceTouch("touchEnd");
+  assert.equal(await evaluate(traced), "M35 319 L170 34", "a fast valid stroke is continuous");
+  const rejectedStroke = "document.querySelector('.tracing-ink-error').getAttribute('d')";
+  const beforeWrong = await evaluate("window.testFeedback");
+  await traceTouch("touchStart", 83, 218);
+  await traceTouch("touchMove", 257, 218);
+  await wait(`Boolean(${rejectedStroke})`);
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.tracing-ink-error')).stroke"), "rgb(199, 37, 56)");
+  await traceTouch("touchEnd");
+  await wait(`!${rejectedStroke} && window.testFeedback === ${beforeWrong} + 1`);
+  assert.equal(await evaluate(traced), "M35 319 L170 34", "an error preserves the accepted stroke");
+  await traceTouch("touchStart", 170, 34);
+  await traceTouch("touchMove", 305, 319);
+  await traceTouch("touchEnd");
+  await traceTouch("touchStart", 83, 218);
+  await traceTouch("touchMove", 257, 218);
+  await traceTouch("touchEnd");
+  await wait("document.querySelector('.tracing-dialog[data-phase=completed] .tracing-completed')");
+  await button("Esci dal ripasso");
+  await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
   // Trace every guide of the current glyph along its real geometry, in drawing order.
   async function traceGuides() {
     const strokes = await evaluate(`[...document.querySelectorAll('.tracing-sheet .tracing-guide')].map(path => {
@@ -965,7 +1002,7 @@ try {
   await wait("!document.querySelector('.tracing-dialog') && !history.state?.lgGameGuard");
   await wait("[...document.querySelectorAll('.tracing-picker .coloring-card')].map(card => card.textContent.trim()).join() === 'Lettere,Numeri'");
   await send("Emulation.setEmulatedMedia", { features: [] });
-  console.log("PASS Ripassa lettere e numeri: Lettere/Numeri choice, demo, path tolerance, green check, ordered progression, return to the choice after the last number, music and exit.");
+  console.log("PASS Ripassa lettere e numeri: ordine libero, ordine obbligatorio con errore rosso e audio, tratti continui, preferenza cloud, avanzamento e musica.");
 
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
