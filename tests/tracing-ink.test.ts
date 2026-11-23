@@ -220,3 +220,42 @@ test("con ordine obbligatorio si accetta un dito che resta a lato della guida, n
   assert.equal(traceAlong(line, line.map(point => ({ ...point, y: 40 }))).invalid, false, "about 22 units beyond the visible guide edge");
   assert.equal(traceAlong(line, [line[0], ...line.slice(1).map(point => ({ ...point, y: 60 }))]).invalid, true, "well outside the guide");
 });
+
+test("con ordine obbligatorio si passa al tratto successivo senza sollevare il dito dove questo riparte", () => {
+  const follow = (glyph: keyof typeof tracingGlyphs, route: (strokes: { x: number; y: number }[][]) => { x: number; y: number }[], first = 0) => {
+    const strokes = glyphStrokes(glyph);
+    const entries = strokes.map((points, index) => orderedTraceEntry(strokes.slice(0, index), points));
+    const path = route(strokes);
+    let stroke = first;
+    let gesture = startOrderedTrace(strokes[first], 0, path[0], entries[first]);
+    for (let index = 1; index < path.length; index++) {
+      let from = path[index - 1];
+      for (;;) {
+        const next = strokes[stroke + 1] && { points: strokes[stroke + 1], entry: entries[stroke + 1] };
+        paintOrderedTrace(strokes[stroke], gesture, from, path[index], next);
+        if (!gesture.handover) break;
+        from = gesture.handover.at;
+        gesture = gesture.handover.gesture;
+        stroke++;
+      }
+    }
+    return { stroke, gesture, strokes };
+  };
+  const lambda = follow("A", ([left, right]) => [...left, ...right]);
+  assert.equal(lambda.stroke, 1);
+  assert.equal(lambda.gesture.invalid, false);
+  assert.equal(lambda.gesture.covered, lambda.strokes[1].length - 1);
+
+  const b = follow("B", ([, top, bottom]) => [...top, ...bottom], 1);
+  assert.equal(b.stroke, 2, "both bowls of B in a single gesture, back along the middle bar");
+  assert.equal(b.gesture.invalid, false);
+  assert.ok(orderedStrokeCompleted(b.strokes[2], b.gesture.covered));
+
+  const r = follow("R", ([, bowl, leg]) => [...bowl, ...leg], 1);
+  assert.equal(r.stroke, 2);
+  assert.ok(orderedStrokeCompleted(r.strokes[2], r.gesture.covered));
+
+  const e = follow("E", ([stem]) => stem);
+  assert.equal(e.stroke, 0, "a stroke that starts elsewhere still requires lifting the finger");
+  assert.equal(e.gesture.invalid, false);
+});

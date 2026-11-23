@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Ripassa lettere e numeri",
   items: [
+    "Con l’ordine obbligatorio puoi fare le due pance della B, la gamba della R e la A a «Λ» senza staccare il dito.",
     "Ripassa è più permissivo: puoi allontanarti un po’ di più dalla guida senza che il tratto diventi rosso.",
     "Con l’ordine obbligatorio non è un errore proseguire oltre un tratto finito o smussare gli angoli; i progressi restano anche se il gesto viene interrotto. La traversa della A mostra il pallino di partenza.",
     "Con l’ordine obbligatorio puoi ripartire da un raccordo già tracciato, come la barra centrale della B.",

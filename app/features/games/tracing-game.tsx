@@ -197,7 +197,21 @@ export function TracingGame({ set, requireOrder, soundVolume, onClose }: { set: 
   function movePointer(current: TracingPointer, destination: TracePoint) {
     let changed = false;
     if (current.ordered) {
-      paintOrderedTrace(ink.current[ordered.current.stroke].points, current.ordered, current.point, destination);
+      let gesture = current.ordered;
+      let from = current.point;
+      for (;;) {
+        const stroke = ordered.current.stroke;
+        const next = ink.current[stroke + 1] && { points: ink.current[stroke + 1].points, entry: orderedEntries.current[stroke + 1] };
+        paintOrderedTrace(ink.current[stroke].points, gesture, from, destination, next);
+        const handover = gesture.handover;
+        if (!handover) break;
+        // The finished stroke is kept and the same gesture goes on along the next one.
+        ordered.current = { stroke: stroke + 1, covered: 0 };
+        committedPath.current = orderedPath(0);
+        gesture = current.ordered = handover.gesture;
+        current.rawPath = `M${handover.at.x.toFixed(1)} ${handover.at.y.toFixed(1)}`;
+        from = handover.at;
+      }
       if (current.point.x !== destination.x || current.point.y !== destination.y) current.rawPath += `L${destination.x.toFixed(1)} ${destination.y.toFixed(1)}`;
     } else {
       changed = paintTrace(ink.current, current.point, destination);

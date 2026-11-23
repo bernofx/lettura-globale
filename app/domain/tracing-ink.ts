@@ -10,7 +10,10 @@ export type OrderedTrace = {
   /** The stroke was already complete when the finger left it: later movement is ignored. */
   done: boolean;
   entry?: { points: TracePoint[]; segments: number };
+  /** The finger went on into the next stroke without lifting: continue there from `at`. */
+  handover?: { gesture: OrderedTrace; at: TracePoint };
 };
+export type NextOrderedStroke = { points: readonly TracePoint[]; entry?: readonly TracePoint[] };
 /** Free tracing: how far from the guide (half wide 18 units) the finger still leaves ink. */
 export const TRACE_TOLERANCE = 32;
 /** Required order: how far from the current stroke the finger may wander before the gesture turns red. */
@@ -150,22 +153,34 @@ export function startOrderedTrace(points: readonly TracePoint[], covered: number
     : { covered, position: covered, invalid: true, done: false };
 }
 
-/** Evaluate forward progress on the current directed stroke, locally even on a loop or crossing. */
-export function paintOrderedTrace(points: readonly TracePoint[], gesture: OrderedTrace, from: TracePoint, to: TracePoint) {
+/**
+ * Evaluate forward progress on the current directed stroke, locally even on a loop or crossing.
+ * With `next`, a finger that finishes the stroke and goes on along the next one (A drawn as «Λ»,
+ * the two bowls of B, the leg of R) is handed over to it instead of having to lift.
+ */
+export function paintOrderedTrace(points: readonly TracePoint[], gesture: OrderedTrace, from: TracePoint, to: TracePoint, next?: NextOrderedStroke) {
   if (gesture.invalid || gesture.done) return;
   const guide = gesture.entry?.points ?? points;
   const entrySegments = gesture.entry?.segments ?? 0;
   const motion = { x: to.x - from.x, y: to.y - from.y };
+  const handOver = (at: TracePoint) => {
+    const following = next && startOrderedTrace(next.points, 0, at, next.entry);
+    if (!following || following.invalid) return false;
+    gesture.done = true;
+    gesture.handover = { gesture: following, at };
+    return true;
+  };
   for (const sample of traceSamples(from, to)) {
     const index = orderedSegment(sample, guide, gesture.position, motion);
     if (index === undefined || index + 1 < gesture.position - ORDER_BACKTRACK) {
       // Leaving a stroke already traced (going past its end, closing a loop) is not a mistake.
-      if (orderedStrokeCompleted(points, gesture.covered)) gesture.done = true;
-      else gesture.invalid = true;
+      if (!orderedStrokeCompleted(points, gesture.covered)) gesture.invalid = true;
+      else if (!handOver(sample)) gesture.done = true;
       return;
     }
     gesture.position = Math.max(gesture.position, index + 1);
     gesture.covered = Math.max(gesture.covered, gesture.position - entrySegments);
+    if (gesture.covered >= points.length - 1 && handOver(sample)) return;
   }
 }
 
