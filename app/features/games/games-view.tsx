@@ -3,7 +3,7 @@
 import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, RotateCcw, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
-import type { TracingGlyph } from "../../domain/tracing-glyphs";
+import type { TracingSet } from "../../domain/tracing-glyphs";
 import type { ColoringArea } from "../../domain/coloring-drawings";
 import type { ColoringPreviews, ColoringStorage } from "./coloring-storage";
 import type { PuzzleImage } from "../../domain/puzzle-library";
@@ -43,7 +43,7 @@ const games = [
 ] as const;
 type Game = (typeof games)[number];
 type ActiveGame = { id: "coloring"; page: ColoringPage; painting: ColoringCanvas } |
-  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection } | { id: "tracing"; glyph: TracingGlyph };
+  { id: "balloons" } | { id: "puzzle"; selection: PuzzleSelection } | { id: "tracing"; set: TracingSet };
 
 export function GamesView({ library, puzzleImages, soundVolume, coloringStorage, notify, onPlayingChange }: {
   library: LibraryItem[];
@@ -55,6 +55,8 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
 }) {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [game, setGame] = useState<ActiveGame | null>(null);
+  // Stable: the tracing game closes itself through it at the end of a set.
+  const closeGame = useCallback(() => setGame(null), []);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [openingDrawing, setOpeningDrawing] = useState(false);
   const [previews, setPreviews] = useState<{ storage: ColoringStorage; drawings: ColoringPreviews }>();
@@ -150,8 +152,8 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
       {game?.id === "balloons" && <BalloonGame soundVolume={soundVolume} onClose={() => setGame(null)} />}
       {selectedGame?.id === "puzzle" && <PuzzleGallery library={library} puzzleImages={puzzleImages} onStart={selection => setGame({ id: "puzzle", selection })} />}
       {game?.id === "puzzle" && <PuzzleGame selection={game.selection} soundVolume={soundVolume} onClose={() => setGame(null)} />}
-      {selectedGame?.id === "tracing" && <TracingPicker onStart={glyph => setGame({ id: "tracing", glyph })} />}
-      {game?.id === "tracing" && <TracingGame glyph={game.glyph} soundVolume={soundVolume} onClose={() => setGame(null)} />}
+      {selectedGame?.id === "tracing" && <TracingPicker onStart={set => setGame({ id: "tracing", set })} />}
+      {game?.id === "tracing" && <TracingGame key={game.set} set={game.set} soundVolume={soundVolume} onClose={closeGame} />}
       {game?.id === "coloring" && (
         <ColoringGame
           page={game.page}

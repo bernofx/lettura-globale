@@ -2,8 +2,8 @@
 export const RELEASE_NOTES = {
   title: "Ripassa lettere e numeri",
   items: [
-    "In Ripassa lettere e numeri il simbolo successivo parte dopo la spunta verde. La musica di Giochi continua durante la serie.",
-    "In Giochi trovi Ripassa lettere e numeri. Guarda il ditino e segui con il dito la guida di una lettera o di un numero.",
+    "In Giochi trovi Ripassa lettere e numeri: scegli Lettere o Numeri e si parte dal primo simbolo, in ordine. Guarda il ditino e segui con il dito la guida.",
+    "Dopo la spunta verde parte il simbolo successivo; finita la serie si torna alla scelta tra Lettere e Numeri. La musica di Giochi continua durante la serie.",
     "La galleria di Colorare mostra i progressi nei disegni direttamente nelle miniature.",
     "La Coccinella sorridente è il primo disegno in Giochi → Colorare.",
     "Colorare salva tratti, riempimenti e sfondo. Riapri lo stesso disegno per continuare o premi Azzera disegno in alto a sinistra.",

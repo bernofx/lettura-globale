@@ -3,7 +3,7 @@
 import { ArrowRight, Check, Pointer, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
-import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingDigits, tracingGlyphs, tracingLetters, tracingTitle, type TracingGlyph } from "../../domain/tracing-glyphs";
+import { nextTracingGlyph, TRACE_HEIGHT, TRACE_WIDTH, tracingGlyphs, tracingSets, tracingTitle, type TracingGlyph, type TracingSet } from "../../domain/tracing-glyphs";
 import { createTraceInk, paintTrace, traceInkCompleted, traceInkPath, TRACE_SAMPLE_STEP, type TracePoint } from "../../domain/tracing-ink";
 import { playFeedbackTone } from "../../shared/audio";
 import { startGameMusic } from "./game-music";
@@ -17,25 +17,25 @@ const liftDuration = 65;
 const completionPause = 1500;
 type Phase = "demo" | "practice" | "completed";
 
-export function TracingThumbnail() {
+export function TracingThumbnail({ glyph = "A" }: { glyph?: TracingGlyph }) {
   return <div className="coloring-card-art tracing-thumbnail" aria-hidden="true">
     <svg viewBox={viewBox} className="tracing-art">
-      {tracingGlyphs.A.map(path => <path className="tracing-guide" key={path} d={path} />)}
-      <path className="tracing-ink" d={tracingGlyphs.A[0]} />
+      {tracingGlyphs[glyph].map(path => <path className="tracing-guide" key={path} d={path} />)}
+      <path className="tracing-ink" d={tracingGlyphs[glyph][0]} />
     </svg>
   </div>;
 }
 
-export function TracingPicker({ onStart }: { onStart: (glyph: TracingGlyph) => void }) {
-  return <div className="tracing-picker">
-    {[{ title: "Lettere", glyphs: tracingLetters }, { title: "Numeri", glyphs: tracingDigits }].map(({ title, glyphs }) =>
-      <section className="panel" key={title} aria-label={title}>
-        <h2>{title}</h2>
-        <div className="tracing-picker-grid">
-          {glyphs.map(glyph => <button key={glyph} type="button" className="ghost-button" onClick={() => onStart(glyph)}>{glyph}</button>)}
-        </div>
-      </section>
-    )}
+/** The child chooses Letters or Numbers; the game then goes through the set in order. */
+export function TracingPicker({ onStart }: { onStart: (set: TracingSet) => void }) {
+  return <div className="game-picker tracing-picker">
+    {(Object.keys(tracingSets) as TracingSet[]).map(set => {
+      const { title, glyphs } = tracingSets[set];
+      return <button className="coloring-card" key={set} type="button" onClick={() => onStart(set)}>
+        <TracingThumbnail glyph={glyphs[0]} />
+        <span>{title}</span>
+      </button>;
+    })}
   </div>;
 }
 
@@ -47,8 +47,8 @@ function samplePath(path: SVGPathElement, length: number) {
   });
 }
 
-export function TracingGame({ glyph: startingGlyph, soundVolume, onClose }: { glyph: TracingGlyph; soundVolume: number; onClose: () => void }) {
-  const [glyph, setGlyph] = useState(startingGlyph);
+export function TracingGame({ set, soundVolume, onClose }: { set: TracingSet; soundVolume: number; onClose: () => void }) {
+  const [glyph, setGlyph] = useState<TracingGlyph>(tracingSets[set].glyphs[0]);
   const paths = tracingGlyphs[glyph];
   const title = tracingTitle(glyph);
   const [attempt, setAttempt] = useState(0);
@@ -90,9 +90,14 @@ export function TracingGame({ glyph: startingGlyph, soundVolume, onClose }: { gl
 
   useEffect(() => {
     if (phase !== "completed") return;
-    const timer = window.setTimeout(() => startRound(nextTracingGlyph(glyph)), completionPause);
+    // After the last glyph of the set, go back to the Letters / Numbers choice.
+    const timer = window.setTimeout(() => {
+      const next = nextTracingGlyph(set, glyph);
+      if (next) startRound(next);
+      else onClose();
+    }, completionPause);
     return () => window.clearTimeout(timer);
-  }, [glyph, phase, startRound]);
+  }, [glyph, onClose, phase, set, startRound]);
 
   useLayoutEffect(() => {
     const element = dialog.current;
