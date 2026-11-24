@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return noStoreJson({ ...await queue(db, accountId), token });
   }
 
-  if (body.action === "enqueue") {
+  if (body.action === "generate") {
     const config = imageGenerationConfig(env);
     if (!config || config.accountId !== accountId) return noStoreJson({ error: "generation_unavailable" }, { status: 503 });
     let words;

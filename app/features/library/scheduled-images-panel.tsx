@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RefreshCw } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MAX_SCHEDULED_INPUT_LENGTH, SCHEDULED_IMAGES_URL, SCHEDULED_REPOSITORY,
@@ -103,10 +103,10 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
     }
   }
 
-  function enqueue() {
+  function generate() {
     try { parseScheduledWords(words); }
     catch { setError("Inserisci da 1 a 20 parole o locuzioni, una per riga. Dopo | puoi aggiungere una precisazione visiva senza contatti o link."); return; }
-    void change({ action: "enqueue", words }, result => {
+    void change({ action: "generate", words }, result => {
       setQueue(result);
       setWords("");
       const ignored = result.submitted - result.accepted;
@@ -153,21 +153,21 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   const validMetadata = proposal ? scheduledImageMetadata(proposal.word, proposal.metadata) : null;
   const visible = expanded ? items : items.slice(0, 6);
   return <section className="panel library-area scheduled-images-panel" aria-labelledby="scheduled-images-title">
-    <SectionHeading id="scheduled-images-title" title="Generazione immagini"
-      description="Genera proposte per il catalogo condiviso. Inserisci solo parole e descrizioni generiche destinate alla pubblicazione.">
+    <SectionHeading id="scheduled-images-title" title="Richieste di generazione">
       <button type="button" className="ghost-button" onClick={() => void refresh()} disabled={busy}>
         <RefreshCw size={16} aria-hidden="true" />Aggiorna
       </button>
     </SectionHeading>
     {generation && <p>{generation.used} / {generation.limit} richieste all’API questo mese.{limitReached && " Limite mensile raggiunto."}</p>}
     {queue && !generation && <p>Generazione disattivata per questo account.</p>}
-    <form className="scheduled-images-form" onSubmit={event => { event.preventDefault(); enqueue(); }}>
+    <form className="scheduled-images-form" onSubmit={event => { event.preventDefault(); generate(); }}>
       <label htmlFor="scheduled-images-words">Parole da illustrare</label>
       <textarea id="scheduled-images-words" rows={3} value={words} onChange={event => setWords(event.target.value)}
         placeholder={"Clessidra\nPesca | il frutto"} maxLength={MAX_SCHEDULED_INPUT_LENGTH} aria-describedby="scheduled-images-hint" disabled={busy || !canGenerate} />
-      <small id="scheduled-images-hint">Una parola per riga. Dopo | puoi aggiungere una precisazione visiva. Usa descrizioni generiche senza nomi o dati personali.</small>
-      <button type="submit" className="primary-button" disabled={busy || !canGenerate || !words.trim()}>
-        <Plus size={18} aria-hidden="true" />Genera immagini
+      <small id="scheduled-images-hint">Inserisci una parola o un elenco, una per riga. Dopo | puoi aggiungere una precisazione visiva. Usa termini generici, senza dati personali.</small>
+      <small id="scheduled-images-submit-hint">Il pulsante invia a OpenAI le nuove parole senza foto. Ogni chiamata conta nel limite mensile.</small>
+      <button type="submit" className="primary-button" aria-describedby="scheduled-images-submit-hint" disabled={busy || !canGenerate || !words.trim()}>
+        <Sparkles size={18} aria-hidden="true" />Genera con OpenAI
       </button>
     </form>
     {error && <p className="form-error" role="alert">{error}</p>}

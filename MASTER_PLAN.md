@@ -39,7 +39,7 @@ Il catalogo attuale è esclusivamente dimostrativo. Prima di integrare immagini 
 
 ### Generazione immagini AI per il catalogo condiviso
 
-L’amministratore dell’account abilitato può avviare la generazione di una proposta per parola. Il Worker invia la richiesta in background tramite Cloudflare Queues, con deduplicazione e un limite mensile ai tentativi. La chiamata OpenAI Images è server-side e usa soltanto il termine e un’eventuale precisazione visiva generica. L’anteprima WebP è privata. Categoria, articolo e sillabazione sono modificabili prima dell’approvazione esplicita. La pubblicazione via PR è separata e richiede la CI. Il flusso è disattivato in assenza della configurazione del provider e dell’account. Vedi ADR 0026.
+L’amministratore dell’account abilitato può richiedere esplicitamente una proposta per parola da **Libreria → Generazione con OpenAI**, anche in lotti. Il salvataggio manuale di una parola con o senza foto ha un percorso dedicato. Il Worker invia la richiesta in background tramite Cloudflare Queues, con deduplicazione e un limite mensile ai tentativi. La chiamata OpenAI Images è server-side e usa soltanto il termine e un’eventuale precisazione visiva generica. L’anteprima WebP è privata. Categoria, articolo e sillabazione sono modificabili prima dell’approvazione esplicita. La pubblicazione via PR è separata e richiede la CI. Il flusso è disattivato in assenza della configurazione del provider e dell’account. Vedi ADR 0026.
 
 ### Prima versione — Storie in CAA
 

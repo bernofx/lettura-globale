@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronUp, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, ChevronDown, ChevronUp, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { type CategorySymbols } from "../../domain/category-images";
 import { articleFor } from "../../domain/article-classification";
 import { hasArtwork } from "../../domain/library-availability";
@@ -22,6 +22,36 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
   const [reviewOnly, setReviewOnly] = useState(false);
   const [wordsExpanded, setWordsExpanded] = useState(false);
   const [sentencesExpanded, setSentencesExpanded] = useState(false);
+  const [generationProfile, setGenerationProfile] = useState<string>();
+  const generationButton = useRef<HTMLButtonElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+  const generationOpen = Boolean(scheduledImagesProfile && generationProfile === scheduledImagesProfile);
+
+  useEffect(() => {
+    if (generationOpen) {
+      backButton.current?.focus();
+    } else if (returnFocus.current) {
+      returnFocus.current = false;
+      generationButton.current?.focus();
+    }
+  }, [generationOpen]);
+
+  if (scheduledImagesProfile && generationOpen) {
+    return <div className="page library-sections">
+      <PageHeader eyebrow="LIBRERIA" title="Generazione immagini con OpenAI"
+        description="Crea proposte per il catalogo condiviso, una parola alla volta o da un elenco.">
+        <button ref={backButton} type="button" className="ghost-button library-header-action" onClick={() => {
+          returnFocus.current = true;
+          setGenerationProfile(undefined);
+        }}>
+          <ArrowLeft size={18} aria-hidden="true" />Torna alla Libreria
+        </button>
+      </PageHeader>
+      <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} />
+    </div>;
+  }
+
   const words = items.filter((item) => !item.categorySymbolOnly && item.contentKind !== "sentence");
   const sentences = items.filter((item) => item.contentKind === "sentence");
   const reviewCount = words.filter((item) => item.syllableStatus === "needs-review").length;
@@ -35,21 +65,25 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
   const expansion = (label: string, entries: LibraryItem[], visible: LibraryItem[], expanded: boolean, setExpanded: (value: boolean) => void) => entries.length > 4 && !searching && !(label === "immagini" && reviewOnly) ? <div className="library-expansion"><span>Mostrati {visible.length} di {entries.length}</span><button type="button" className="ghost-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}{expanded ? "Riduci" : `Mostra tutte le ${label}`}</button></div> : null;
   const cards = (entries: LibraryItem[], sentence = false) => <div className="library-grid">{entries.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}{!hasArtwork(item) && <span className="word-only-badge">Solo parola</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{sentence ? `${item.subject} · ${item.verb}` : `${item.category}${articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}`}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3>{sentence ? <p className="syllables">SOGGETTO + VERBO</p> : <p className={item.syllableStatus === "needs-review" ? "syllables needs-review" : "syllables"}>{item.syllabification?.toLocaleUpperCase("it-IT")} · {item.syllableCount} sillabe{item.syllableStatus === "needs-review" ? " · Da verificare" : ""}</p>}<p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>;
   return <div className="page library-sections">
-    <PageHeader eyebrow="CONTENUTI" title="Libreria" description="Gestisci immagini singole, frasi d’azione, puzzle e suoni." />
+    <PageHeader eyebrow="CONTENUTI" title="Libreria" description="Gestisci immagini singole, frasi d’azione, puzzle e suoni.">
+      {scheduledImagesProfile && <button ref={generationButton} type="button" className="ghost-button library-header-action"
+        onClick={() => setGenerationProfile(scheduledImagesProfile)}>
+        <Sparkles size={18} aria-hidden="true" />Generazione con OpenAI
+      </button>}
+    </PageHeader>
     <div className="toolbar">
       <label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label>
       <div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div>
     </div>
     <section className="panel library-area" aria-labelledby="library-words">
-      <SectionHeading id="library-words" title="Parole e immagini" description="Contenuti per riconoscimento, categorie, articoli e denominazione.">
-        <button type="button" className="primary-button" onClick={() => onUpload("word")}><Plus size={18} aria-hidden="true" />Aggiungi immagine</button>
+      <SectionHeading id="library-words" title="Parole e immagini" description="Inserisci una parola e, se vuoi, carica una foto dal dispositivo anche in seguito.">
+        <button type="button" className="primary-button" onClick={() => onUpload("word")}><Plus size={18} aria-hidden="true" />Aggiungi parola o foto</button>
       </SectionHeading>
       <button type="button" className={`filter-chip ${reviewOnly ? "selected" : ""}`} onClick={() => setReviewOnly((value) => !value)} aria-pressed={reviewOnly}>Sillabazione da verificare <span>{reviewCount}</span></button>
       {cards(visibleWords)}
       {!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}
       {expansion("immagini", filteredWords, visibleWords, wordsExpanded, setWordsExpanded)}
     </section>
-    {scheduledImagesProfile && <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} />}
     <section className="panel library-area sentence-library-area" aria-labelledby="library-scenes">
       <SectionHeading id="library-scenes" title="Scene soggetto + verbo" description="Immagini d’azione usate da Abbina la frase.">
         <button type="button" className="primary-button" onClick={() => onUpload("sentence")}><Plus size={18} aria-hidden="true" />Aggiungi frase</button>

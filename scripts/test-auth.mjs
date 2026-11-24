@@ -286,15 +286,45 @@ try {
   assert.equal((await queueAdmin(undefined, secondCookie, "adult-b")).status, 403);
   assert.equal((await queuePublisher("0".repeat(64), { action: "claim" })).status, 401);
   assert.equal((await request(queuePath + "/worker", { method: "POST" })).status, 404, "generation has no public worker route");
-  const existingState = await db.prepare("SELECT payload FROM user_states WHERE user_id = ?").bind(account).first();
-  const withPhoto = JSON.parse(existingState.payload);
-  withPhoto.library.push({ id: "private-photo", word: "Rocchetto", privateUpload: true, remoteImageId: "private-photo" });
-  await db.prepare("UPDATE user_states SET payload = ? WHERE user_id = ?").bind(JSON.stringify(withPhoto), account).run();
-  const added = await (await queueAdmin({ action: "enqueue", words: "Nave\nRocchetto\nClessidra\nLanterna | una lampada a olio\nLANTERNA" })).json();
+  const manualCard = {
+    id: crypto.randomUUID(), word: "Rocchetto", category: "Oggetti", contentKind: "word",
+    source: "Elemento testuale", license: "Nessuna immagine", author: "—", article: null,
+    syllabification: "roc-chet-to", syllableCount: 3, syllableStatus: "automatic",
+  };
+  const saveManualCard = async item => {
+    const { state: previous, revision } = await (await read(adminCookie)).json();
+    const library = [...previous.library.filter(entry => entry.id !== item.id), item];
+    const change = buildStateChange(previous, { ...previous, library }, crypto.randomUUID(), revision);
+    const response = await request("/api/state/changes", {
+      method: "PATCH", headers: { cookie: adminCookie, "content-type": "application/json" }, body: JSON.stringify(change),
+    });
+    assert.equal(response.status, 200);
+  };
+  const assertNoGeneration = async () => {
+    const { requests, generation } = await (await queueAdmin()).json();
+    assert.deepEqual(requests, [], "saving a manual card never creates a generation request");
+    assert.equal(generation.used, 0);
+    assert.deepEqual(imageApiCalls, []);
+  };
+  await saveManualCard(manualCard);
+  await assertNoGeneration();
+
+  const mediaId = crypto.randomUUID();
+  const uploadPhoto = await request("/api/media", {
+    method: "POST", headers: { cookie: adminCookie, "content-type": "image/webp", "x-media-id": mediaId },
+    body: Buffer.from(apiImage, "base64"),
+  });
+  assert.equal(uploadPhoto.status, 201);
+  await saveManualCard({
+    ...manualCard, source: "Upload privato", license: "Diritto d’uso dichiarato", author: "Utente",
+    privateUpload: true, remoteImageId: mediaId, article: "IL",
+  });
+  await assertNoGeneration();
+  const added = await (await queueAdmin({ action: "generate", words: "Nave\nRocchetto\nClessidra\nLanterna | una lampada a olio\nLANTERNA" })).json();
   assert.equal(added.accepted, 4);
   assert.equal(added.requests.find(item => item.word === "Nave").status, "existing");
   assert.equal(added.requests.find(item => item.word === "Rocchetto").status, "existing");
-  const duplicate = await (await queueAdmin({ action: "enqueue", words: " lanterna " })).json();
+  const duplicate = await (await queueAdmin({ action: "generate", words: " lanterna " })).json();
   assert.equal(duplicate.accepted, 0);
   const waitForQueueStatus = async (word, status) => {
     for (let attempt = 0; attempt < 80; attempt++) {
@@ -325,9 +355,9 @@ try {
   assert.equal((await queueAdmin(approval, secondCookie, "adult-b")).status, 403);
   assert.equal((await queueAdmin({ ...approval, metadata: { ...metadata, category: "Azione" } })).status, 422);
   assert.equal((await queueAdmin(approval)).status, 200);
-  await queueAdmin({ action: "enqueue", words: "Ombrello" });
+  await queueAdmin({ action: "generate", words: "Ombrello" });
   await waitForQueueStatus("Ombrello", "needs_review");
-  await queueAdmin({ action: "enqueue", words: "Ventaglio" });
+  await queueAdmin({ action: "generate", words: "Ventaglio" });
   const limited = await waitForQueueStatus("Ventaglio", "failed");
   assert.match(limited.message, /Limite mensile/);
   assert.deepEqual(imageApiCalls.map(item => item.parola), ["Lanterna", "Ombrello"], "queue redelivery and the capped word consume no requests");
@@ -369,7 +399,7 @@ try {
   const snapshot = await (await queueAdmin()).json();
   assert.equal(snapshot.requests.find(item => item.id === job.id).status, "pull_request");
   assert.equal(snapshot.token, undefined);
-  console.log("PASS: image queue, mocked OpenAI, paid limit, duplicate deliveries, editable approval, PR and deployment checks.");
+  console.log("PASS: manual card and photo save bypass OpenAI, explicit single and batch generation, quota, recovery and approval.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

@@ -2,7 +2,7 @@
 
 ## Contesto
 
-La prova di Clessidra ha verificato il ciclo ImageGen e PR. Un task Codex che leggeva le note della coda e accedeva a GitHub avrebbe richiesto un ambiente isolato. Su richiesta dell’utente, la proposta passa alla chiamata diretta all’API OpenAI, avviata dal modulo di Libreria.
+La prova di Clessidra ha verificato il ciclo ImageGen e PR. Un task Codex che leggeva le note della coda e accedeva a GitHub avrebbe richiesto un ambiente isolato. Su richiesta dell’utente, la proposta passa alla chiamata diretta all’API OpenAI, avviata esplicitamente dalla sezione **Generazione con OpenAI** in Libreria. La creazione e la modifica di schede manuali persistono soltanto i dati della Libreria e gli eventuali file caricati.
 
 ## Decisione
 
