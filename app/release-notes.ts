@@ -1,7 +1,8 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Ripassa lettere e numeri",
+  title: "Nuove immagini in Libreria",
   items: [
+    "Pera, banana e girasole ora hanno immagini dedicate. Le trovi nelle categorie Cibi e Oggetti della natura, con articoli e sillabe pronti per gli esercizi.",
     "Con l’ordine obbligatorio stacchi il dito solo quando serve: se il tratto seguente parte da una linea già fatta, scorri lungo di essa e continua (E, T, B, R, A…).",
     "Ripassa è più permissivo: puoi allontanarti un po’ di più dalla guida senza che il tratto diventi rosso.",
     "Con l’ordine obbligatorio non è un errore proseguire oltre un tratto finito o smussare gli angoli; i progressi restano anche se il gesto viene interrotto. La traversa della A mostra il pallino di partenza.",

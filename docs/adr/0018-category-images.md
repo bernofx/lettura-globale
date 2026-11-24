@@ -61,3 +61,10 @@ impedisce di reintrodurre associazioni successivamente rimosse. Le scelte preced
 non sono sostituite; categorie personalizzate restano esplicite e senza fallback.
 Catalogo e mappa passano dalla coda cloud esistente, insieme e senza scritture D1
 dirette. I link già creati rimangono immutabili. Nessuna nuova migrazione.
+
+## Immagini del catalogo
+
+Pera e Banana riusano gli identificativi delle schede già presenti in Cibi.
+Girasole entra in Oggetti della natura. Le tre immagini WebP generate con
+ImageGen usano i metadati del catalogo demo e riusano i simboli delle categorie
+esistenti. Le foto caricate e le schede archiviate mantengono i propri metadati.

@@ -12,7 +12,7 @@ type SyllableMetadata = Partial<SyllableAnalysis> & { word: string };
 // The bundled catalogue is reviewed once here. User words still receive an
 // automatic proposal and only ambiguous spellings are queued for review.
 const reviewedWords: Record<string, string> = {
-  mela: "me-la", gatto: "gat-to", pane: "pa-ne", casa: "ca-sa", palla: "pal-la", sole: "so-le", auto: "au-to", fiore: "fio-re",
+  mela: "me-la", gatto: "gat-to", pane: "pa-ne", casa: "ca-sa", palla: "pal-la", sole: "so-le", auto: "au-to", fiore: "fio-re", girasole: "gi-ra-so-le",
   caramelle: "ca-ra-mel-le", yogurt: "yo-gurt", acqua: "ac-qua", grissini: "gris-si-ni", bocca: "boc-ca", schiena: "schie-na",
   telefono: "te-le-fo-no", pigiama: "pi-gia-ma", bicicletta: "bi-ci-clet-ta", gallo: "gal-lo", gelato: "ge-la-to", maiale: "ma-ia-le",
   coniglio: "co-ni-glio", maglietta: "ma-gliet-ta", piadina: "pia-di-na", giacca: "giac-ca", camion: "ca-mion", granchio: "gran-chio",
