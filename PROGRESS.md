@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] La ricerca nel catalogo interroga direttamente Wikimedia Commons se Openverse è indisponibile o la prima pagina è priva di risultati utilizzabili. I log distinguono la risposta di ciascun servizio.
+
 - [x] Ricerca Openverse dalla Libreria, verifica sulle API di Wikimedia Commons e pubblicazione diretta con crediti per CC0 e CC BY 4.0. Migrazione 0019 per l’attribuzione.
 
 - [x] Le immagini approvate vengono pubblicate direttamente nel catalogo condiviso D1/R2. Il recupero importa le proposte già approvate, riusando la foto. La migrazione 0018 revoca il publisher GitHub, il cui workflow è stato rimosso.

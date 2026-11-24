@@ -51,7 +51,7 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
           <ArrowLeft size={18} aria-hidden="true" />Torna alla Libreria
         </button>
       </PageHeader>
-      {searching ? <OpenversePanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} onCatalogPublished={onCatalogPublished} />
+      {searching ? <OpenversePanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} library={items} onCatalogPublished={onCatalogPublished} />
         : <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} onCatalogPublished={onCatalogPublished} />}
     </div>;
   }

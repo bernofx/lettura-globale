@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { commonsPageId } from "../../../domain/openverse-catalog";
 import { parseScheduledWords, scheduledId, scheduledImageMetadata, scheduledWordKey } from "../../../domain/scheduled-images";
 import { catalogPublicationAvailable, saveImportedCatalogImage } from "../../../server/official-catalog";
 import { CatalogSourceError, prepareCommonsImage, searchCommonsImages } from "../../../server/openverse-catalog";
@@ -28,13 +29,15 @@ export async function POST(request: Request) {
     if (body.action === "search") {
       const detail = body.detail ?? "";
       const page = body.page ?? 1;
+      const source = body.source;
+      if (source !== undefined && source !== "openverse" && source !== "wikimedia") return noStoreJson({ error: "invalid_search" }, { status: 400 });
       if (typeof detail !== "string" || /[|\r\n]/.test(detail) || typeof page !== "number" ||
         !Number.isInteger(page) || page < 1 || page > 5) return noStoreJson({ error: "invalid_search" }, { status: 400 });
       const [search] = parseScheduledWords(`${word} | ${detail}`);
-      return noStoreJson(await searchCommonsImages(search.detail || word, page));
+      return noStoreJson(await searchCommonsImages(search.detail || word, page, source));
     }
 
-    if ((body.action !== "preview" && body.action !== "publish") || typeof body.id !== "string" || !scheduledId.test(body.id)) {
+    if ((body.action !== "preview" && body.action !== "publish") || typeof body.id !== "string" || (!scheduledId.test(body.id) && !commonsPageId(body.id))) {
       return noStoreJson({ error: "invalid_action" }, { status: 400 });
     }
 

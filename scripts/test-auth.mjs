@@ -34,6 +34,12 @@ const indexedPhoto = { id: commonsId, title: "Port lamp", source: "wikimedia", l
 let commonsLicense = ccBy;
 let alternateImageHost = false;
 let redirectedImage = false;
+let commonsSearchUnavailable = false;
+let opensForCamion = 0;
+const camionPage = 132;
+const camionPath = "/wikipedia/commons/thumb/a/a0/Camion.png";
+const camionThumb = "https://upload.wikimedia.org" + camionPath;
+
 
 const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", compatibilityFlags: ["nodejs_compat"], modules,
   durableObjects: { SESSIONS: { className: "RealtimeSession", useSQLite: true } }, d1Databases: { DB: "synthetic-auth-d1" },
@@ -48,6 +54,10 @@ const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", c
       assert.equal(req.headers.has("authorization"), false);
       if (url.pathname === "/v1/images/") {
         assert.equal(url.searchParams.get("source"), "wikimedia");
+        if (url.searchParams.get("q") === "Camion") {
+          opensForCamion++;
+          return Response.json({ detail: "temporary failure" }, { status: 503 });
+        }
         assert.equal(url.searchParams.get("q"), "Port lamp");
         return Response.json({ page_count: 1, results: [
           indexedPhoto, { ...indexedPhoto, id: crypto.randomUUID(), license_version: "3.0" },
@@ -60,6 +70,21 @@ const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", c
     }
     if (url.origin === commonsOrigin) {
       assert.equal(url.pathname, "/w/api.php");
+      if (url.searchParams.get("generator") === "search" || url.searchParams.get("pageids") === String(camionPage)) {
+        const search = url.searchParams.get("generator") === "search";
+        if (search) {
+          assert.equal(url.searchParams.get("gsrsearch"), "Camion");
+          if (commonsSearchUnavailable) return Response.json({ error: { code: "readonly" } });
+        }
+        const width = search ? "320" : "640";
+        assert.equal(url.searchParams.get("iiurlwidth"), width);
+        const page = { pageid: camionPage, index: 1, title: "File:Camion.png", imageinfo: [{
+          mime: "image/png", mediatype: "BITMAP", thumburl: `${camionThumb}/${width}px-Camion.png`,
+          extmetadata: { Artist: { value: "Test Commons" }, LicenseUrl: { value: ccBy } },
+        }] };
+        return Response.json({ ...(search && url.searchParams.get("gsroffset") === "0" ? { continue: { gsroffset: 12 } } : {}),
+          query: { pages: [page] } });
+      }
       assert.equal(url.searchParams.get("titles"), "File:Port_lamp.png");
       return Response.json({ query: { pages: [{ title: "File:Port lamp.png", imageinfo: [{
         mime: "image/png", mediatype: "BITMAP",
@@ -68,7 +93,7 @@ const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", c
       }] }] } });
     }
     if (url.origin === "https://upload.wikimedia.org") {
-      assert.equal(url.pathname, "/wikipedia/commons/thumb/a/a0/Port_lamp.png/640px-Port_lamp.png");
+      assert.ok(["/wikipedia/commons/thumb/a/a0/Port_lamp.png/640px-Port_lamp.png", camionPath + "/640px-Camion.png"].includes(url.pathname));
       if (redirectedImage) return Response.redirect("https://unrelated.example/redirected.png", 302);
       return new Response(Buffer.from(apiImage, "base64"), { headers: { "content-type": "image/png" } });
     }
@@ -493,6 +518,31 @@ try {
   assert.equal(stockPhoto.headers.get("content-type"), "image/png");
   assert.equal(imageApiCalls.length, 2, "search, preview and publication do not invoke OpenAI");
   console.log("PASS: Openverse import checks source, license and exact preview and publishes with credits without spending OpenAI budget.");
+
+  const camionSearch = { action: "search", word: "Camion" };
+  const fallbackResponse = await importImage(camionSearch);
+  assert.equal(fallbackResponse.status, 200);
+  const fallback = await fallbackResponse.json();
+  assert.deepEqual(fallback, { source: "wikimedia", page: 1, more: true,
+    results: [{ id: `commons-${camionPage}`, title: "Camion.png", thumbnail: camionThumb + "/320px-Camion.png", license: "by" }] });
+  const nextPage = await (await importImage({ ...camionSearch, source: "wikimedia", page: 2 })).json();
+  assert.equal(nextPage.page, 2);
+  assert.equal(nextPage.more, false);
+  assert.equal(opensForCamion, 1, "pagination stays on the fallback source");
+  commonsSearchUnavailable = true;
+  const unavailable = await importImage(camionSearch);
+  assert.equal(unavailable.status, 502);
+  assert.deepEqual(await unavailable.json(), { error: "search_unavailable" });
+  commonsSearchUnavailable = false;
+  const camionReview = await (await importImage({ action: "preview", id: `commons-${camionPage}`, word: "Camion" })).json();
+  assert.equal(camionReview.credit.providerId, `commons-${camionPage}`);
+  assert.equal((await importImage({ action: "publish", id: `commons-${camionPage}`, word: "Camion", digest: camionReview.digest, metadata: camionReview.metadata })).status, 409);
+  const directReview = await (await importImage({ action: "preview", id: `commons-${camionPage}`, word: "Camionetta" })).json();
+  assert.equal((await importImage({ action: "publish", id: `commons-${camionPage}`, word: "Camionetta", digest: directReview.digest, metadata: directReview.metadata })).status, 201);
+  assert.equal((await listedCatalog()).find(entry => entry.word === "Camionetta")?.credit.providerId, `commons-${camionPage}`);
+  assert.equal(imageApiCalls.length, 2);
+  console.log("PASS: Camion search falls back to Wikimedia; pagination, preview, diagnostics and optional publication are verified.");
+
 
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
