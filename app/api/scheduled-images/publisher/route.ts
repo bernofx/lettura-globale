@@ -4,6 +4,11 @@ import { stockItems } from "../../../shared/seed-data";
 import { noStoreJson } from "../../controller/_shared";
 import { readQueueBody, scheduledLeaseMs, scheduledPublisher } from "../_shared";
 
+function catalogIllustrates(wordKey: string) {
+  return stockItems.some(item => item.image && !item.categorySymbolOnly && item.contentKind !== "sentence" &&
+    !item.image.startsWith("/images/scheduled/") && scheduledWordKey(item.word) === wordKey);
+}
+
 export async function POST(request: Request) {
   const access = await scheduledPublisher(request);
   if (access instanceof Response) return access;
@@ -61,10 +66,17 @@ export async function POST(request: Request) {
     }
     case "confirm": {
       const url = scheduledAssetUrl(body.id);
-      if (!stockItems.some(item => item.image === url)) return noStoreJson({ error: "deployment_pending" }, { status: 425 });
+      let status = "published";
+      if (!stockItems.some(item => item.image === url)) {
+        // The catalog keeps an image that arrived for the same word meanwhile and skips this entry.
+        const item = await db.prepare(`SELECT word_key FROM scheduled_image_requests WHERE status = 'pull_request' AND ${active}`)
+          .bind(...bindings).first<{ word_key: string }>();
+        if (!item || !catalogIllustrates(item.word_key)) return noStoreJson({ error: "deployment_pending" }, { status: 425 });
+        status = "existing";
+      }
       result = await db.prepare(`UPDATE scheduled_image_requests
-        SET status = 'published', image_base64 = NULL, claim_id = NULL, lease_until = NULL, updated_at = ?
-        WHERE status = 'pull_request' AND ${active}`).bind(now, ...bindings).run();
+        SET status = ?, image_base64 = NULL, claim_id = NULL, lease_until = NULL, updated_at = ?
+        WHERE status = 'pull_request' AND ${active}`).bind(status, now, ...bindings).run();
       break;
     }
     case "existing": {
@@ -79,7 +91,11 @@ export async function POST(request: Request) {
       break;
     }
     case "release": {
-      const messages = { check_failed: "Controlli GitHub da verificare.", deployment_pending: "In attesa del deploy.", unavailable: "Pubblicazione da riprovare." } as const;
+      const messages = {
+        check_failed: "I controlli automatici non sono passati: la pubblicazione è sospesa.",
+        deployment_pending: "In attesa dell’aggiornamento dell’app.",
+        unavailable: "Pubblicazione interrotta, verrà ripresa in automatico.",
+      } as const;
       if (typeof body.reason !== "string" || !Object.hasOwn(messages, body.reason)) return noStoreJson({ error: "invalid_reason" }, { status: 400 });
       result = await db.prepare(`UPDATE scheduled_image_requests
         SET message = ?, claim_id = NULL, lease_until = NULL, updated_at = ?

@@ -11,7 +11,7 @@ export const scheduledImageStatuses = {
   processing: "In lavorazione",
   generated: "Da verificare",
   approved: "Approvata",
-  pull_request: "PR aperta",
+  pull_request: "In pubblicazione",
   published: "Pubblicata",
   existing: "Già presente",
   needs_review: "Da chiarire",

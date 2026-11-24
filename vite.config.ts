@@ -16,6 +16,11 @@ const CLOUDFLARE_D1_DATABASE_ID =
 
 const { d1, r2 } = hostingConfig;
 const workerEntry = "./build/sites-worker.ts";
+// Each environment has its own Worker, D1, queue and triggers. Production stays the
+// default for Workers Builds; a staging build sets LETTURA_WRANGLER_CONFIG.
+const wranglerConfigs = ["wrangler.production.jsonc", "wrangler.staging.jsonc"];
+const wranglerConfig = process.env.LETTURA_WRANGLER_CONFIG ?? "wrangler.production.jsonc";
+if (!wranglerConfigs.includes(wranglerConfig)) throw new Error(`LETTURA_WRANGLER_CONFIG must be one of ${wranglerConfigs.join(", ")}`);
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -82,9 +87,9 @@ export default defineConfig(async ({ command }) => {
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
         // Workers Builds can use bare `wrangler deploy`, which follows Vite's
-        // generated config. Build that artifact from the production config.
+        // generated config. Build that artifact from the chosen environment's config.
         ...(command === "build"
-          ? { configPath: "./wrangler.production.jsonc", config: { main: workerEntry } }
+          ? { configPath: `./${wranglerConfig}`, config: { main: workerEntry } }
           : {
               config: {
                 ...localBindingConfig,
