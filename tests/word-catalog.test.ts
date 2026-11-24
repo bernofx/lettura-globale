@@ -83,3 +83,21 @@ test("una pera archiviata resta associabile alla foto privata che l’ha sostitu
   const privateBanana = { ...oldBanana, privateUpload: true, image: "/api/media/private-banana" };
   assert.equal(hydrateLibrary([privateBanana]).find(item => item.id === oldBanana.id)?.image, privateBanana.image);
 });
+
+test("Clessidra ha una scheda illustrata unica, con categoria, articolo e sillabe", () => {
+  const library = hydrateLibrary([]);
+  const matches = library.filter(item => item.id === "clessidra");
+  assert.equal(matches.length, 1);
+  const item = matches[0];
+  assert.equal(item.word, "Clessidra");
+  assert.equal(item.category, "Oggetti");
+  assert.equal(articleFor(item), "LA");
+  assert.equal(item.syllabification, "cles-si-dra");
+  assert.equal(item.syllableCount, 3);
+  assert.equal(item.syllableStatus, "verified");
+  assert.equal(item.source, "OpenAI ImageGen");
+  assert.equal(item.license, "Uso interno del progetto");
+  assert.equal(item.image, "/images/demo/clessidra.webp");
+  const image = readFileSync(new URL(`../public${item.image}`, import.meta.url));
+  assert.equal(image.toString("ascii", 8, 12), "WEBP");
+});
