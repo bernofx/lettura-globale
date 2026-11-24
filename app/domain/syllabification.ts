@@ -25,7 +25,7 @@ const reviewedWords: Record<string, string> = {
   tuta: "tu-ta", borsa: "bor-sa", fascia: "fa-scia", sciarpa: "sciar-pa", casco: "ca-sco", cuffia: "cuf-fia", sasso: "sas-so",
   roccia: "roc-cia", foglia: "fo-glia", ramo: "ra-mo", tronco: "tron-co", prato: "pra-to", monte: "mon-te", mare: "ma-re", lago: "la-go",
   neve: "ne-ve", pasta: "pa-sta", pizza: "piz-za", riso: "ri-so", pollo: "pol-lo", torta: "tor-ta", uovo: "uo-vo", burro: "bur-ro",
-  zuppa: "zup-pa", pesca: "pe-sca", noce: "no-ce", pirata: "pi-ra-ta", nave: "na-ve",
+  zuppa: "zup-pa", pesca: "pe-sca", noce: "no-ce", pirata: "pi-ra-ta", nave: "na-ve", clessidra: "cles-si-dra",
 };
 
 const vowels = "aeiouàèéìíòóùú";

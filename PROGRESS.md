@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Prova programmata del catalogo demo con la scheda illustrata Clessidra (Oggetti, LA, cles-si-dra). Nave aveva già un’immagine.
+
 - [x] Due immagini WebP in Libreria per Pirata (Persone) e Nave (Trasporti), con articoli IL e LA, sillabazione verificata e i rispettivi esercizi «Trova il pirata» e «Trova la nave».
 
 - [x] Tre immagini WebP in Libreria per Pera e Banana (Cibi) e Girasole (Oggetti della natura). Articoli LA, LA e IL e sillabazione verificata. Le foto di pera e banana riusano le schede esistenti. È incluso l’esercizio «Trova il girasole».

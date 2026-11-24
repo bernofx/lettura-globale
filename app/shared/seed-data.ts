@@ -46,6 +46,7 @@ export const stockItems: LibraryItem[] = [
   { id: "girasole", word: "Girasole", image: "/images/demo/girasole.webp", category: "Oggetti della natura", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "pirata", word: "Pirata", image: "/images/demo/pirata.webp", category: "Persone", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "nave", word: "Nave", image: "/images/demo/nave.webp", category: "Trasporti", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
+  { id: "clessidra", word: "Clessidra", image: "/images/demo/clessidra.webp", category: "Oggetti", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
   { id: "latte", word: "Latte", emoji: "🥛", category: "Cibi", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "letto", word: "Letto", emoji: "🛏️", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },
   { id: "porta", word: "Porta", emoji: "🚪", category: "Casa", source: "Catalogo demo", license: "CC0 demo", author: "OpenMoji demo" },

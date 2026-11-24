@@ -5,6 +5,6 @@ const articlesById: Record<string, "IL" | "LA"> = {
   treno: "IL", barca: "LA", bocca: "LA", schiena: "LA", telefono: "IL", pigiama: "IL",
   bicicletta: "LA", gallo: "IL", gelato: "IL", maiale: "IL", coniglio: "IL", maglietta: "LA",
   piadina: "LA", giacca: "LA", camion: "IL", granchio: "IL", "coca-cola": "LA", carota: "LA",
-  pirata: "IL", nave: "LA",
+  pirata: "IL", nave: "LA", clessidra: "LA",
 };
 export const articleFor = (item: { id: string; article?: "IL" | "LA" | null }) => item.article !== undefined ? item.article ?? undefined : articlesById[item.id];
