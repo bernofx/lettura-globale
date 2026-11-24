@@ -1,5 +1,5 @@
 import { isScheduledWord, scheduledId, scheduledImageMetadata, scheduledWordKey, type ScheduledImageMetadata } from "../domain/scheduled-images";
-import { commonsFileTitle, commonsLicenses, type CommonsCredit } from "../domain/openverse-catalog";
+import { commonsFileTitle, commonsLicenses, commonsPageId, type CommonsCredit } from "../domain/openverse-catalog";
 import type { SupportedImageType } from "../domain/image-validation";
 import { publishedImageBytes, scheduledImagePreview } from "../domain/scheduled-image-preview";
 import { bundledImageWords, imageProposalDigest } from "./scheduled-image-jobs";
@@ -24,7 +24,7 @@ function parseCredit(raw: string): CommonsCredit | null {
   try {
     const credit = JSON.parse(raw) as CommonsCredit;
     if (!credit || !Object.hasOwn(commonsLicenses, credit.license) || !commonsFileTitle(credit.sourceUrl) ||
-      !scheduledId.test(credit.providerId) || typeof credit.title !== "string" || !credit.title ||
+      (!scheduledId.test(credit.providerId) && !commonsPageId(credit.providerId)) || typeof credit.title !== "string" || !credit.title ||
       typeof credit.author !== "string" || !credit.author) return null;
     return { title: credit.title, author: credit.author, sourceUrl: credit.sourceUrl, license: credit.license, providerId: credit.providerId };
   } catch {

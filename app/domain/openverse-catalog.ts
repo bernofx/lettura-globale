@@ -39,3 +39,10 @@ export function commonsCreditLinks(sourceUrl: unknown, licenseUrl: unknown) {
   return typeof sourceUrl === "string" && commonsFileTitle(sourceUrl) && typeof licenseUrl === "string" &&
     Object.values(commonsLicenses).some(license => license.url === licenseUrl) ? { sourceUrl, licenseUrl } : null;
 }
+
+export type CatalogSearchSource = "openverse" | "wikimedia";
+export type CatalogSearchReply = { results: OpenverseResult[]; more: boolean; source: CatalogSearchSource; page: number };
+
+export function commonsPageId(id: string) {
+  return /^commons-([1-9][0-9]{0,12})(?![\s\S])/.exec(id)?.[1] ?? null;
+}
