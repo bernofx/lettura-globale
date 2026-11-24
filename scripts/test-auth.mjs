@@ -41,6 +41,7 @@ const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", c
     assert.equal(body.output_format, "webp");
     assert.equal(body.n, 1);
     assert.equal(body.moderation, "auto");
+    assert.equal(body.background, undefined);
     assert.equal(body.tools, undefined);
     const subject = JSON.parse(body.prompt.split("\n").at(-1));
     imageApiCalls.push(subject);
@@ -356,7 +357,7 @@ try {
   assert.equal((await queueAdmin({ ...approval, metadata: { ...metadata, category: "Azione" } })).status, 422);
   assert.equal((await queueAdmin(approval)).status, 200);
   await queueAdmin({ action: "generate", words: "Ombrello" });
-  await waitForQueueStatus("Ombrello", "needs_review");
+  assert.match((await waitForQueueStatus("Ombrello", "needs_review")).message, /HTTP 400 · moderation_blocked/);
   await queueAdmin({ action: "generate", words: "Ventaglio" });
   const limited = await waitForQueueStatus("Ventaglio", "failed");
   assert.match(limited.message, /Limite mensile/);

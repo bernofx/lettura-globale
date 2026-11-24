@@ -3,7 +3,7 @@ import { scheduledCategories, scheduledId, scheduledImageMetadata, scheduledWord
 import { hashText } from "../domain/sha256";
 import { analyzeItalianSyllables } from "../domain/syllabification";
 import { stockItems } from "../shared/seed-data";
-import { generateOpenAIImage, ImageGenerationAccessError, ImageGenerationRateLimit, ImageGenerationRejected } from "./openai-image-generation";
+import { generateOpenAIImage, OpenAIImageError } from "./openai-image-generation";
 
 export type ScheduledImageJob = { id: string; generationId: string };
 
@@ -115,9 +115,10 @@ export async function processImageJob(job: ScheduledImageJob, env: Cloudflare.En
   try {
     image = await generateOpenAIImage(key, item.word, item.detail);
   } catch (error) {
-    if (error instanceof ImageGenerationRejected) return finish("needs_review", "Rivedi la parola o la precisazione visiva.");
-    if (error instanceof ImageGenerationAccessError) return finish("failed", "Controlla la chiave API e i permessi del progetto OpenAI.");
-    if (error instanceof ImageGenerationRateLimit) return finish("failed", "OpenAI segnala un limite di utilizzo. Controlla il progetto API prima di riprovare.");
+    if (error instanceof OpenAIImageError) {
+      console.warn("OpenAI image generation failed", error.failure);
+      return finish(error.needsReview ? "needs_review" : "failed", error.userMessage);
+    }
     return finish("failed", "Generazione non riuscita. Puoi riprovare dalla coda.");
   }
 

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizeGeneratedWebp, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
+import { generateOpenAIImage, normalizeGeneratedWebp, OpenAIImageError, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
 import { verifyCatalogCommit } from "../scripts/publish-scheduled-image.mjs";
 import { addScheduledCatalog, readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
 import { MAX_SCHEDULED_IMAGES, isScheduledWebp, parseScheduledWords, scheduledAssetUrl, scheduledImageMetadata, scheduledWebpFromBase64, scheduledWordKey } from "../app/domain/scheduled-images.ts";
@@ -127,4 +127,54 @@ test("la risposta del provider conserva soltanto i pixel WebP statici", () => {
   withMetadata[20] |= 2; // Reject animated WebP.
   assert.throws(() => normalizeGeneratedWebp(withMetadata.toString("base64")), /invalid_generated_image/);
   assert.throws(() => normalizeGeneratedWebp("YWJj"), /invalid_generated_image/);
+});
+
+test("gli errori OpenAI conservano dati diagnostici ammessi senza esporre la risposta grezza", async (t) => {
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => Response.json({
+    error: {
+      code: "unsupported_parameter", param: "background", message: "Testo privato del provider",
+    },
+  }, { status: 400, headers: { "x-request-id": "req_test123" } }));
+  await assert.rejects(generateOpenAIImage("synthetic-key", "Lanterna", ""), error => {
+    assert.ok(error instanceof OpenAIImageError);
+    assert.deepEqual(error.failure, {
+      kind: "http", status: 400, code: "unsupported_parameter", parameter: "background", requestId: "req_test123",
+    });
+    assert.match(error.userMessage, /parametro background.*HTTP 400/);
+    assert.doesNotMatch(error.userMessage + JSON.stringify(error.failure), /Testo privato|synthetic-key/);
+    return true;
+  });
+  assert.equal(fetchMock.mock.callCount(), 1);
+
+  fetchMock.mock.mockImplementation(async () => Response.json({
+    error: { code: "arbitrary_echo", param: "arbitrary_echo", message: "arbitrary_echo" },
+  }, { status: 400, headers: { "x-request-id": "arbitrary_echo" } }));
+  await assert.rejects(generateOpenAIImage("synthetic-key", "Lanterna", ""), error => {
+    assert.ok(error instanceof OpenAIImageError);
+    assert.match(error.userMessage, /HTTP 400/);
+    assert.doesNotMatch(error.userMessage + JSON.stringify(error.failure), /arbitrary_echo/);
+    return true;
+  });
+});
+
+test("la coda distingue permessi del modello, quota OpenAI, rete e WebP incompatibile", async (t) => {
+  const denied = { body: { error: { code: "model_not_found" } }, status: 404, message: /modello immagini.*HTTP 404/ };
+  const quota = { body: { error: { code: "insufficient_quota" } }, status: 429, message: /fatturazione.*HTTP 429/ };
+  const wrongImage = { body: { data: [{ b64_json: "YWJj" }] }, status: 200, message: /immagine ricevuta/ };
+  const fetchMock = t.mock.method(globalThis, "fetch");
+  for (const { body, status, message } of [denied, quota, wrongImage]) {
+    fetchMock.mock.mockImplementation(async () => Response.json(body, { status }));
+    await assert.rejects(generateOpenAIImage("synthetic-key", "Lanterna", ""), error => {
+      assert.ok(error instanceof OpenAIImageError);
+      assert.match(error.userMessage, message);
+      return true;
+    });
+  }
+  fetchMock.mock.mockImplementation(async () => { throw new Error("network failure with private context"); });
+  await assert.rejects(generateOpenAIImage("synthetic-key", "Lanterna", ""), error => {
+    assert.ok(error instanceof OpenAIImageError);
+    assert.deepEqual(error.failure, { kind: "network" });
+    assert.match(error.userMessage, /contattare OpenAI/);
+    return true;
+  });
 });
