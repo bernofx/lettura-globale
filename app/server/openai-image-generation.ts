@@ -20,8 +20,11 @@ const imageParameters = new Set([
 type GenerationFailure = { kind: "http" | "network" | "timeout" | "image"; status?: number; code?: string; parameter?: string; requestId?: string };
 
 export class OpenAIImageError extends Error {
-  constructor(readonly failure: GenerationFailure) {
+  readonly failure: GenerationFailure;
+
+  constructor(failure: GenerationFailure) {
     super("openai_image_generation_failed");
+    this.failure = failure;
   }
 
   get needsReview() {
