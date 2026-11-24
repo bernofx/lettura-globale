@@ -68,3 +68,4 @@ Pera e Banana riusano gli identificativi delle schede già presenti in Cibi.
 Girasole entra in Oggetti della natura. Le tre immagini WebP generate con
 ImageGen usano i metadati del catalogo demo e riusano i simboli delle categorie
 esistenti. Le foto caricate e le schede archiviate mantengono i propri metadati.
+Pirata e Nave usano la stessa convenzione, nelle categorie Persone e Trasporti.
