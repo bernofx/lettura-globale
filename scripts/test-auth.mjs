@@ -26,6 +26,15 @@ crypto.subtle.deriveBits = function(algorithm, key, length) {
 };\n` + modules[0].contents;
 const apiImage = readFileSync("public/images/demo/mela.png").toString("base64");
 const imageApiCalls = [];
+const commonsId = "8ce494ce-d038-40ae-a3ab-2131ab07b2f2";
+const commonsOrigin = "https://commons.wikimedia.org";
+const ccBy = "https://creativecommons.org/licenses/by/4.0/";
+const indexedPhoto = { id: commonsId, title: "Port lamp", source: "wikimedia", license: "by", license_version: "4.0",
+  foreign_landing_url: commonsOrigin + "/wiki/File:Port_lamp.png" };
+let commonsLicense = ccBy;
+let alternateImageHost = false;
+let redirectedImage = false;
+
 const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", compatibilityFlags: ["nodejs_compat"], modules,
   durableObjects: { SESSIONS: { className: "RealtimeSession", useSQLite: true } }, d1Databases: { DB: "synthetic-auth-d1" },
   r2Buckets: { BUCKET: "synthetic-soundtrack-r2" },
@@ -34,6 +43,35 @@ const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", c
   queueProducers: { SCHEDULED_IMAGE_JOBS: "synthetic-image-jobs" },
   queueConsumers: { "synthetic-image-jobs": { maxBatchSize: 1, maxBatchTimeout: 0 } },
   async outboundService(req) {
+    const url = new URL(req.url);
+    if (url.origin === "https://api.openverse.org") {
+      assert.equal(req.headers.has("authorization"), false);
+      if (url.pathname === "/v1/images/") {
+        assert.equal(url.searchParams.get("source"), "wikimedia");
+        assert.equal(url.searchParams.get("q"), "Port lamp");
+        return Response.json({ page_count: 1, results: [
+          indexedPhoto, { ...indexedPhoto, id: crypto.randomUUID(), license_version: "3.0" },
+          { ...indexedPhoto, id: crypto.randomUUID(), source: "flickr" },
+          { ...indexedPhoto, id: crypto.randomUUID(), mature: true },
+        ] });
+      }
+      assert.equal(url.pathname, `/v1/images/${commonsId}/`);
+      return Response.json(indexedPhoto);
+    }
+    if (url.origin === commonsOrigin) {
+      assert.equal(url.pathname, "/w/api.php");
+      assert.equal(url.searchParams.get("titles"), "File:Port_lamp.png");
+      return Response.json({ query: { pages: [{ title: "File:Port lamp.png", imageinfo: [{
+        mime: "image/png", mediatype: "BITMAP",
+        thumburl: alternateImageHost ? "https://unrelated.example/secret.png" : "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Port_lamp.png/640px-Port_lamp.png",
+        extmetadata: { Artist: { value: "<a href='https://example.test'>Demo &amp; Author</a>" }, LicenseUrl: { value: commonsLicense } },
+      }] }] } });
+    }
+    if (url.origin === "https://upload.wikimedia.org") {
+      assert.equal(url.pathname, "/wikipedia/commons/thumb/a/a0/Port_lamp.png/640px-Port_lamp.png");
+      if (redirectedImage) return Response.redirect("https://unrelated.example/redirected.png", 302);
+      return new Response(Buffer.from(apiImage, "base64"), { headers: { "content-type": "image/png" } });
+    }
     assert.equal(req.url, "https://api.openai.com/v1/images/generations");
     assert.equal(req.headers.get("authorization"), "Bearer synthetic-key");
     assert.equal(req.method, "POST");
@@ -413,6 +451,49 @@ try {
   const snapshot = await (await queueAdmin()).json();
   assert.equal(snapshot.requests.find(item => item.id === job.id).status, "published");
   console.log("PASS: manual card and photo save bypass OpenAI, explicit single and batch generation, quota, private previews, direct publication and legacy recovery.");
+  const importPath = "/api/official-catalog/import";
+  const importImage = (body, key = adminCookie, profile = "adult-a") => request(importPath, {
+    method: "POST", headers: { cookie: key, "x-scheduled-images-profile": profile, "content-type": "application/json" },
+    body: JSON.stringify({ word: "Fanalino", ...body }),
+  });
+  const searches = { action: "search", detail: "Port lamp" };
+  assert.equal((await importImage(searches, secondCookie, "adult-b")).status, 403);
+  assert.equal((await importImage({ ...searches, detail: "https://example.test/" })).status, 400);
+  const searchResponse = await importImage(searches);
+  const found = await searchResponse.json();
+  assert.equal(searchResponse.status, 200, JSON.stringify(found));
+  assert.deepEqual(found.results, [{ id: commonsId, title: "Port lamp", thumbnail: `https://api.openverse.org/v1/images/${commonsId}/thumb/`, license: "by" }]);
+
+  const imagePreview = { action: "preview", id: commonsId };
+  alternateImageHost = true;
+  assert.equal((await importImage(imagePreview)).status, 422);
+  alternateImageHost = false;
+  redirectedImage = true;
+  assert.equal((await importImage(imagePreview)).status, 502);
+  redirectedImage = false;
+  commonsLicense = "https://creativecommons.org/publicdomain/zero/1.0/";
+  assert.equal((await (await importImage(imagePreview)).json()).credit.license, "cc0");
+  commonsLicense = ccBy;
+  const review = await (await importImage(imagePreview)).json();
+  assert.equal(review.imageType, "image/png");
+  assert.equal(review.credit.author, "Demo & Author");
+  assert.equal(review.credit.sourceUrl, commonsOrigin + "/wiki/File:Port_lamp.png");
+  assert.equal((await listedCatalog()).length, 3, "preview does not publish");
+  const importApproval = { action: "publish", id: commonsId, digest: review.digest, metadata: review.metadata };
+  assert.equal((await importImage({ ...importApproval, digest: "f".repeat(64) })).status, 409);
+  commonsLicense = "https://creativecommons.org/licenses/by-nc/4.0/";
+  assert.equal((await importImage(importApproval)).status, 422, "publication rechecks the license at source");
+  commonsLicense = ccBy;
+  const approvedImports = await Promise.all([importImage(importApproval), importImage(importApproval)]);
+  assert.deepEqual(approvedImports.map(response => response.status).sort(), [201, 409]);
+  const imported = (await listedCatalog()).find(entry => entry.word === "Fanalino");
+  assert.deepEqual(imported.credit, review.credit);
+  const stockPhoto = await request(`/images/catalog/${imported.assetId}.png`);
+  assert.equal(stockPhoto.status, 200);
+  assert.equal(stockPhoto.headers.get("content-type"), "image/png");
+  assert.equal(imageApiCalls.length, 2, "search, preview and publication do not invoke OpenAI");
+  console.log("PASS: Openverse import checks source, license and exact preview and publishes with credits without spending OpenAI budget.");
+
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

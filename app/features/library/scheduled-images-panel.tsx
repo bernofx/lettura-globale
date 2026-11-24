@@ -4,12 +4,13 @@ import { RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MAX_SCHEDULED_INPUT_LENGTH, SCHEDULED_IMAGES_URL,
-  parseScheduledWords, scheduledCategories, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
+  parseScheduledWords, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
 } from "../../domain/scheduled-images";
 import type { SupportedImageType } from "../../domain/image-validation";
 import { fetchWithTimeout } from "../../shared/cloud-client";
 import { SectionHeading } from "../../shared/ui/headings";
 import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
+import { CatalogMetadataFields } from "./catalog-metadata-fields";
 import "./scheduled-images-panel.css";
 
 type Queue = {
@@ -256,33 +257,8 @@ export function ScheduledImagesPanel({ profileId, onCatalogPublished }: { profil
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className="scheduled-images-preview" src={`data:${proposal.imageType};base64,${proposal.image}`} alt={proposal.word}
         onLoad={() => setProposalLoaded(true)} onError={() => setProposalLoaded(false)} />
-      <div className="scheduled-images-metadata">
-        <label>Categoria
-          <select value={proposal.metadata.category} disabled={busy} onChange={event => {
-            const category = scheduledCategories.find(value => value === event.target.value);
-            if (category) setProposal({ ...proposal, metadata: { ...proposal.metadata, category } });
-          }}>
-            {scheduledCategories.map(category => <option key={category}>{category}</option>)}
-          </select>
-        </label>
-        <label>Articolo nell’esercizio IL / LA
-          <select value={proposal.metadata.article ?? ""} disabled={busy} onChange={event => {
-            const value = event.target.value;
-            const article = value === "IL" || value === "LA" ? value : null;
-            setProposal({ ...proposal, metadata: { ...proposal.metadata, article } });
-          }}>
-            <option value="">Non usare nell’esercizio</option>
-            <option>IL</option>
-            <option>LA</option>
-          </select>
-        </label>
-        <label className="scheduled-images-syllables">Divisione in sillabe
-          <input value={proposal.metadata.syllabification} maxLength={96} disabled={busy} aria-describedby="scheduled-syllables-hint"
-            onChange={event => setProposal({ ...proposal, metadata: { ...proposal.metadata, syllabification: event.target.value } })}
-            aria-invalid={!validMetadata} />
-          <small id="scheduled-syllables-hint">Separa le sillabe con i trattini, per esempio lan-ter-na.</small>
-        </label>
-      </div>
+      <CatalogMetadataFields metadata={proposal.metadata} disabled={busy} valid={Boolean(validMetadata)}
+        onChange={metadata => setProposal({ ...proposal, metadata })} />
       {error && <p className="form-error" role="alert">{error}</p>}
       <ModalActions onCancel={() => setProposal(undefined)} cancelLabel="Chiudi" cancelDisabled={busy}>
         {proposalItem && <button type="button" className="danger-button" disabled={busy} onClick={() => setDiscard(proposalItem)}>

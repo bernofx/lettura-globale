@@ -77,3 +77,38 @@
 @media (max-width: 540px) {
   .scheduled-images-metadata { grid-template-columns: minmax(0, 1fr); }
 }
+
+.openverse-form label {
+  display: grid;
+  gap: .35rem;
+}
+.openverse-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  padding: .65rem .75rem;
+  font: inherit;
+  background: var(--surface, white);
+  color: inherit;
+}
+.openverse-results {
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: .75rem;
+}
+.openverse-results button {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: .3rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.openverse-results img {
+  width: 100%;
+  height: 8rem;
+  object-fit: contain;
+}

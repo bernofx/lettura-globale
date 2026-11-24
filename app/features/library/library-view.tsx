@@ -7,6 +7,7 @@ import { type SoundPreferences } from "../../domain/sound-preferences";
 import { SoundSettingsPanel } from "../settings/appearance-view";
 import { GameSoundtrackPanel } from "./game-soundtrack-panel";
 import { PuzzleLibraryPanel } from "./puzzle-library-panel";
+import { OpenversePanel } from "./openverse-panel";
 import { ScheduledImagesPanel } from "./scheduled-images-panel";
 import type { PuzzleLibrary } from "../games/use-puzzle-library";
 import { Artwork } from "../../shared/artwork";
@@ -22,33 +23,36 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
   const [reviewOnly, setReviewOnly] = useState(false);
   const [wordsExpanded, setWordsExpanded] = useState(false);
   const [sentencesExpanded, setSentencesExpanded] = useState(false);
-  const [generationProfile, setGenerationProfile] = useState<string>();
+  const [catalogTool, setCatalogTool] = useState<{ profile: string; tool: "search" | "generate" }>();
   const generationButton = useRef<HTMLButtonElement>(null);
+  const catalogSearchButton = useRef<HTMLButtonElement>(null);
   const backButton = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef(false);
-  const generationOpen = Boolean(scheduledImagesProfile && generationProfile === scheduledImagesProfile);
+  const returnFocus = useRef<"search" | "generate" | null>(null);
+  const generationOpen = Boolean(scheduledImagesProfile && catalogTool?.profile === scheduledImagesProfile);
 
   useEffect(() => {
     if (generationOpen) {
       backButton.current?.focus();
     } else if (returnFocus.current) {
-      returnFocus.current = false;
-      generationButton.current?.focus();
+      (returnFocus.current === "search" ? catalogSearchButton : generationButton).current?.focus();
+      returnFocus.current = null;
     }
   }, [generationOpen]);
 
-  if (scheduledImagesProfile && generationOpen) {
+  if (scheduledImagesProfile && generationOpen && catalogTool) {
+    const searching = catalogTool.tool === "search";
     return <div className="page library-sections">
-      <PageHeader eyebrow="LIBRERIA" title="Generazione immagini con OpenAI"
-        description="Crea proposte per il catalogo condiviso, una parola alla volta o da un elenco.">
+      <PageHeader eyebrow="LIBRERIA" title={searching ? "Catalogo pubblico" : "Generazione immagini con OpenAI"}
+        description={searching ? undefined : "Crea proposte per il catalogo condiviso, una parola alla volta o da un elenco."}>
         <button ref={backButton} type="button" className="ghost-button library-header-action" onClick={() => {
-          returnFocus.current = true;
-          setGenerationProfile(undefined);
+          returnFocus.current = catalogTool.tool;
+          setCatalogTool(undefined);
         }}>
           <ArrowLeft size={18} aria-hidden="true" />Torna alla Libreria
         </button>
       </PageHeader>
-      <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} onCatalogPublished={onCatalogPublished} />
+      {searching ? <OpenversePanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} onCatalogPublished={onCatalogPublished} />
+        : <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} onCatalogPublished={onCatalogPublished} />}
     </div>;
   }
 
@@ -66,10 +70,16 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
   const cards = (entries: LibraryItem[], sentence = false) => <div className="library-grid">{entries.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}{!hasArtwork(item) && <span className="word-only-badge">Solo parola</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{sentence ? `${item.subject} · ${item.verb}` : `${item.category}${articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}`}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3>{sentence ? <p className="syllables">SOGGETTO + VERBO</p> : <p className={item.syllableStatus === "needs-review" ? "syllables needs-review" : "syllables"}>{item.syllabification?.toLocaleUpperCase("it-IT")} · {item.syllableCount} sillabe{item.syllableStatus === "needs-review" ? " · Da verificare" : ""}</p>}<p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>;
   return <div className="page library-sections">
     <PageHeader eyebrow="CONTENUTI" title="Libreria" description="Gestisci immagini singole, frasi d’azione, puzzle e suoni.">
-      {scheduledImagesProfile && <button ref={generationButton} type="button" className="ghost-button library-header-action"
-        onClick={() => setGenerationProfile(scheduledImagesProfile)}>
-        <Sparkles size={18} aria-hidden="true" />Generazione con OpenAI
-      </button>}
+      {scheduledImagesProfile && <div className="library-catalog-actions">
+        <button ref={catalogSearchButton} type="button" className="ghost-button library-header-action"
+          onClick={() => setCatalogTool({ profile: scheduledImagesProfile, tool: "search" })}>
+          <Search size={18} aria-hidden="true" />Cerca in un catalogo pubblico
+        </button>
+        <button ref={generationButton} type="button" className="ghost-button library-header-action"
+          onClick={() => setCatalogTool({ profile: scheduledImagesProfile, tool: "generate" })}>
+          <Sparkles size={18} aria-hidden="true" />Generazione con OpenAI
+        </button>
+      </div>}
     </PageHeader>
     <div className="toolbar">
       <label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label>

@@ -69,7 +69,7 @@ export async function wordsWithImages(db: D1Database, accountId: string) {
   return new Set([...bundledImageWords, ...results.filter(item => typeof item.word === "string").map(item => scheduledWordKey(item.word))]);
 }
 
-function draftMetadata(word: string): ScheduledImageMetadata {
+export function draftMetadata(word: string): ScheduledImageMetadata {
   const card = wordCards.find(item => scheduledWordKey(item.word) === scheduledWordKey(word));
   const category = scheduledCategories.find(category => category === card?.category) ?? "Oggetti";
   const article = card ? articleFor(card) ?? null : null;

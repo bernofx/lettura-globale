@@ -17,3 +17,5 @@ Il provider riceve la parola e l’eventuale precisazione visiva generica. Il Wo
 Ogni chiamata OpenAI prenota un tentativo prima dell’invio, inclusi gli errori e gli esiti incerti. Questi ultimi richiedono una nuova richiesta esplicita prima di spendere un altro tentativo. Il limite è sul numero di chiamate, mentre la fattura dipende dalle tariffe e dall’uso API. Rimuovere `OPENAI_API_KEY` o impostare il limite a `0` sospende le nuove generazioni.
 
 Riferimenti [OpenAI Images API](https://developers.openai.com/api/reference/resources/images/methods/generate) e [modello GPT-Image-2.6 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare).
+
+Per cercare una foto esistente, usa **Libreria → Cerca in un catalogo pubblico**. L’anteprima verifica la licenza su Wikimedia Commons. L’approvazione usa lo stesso catalogo D1/R2, con i crediti dell’autore, e lascia invariato il contatore OpenAI. Applica la migrazione `0019_openverse_credits` prima del deploy. Vedi [ADR 0027](adr/0027-import-openverse.md).

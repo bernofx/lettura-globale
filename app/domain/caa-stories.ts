@@ -1,3 +1,5 @@
+import { commonsCreditLinks } from "./openverse-catalog.ts";
+
 export const ARASAAC_CREDIT = "Pittogrammi: Sergio Palao · ARASAAC (arasaac.org) · Proprietà: Governo di Aragona · CC BY-NC-SA";
 export const CAA_MAX_TEXT = 4000;
 export const CAA_MAX_SENTENCES = 32;
@@ -24,7 +26,7 @@ export const CAA_BOOK_PAPERS = {
 export type CaaSymbol =
   | { kind: "arasaac"; id: number }
   | { kind: "media"; id: string; source: string; author: string; license: string }
-  | { kind: "bundled"; path: string; source: string; author: string; license: string };
+  | { kind: "bundled"; path: string; source: string; author: string; license: string; sourceUrl?: string; licenseUrl?: string };
 export type CaaToken = { id: string; text: string; symbol?: CaaSymbol };
 export type CaaSentence = { id: string; text?: string; tokens: CaaToken[]; pageBreak: boolean };
 export type CaaStory = {
@@ -39,12 +41,12 @@ export type CaaStored = { owner: string; story: CaaStory; etag: string | null; p
 export const caaId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(value);
 // Library/media IDs predate story UUIDs: IDs such as "letto" are valid media keys.
 export const caaMediaId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value);
-export type CaaLibraryItem = { id: string; word: string; image?: string; remoteImageId?: string; source: string; author: string; license: string };
+export type CaaLibraryItem = { id: string; word: string; image?: string; remoteImageId?: string; source: string; author: string; license: string; sourceUrl?: string; licenseUrl?: string };
 export function caaLibrarySymbol(item: CaaLibraryItem): CaaSymbol | null {
   if ([item.source,item.author,item.license].some(text => typeof text !== "string" || !text.trim() || text.length > 300)) return null;
   const rights = { source: item.source,author: item.author,license: item.license };
   if (caaMediaId(item.remoteImageId)) return { kind: "media",id: item.remoteImageId,...rights };
-  if (item.image && /^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(item.image)) return { kind: "bundled",path: item.image,...rights };
+  if (item.image && /^\/images\/[a-zA-Z0-9/_-]+\.(webp|png|jpg|jpeg)$/.test(item.image)) return { kind: "bundled",path: item.image,...rights, ...commonsCreditLinks(item.sourceUrl, item.licenseUrl) };
   return null;
 }
 export const caaSearchTerm = (value: string) => value.toLocaleLowerCase("it-IT").normalize("NFC").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
@@ -107,7 +109,7 @@ export function parseCaaStory(value: unknown): CaaStory {
   }
   if (count > CAA_MAX_TOKENS || characters > CAA_MAX_TEXT) throw new Error("story_too_long");
   // Rebuild the document so unexpected fields cannot smuggle account IDs or URLs.
-  return { schemaVersion: 1, id: v.id, title: v.title, draftText: v.draftText, sentences: v.sentences.map(s => ({ id: s.id, text: sentenceText(s), pageBreak: s.pageBreak, tokens: s.tokens.map(t => ({ id: t.id, text: t.text, ...(t.symbol ? { symbol: t.symbol.kind === "arasaac" ? { kind: "arasaac" as const, id: t.symbol.id } : t.symbol.kind === "media" ? { kind: "media" as const, id: t.symbol.id, source: t.symbol.source, author: t.symbol.author, license: t.symbol.license } : { kind: "bundled" as const, path: t.symbol.path, source: t.symbol.source, author: t.symbol.author, license: t.symbol.license } } : {}) })) })), format: v.format, paper: v.paper, ...(v.letterCase !== undefined ? { letterCase: v.letterCase } : {}), ...(v.bookPaper !== undefined ? { bookPaper: v.bookPaper } : {}), ...(v.customPaper !== undefined ? { customPaper: { width: v.customPaper.width,height: v.customPaper.height } } : {}), symbolSize: v.symbolSize, ...(v.symbolScale !== undefined ? { symbolScale: v.symbolScale } : {}), sentencesPerPage: v.sentencesPerPage, cover: v.cover, nonCommercial: v.nonCommercial, archived: v.archived, updatedAt: v.updatedAt };
+  return { schemaVersion: 1, id: v.id, title: v.title, draftText: v.draftText, sentences: v.sentences.map(s => ({ id: s.id, text: sentenceText(s), pageBreak: s.pageBreak, tokens: s.tokens.map(t => ({ id: t.id, text: t.text, ...(t.symbol ? { symbol: t.symbol.kind === "arasaac" ? { kind: "arasaac" as const, id: t.symbol.id } : t.symbol.kind === "media" ? { kind: "media" as const, id: t.symbol.id, source: t.symbol.source, author: t.symbol.author, license: t.symbol.license } : { kind: "bundled" as const, path: t.symbol.path, source: t.symbol.source, author: t.symbol.author, license: t.symbol.license, ...commonsCreditLinks(t.symbol.sourceUrl, t.symbol.licenseUrl) } } : {}) })) })), format: v.format, paper: v.paper, ...(v.letterCase !== undefined ? { letterCase: v.letterCase } : {}), ...(v.bookPaper !== undefined ? { bookPaper: v.bookPaper } : {}), ...(v.customPaper !== undefined ? { customPaper: { width: v.customPaper.width,height: v.customPaper.height } } : {}), symbolSize: v.symbolSize, ...(v.symbolScale !== undefined ? { symbolScale: v.symbolScale } : {}), sentencesPerPage: v.sentencesPerPage, cover: v.cover, nonCommercial: v.nonCommercial, archived: v.archived, updatedAt: v.updatedAt };
 }
 export function caaSymbolUrl(symbol: CaaSymbol) {
   return symbol.kind === "arasaac" ? `https://static.arasaac.org/pictograms/${symbol.id}/${symbol.id}_500.png` : symbol.kind === "media" ? `/api/media/${symbol.id}` : symbol.path;

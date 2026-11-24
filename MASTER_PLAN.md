@@ -28,7 +28,7 @@ La sezione Giochi è accessibile dal pannello adulto anche senza scegliere un ba
 - libreria privata di parole e immagini;
 - vocabolario iniziale organizzato nelle categorie didattiche `Animali`, `Parti del corpo`, `Vestiti`, `Oggetti della natura` e `Cibi`, con termini semplici e facilmente rappresentabili;
 - upload JPEG/PNG/WebP validato, normalizzato e ridimensionato;
-- ricerca futura soltanto tramite API ufficiali di provider stock approvati;
+- ricerca in Wikimedia Commons tramite API Openverse con licenza e crediti verificati alla fonte;
 - generazione AI opzionale, attivabile dall'adulto, tramite API ufficiale di un provider approvato;
 - niente scraping né download da URL arbitrari;
 - import con un click/tap e conservazione di provider, asset ID, autore, fonte, licenza e data;
@@ -36,6 +36,10 @@ La sezione Giochi è accessibile dal pannello adulto anche senza scegliere un ba
 - cancellazione logica degli asset usati nello storico e conservazione della versione mostrata al bambino;
 
 Il catalogo attuale è esclusivamente dimostrativo. Prima di integrare immagini stock reali occorre un ADR sul provider e sulle licenze.
+
+### Ricerca nel catalogo pubblico
+
+La Libreria permette agli amministratori abilitati di cercare Wikimedia Commons tramite Openverse, verificare alla fonte i risultati CC0 1.0 o CC BY 4.0 e pubblicare una foto con i relativi crediti in D1/R2. Vedi ADR 0027.
 
 ### Generazione immagini AI per il catalogo condiviso
 
