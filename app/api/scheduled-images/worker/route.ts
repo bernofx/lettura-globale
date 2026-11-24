@@ -1,83 +1,66 @@
-import { env } from "cloudflare:workers";
 import { hashText } from "../../../chatgpt-auth";
-import { workerReportStatuses, type ScheduledImageRequest, type WorkerReportStatus } from "../../../domain/scheduled-images";
+import { MAX_SCHEDULED_IMAGE_BODY, scheduledId, scheduledImageMetadata, scheduledWebpFromBase64 } from "../../../domain/scheduled-images";
 import { noStoreJson } from "../../controller/_shared";
-import { readQueueBody, requestFields, wordsWithImages } from "../_shared";
-
-const LEASE_MS = 60 * 60 * 1000;
-const CLAIM_SIZE = 3;
-const workerStillAuthorized = "EXISTS (SELECT 1 FROM scheduled_image_workers WHERE account_id = ? AND token_hash = ?)";
+import { readQueueBody, scheduledLeaseMs, scheduledWorker, wordsWithImages } from "../_shared";
 
 export async function POST(request: Request) {
-  if (!env.DB) return noStoreJson({ error: "queue_unavailable" }, { status: 503 });
-  const token = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.get("authorization") ?? "")?.[1];
-  if (!token) return noStoreJson({ error: "worker_authentication_required" }, { status: 401 });
-  const db = env.DB;
-  const tokenHash = await hashText(token);
-  const worker = await db.prepare("SELECT account_id FROM scheduled_image_workers WHERE token_hash = ?").bind(tokenHash).first<{ account_id: string }>();
-  if (!worker) return noStoreJson({ error: "worker_authentication_required" }, { status: 401 });
-  const accountId = worker.account_id;
-  const body = await readQueueBody(request).catch(() => null);
+  const access = await scheduledWorker(request, "generator");
+  if (access instanceof Response) return access;
+  const { db, accountId, tokenHash, stillAuthorized } = access;
+  const body = await readQueueBody(request, MAX_SCHEDULED_IMAGE_BODY).catch(() => null);
   if (!body) return noStoreJson({ error: "invalid_body" }, { status: 400 });
   const now = Date.now();
 
   if (body.action === "claim") {
     const claimId = crypto.randomUUID();
     const { results } = await db.prepare(`
-      WITH available AS MATERIALIZED (
-        SELECT item.id, item.batch_id FROM scheduled_image_requests AS item
-        WHERE item.account_id = ? AND item.status IN ('queued', 'processing', 'pull_request')
-          AND (item.lease_until IS NULL OR item.lease_until <= ?)
-          AND (item.batch_id IS NULL OR NOT EXISTS (
-            SELECT 1 FROM scheduled_image_requests AS active
-            WHERE active.account_id = item.account_id AND active.batch_id = item.batch_id AND active.lease_until > ?
-          ))
-        ORDER BY CASE WHEN item.batch_id IS NOT NULL THEN 0 ELSE 1 END, item.created_at, item.id
-      )
       UPDATE scheduled_image_requests
-      SET status = CASE WHEN status = 'queued' THEN 'processing' ELSE status END,
-        batch_id = COALESCE(batch_id, ?), claim_id = ?, lease_until = ?, updated_at = ?
-      WHERE ${workerStillAuthorized} AND id IN (
-        SELECT id FROM available WHERE batch_id IS (SELECT batch_id FROM available LIMIT 1) LIMIT ?
+      SET status = 'processing', claim_id = ?, lease_until = ?, updated_at = ?
+      WHERE ${stillAuthorized} AND id IN (
+        SELECT id FROM scheduled_image_requests
+        WHERE account_id = ? AND status IN ('queued', 'processing') AND (lease_until IS NULL OR lease_until <= ?)
+        ORDER BY created_at, id LIMIT 3
       )
-      RETURNING ${requestFields}, word_key AS wordKey, batch_id AS batchId
-    `).bind(accountId, now, now, claimId, claimId, now + LEASE_MS, now, accountId, tokenHash, CLAIM_SIZE)
-      .all<ScheduledImageRequest & { wordKey: string; batchId: string }>();
+      RETURNING id, word, detail, word_key AS wordKey
+    `).bind(claimId, now + scheduledLeaseMs, now, accountId, tokenHash, accountId, now)
+      .all<{ id: string; word: string; detail: string; wordKey: string }>();
     if (!results.length) return noStoreJson({ requests: [] });
     const images = await wordsWithImages(db, accountId);
-    return noStoreJson({ claimId, batchId: results[0].batchId,
-      requests: results.map(item => ({
-        id: item.id, word: item.word, detail: item.detail, status: item.status,
-        message: item.message, prNumber: item.prNumber, hasImage: images.has(item.wordKey),
-      })),
-    });
+    const requests = [];
+    for (const item of results) {
+      if (images.has(item.wordKey)) {
+        await db.prepare(`UPDATE scheduled_image_requests SET status = 'existing', claim_id = NULL, lease_until = NULL
+          WHERE account_id = ? AND id = ? AND claim_id = ? AND ${stillAuthorized}`)
+          .bind(accountId, item.id, claimId, accountId, tokenHash).run();
+      } else {
+        requests.push({ id: item.id, word: item.word, detail: item.detail });
+      }
+    }
+    return noStoreJson({ claimId, requests });
   }
 
-  if (body.action !== "report" || typeof body.id !== "string" || typeof body.claimId !== "string" ||
-    !workerReportStatuses.includes(body.status as WorkerReportStatus)) {
+  if (typeof body.id !== "string" || !scheduledId.test(body.id) || typeof body.claimId !== "string" || !scheduledId.test(body.claimId)) {
     return noStoreJson({ error: "invalid_action" }, { status: 400 });
   }
-  const status = body.status as WorkerReportStatus;
-  const linked = status === "pull_request" || status === "published";
-  const prNumber = linked && typeof body.prNumber === "number" && Number.isSafeInteger(body.prNumber) && body.prNumber > 0 ? body.prNumber : null;
-  if ((linked && !prNumber) || (body.message !== undefined && (typeof body.message !== "string" || body.message.length > 400))) {
-    return noStoreJson({ error: "invalid_report" }, { status: 400 });
+  const active = `account_id = ? AND id = ? AND claim_id = ? AND status = 'processing' AND lease_until > ? AND ${stillAuthorized}`;
+  const bindings = [accountId, body.id, body.claimId, now, accountId, tokenHash] as const;
+
+  if (body.action === "submit" && Object.keys(body).length === 5) {
+    const item = await db.prepare(`SELECT word FROM scheduled_image_requests WHERE ${active}`).bind(...bindings).first<{ word: string }>();
+    if (!item) return noStoreJson({ error: "claim_changed" }, { status: 409 });
+    const metadata = scheduledImageMetadata(item.word, body.metadata);
+    if (!metadata || !scheduledWebpFromBase64(body.image)) return noStoreJson({ error: "invalid_proposal" }, { status: 422 });
+    const result = await db.prepare(`UPDATE scheduled_image_requests
+      SET status = 'generated', metadata = ?, image_base64 = ?, proposal_digest = ?, claim_id = NULL, lease_until = NULL, updated_at = ?
+      WHERE ${active}`).bind(JSON.stringify(metadata), body.image, await hashText(JSON.stringify([metadata, body.image])), now, ...bindings).run();
+    if (result.meta.changes) return noStoreJson({ ok: true });
+  } else if (body.action === "report" && Object.keys(body).length === 4 && (body.status === "needs_review" || body.status === "failed")) {
+    const result = await db.prepare(`UPDATE scheduled_image_requests
+      SET status = ?, claim_id = NULL, lease_until = NULL, updated_at = ?
+      WHERE ${active}`).bind(body.status, now, ...bindings).run();
+    if (result.meta.changes) return noStoreJson({ ok: true });
+  } else {
+    return noStoreJson({ error: "invalid_action" }, { status: 400 });
   }
-  const lease = status === "pull_request" && body.release !== true ? now + LEASE_MS : null;
-  const result = await db.prepare(`
-    UPDATE scheduled_image_requests
-    SET status = ?, message = ?, pr_number = ?, lease_until = ?, updated_at = ?
-    WHERE account_id = ? AND id = ? AND claim_id = ? AND ${workerStillAuthorized}
-      AND (
-        (lease_until > ? AND (
-          (status = 'processing' AND ? <> 'published') OR
-          (status = 'pull_request' AND ? IN ('pull_request', 'published') AND pr_number = ?)
-        )) OR
-        (lease_until IS NULL AND status = ? AND pr_number IS ? AND ? IS NULL)
-      )
-    RETURNING ${requestFields}
-  `).bind(status, body.message ?? "", prNumber, lease, now, accountId, body.id, body.claimId, accountId, tokenHash,
-    now, status, status, prNumber, status, prNumber, lease).first<ScheduledImageRequest>();
-  if (!result) return noStoreJson({ error: "claim_changed" }, { status: 409 });
-  return noStoreJson({ request: result });
+  return noStoreJson({ error: "claim_changed" }, { status: 409 });
 }

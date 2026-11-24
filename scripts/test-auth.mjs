@@ -256,7 +256,7 @@ try {
     headers: { cookie: key, "x-scheduled-images-profile": profile, "content-type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const queueWorker = (token, body) => request(queuePath + "/worker", {
+  const queueWorker = (token, body, role = "worker") => request(queuePath + "/" + role, {
     method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify(body),
   });
   assert.equal((await request(queuePath)).status, 401);
@@ -266,7 +266,7 @@ try {
   const withPhoto = JSON.parse(existingState.payload);
   withPhoto.library.push({ id: "private-photo", word: "Rocchetto", privateUpload: true, remoteImageId: "private-photo" });
   await db.prepare("UPDATE user_states SET payload = ? WHERE user_id = ?").bind(JSON.stringify(withPhoto), account).run();
-  const added = await (await queueAdmin({ action: "enqueue", words: "Nave\nRocchetto\nClessidra\nLanterna\nLANTERNA" })).json();
+  const added = await (await queueAdmin({ action: "enqueue", words: "Nave\nRocchetto\nClessidra\nLanterna | una lampada a olio\nLANTERNA" })).json();
   assert.equal(added.accepted, 4);
   assert.equal(added.requests.find(item => item.word === "Nave").status, "existing");
   assert.equal(added.requests.find(item => item.word === "Rocchetto").status, "existing");
@@ -277,28 +277,63 @@ try {
   assert.ok(claims.every(response => response.status === 200));
   const assigned = (await Promise.all(claims.map(response => response.json()))).filter(result => result.requests.length);
   assert.equal(assigned.length, 1);
-  const { claimId, batchId, requests } = assigned[0];
+  const { claimId, requests } = assigned[0];
   assert.equal(requests.length, 1, "Clessidra and Nave already exist in the bundled catalog");
   const [job] = requests;
+  assert.deepEqual(Object.keys(job).sort(), ["detail", "id", "word"]);
   assert.equal(job.word, "Lanterna");
-  const report = (status, extra = {}, token = workerKey, lease = claimId) => queueWorker(token, { action: "report", id: job.id, claimId: lease, status, ...extra });
-  assert.equal((await report("published", { prNumber: 12 })).status, 409);
-  assert.equal((await report("pull_request", { prNumber: 12, release: true })).status, 200);
-  const nextClaim = await (await queueWorker(workerKey, { action: "claim" })).json();
-  assert.equal(nextClaim.batchId, batchId);
-  assert.equal(nextClaim.requests[0].prNumber, 12);
-  assert.equal((await report("published", { prNumber: 12 })).status, 409, "an older claim cannot finalize the PR");
+  const { token: publisherKey } = await (await queueAdmin({ action: "rotate_publisher_key" })).json();
+  const publisher = (body, token = publisherKey) => queueWorker(token, body, "publisher");
+  assert.equal((await publisher({ action: "claim" }, workerKey)).status, 401, "the image generator cannot be a publisher");
+  assert.equal((await queueWorker(publisherKey, { action: "claim" })).status, 401, "the publisher cannot read generation notes");
+  const worker = (body, token = workerKey) => queueWorker(token, { id: job.id, claimId, ...body });
+  assert.equal((await worker({ action: "report", status: "published" })).status, 400);
+  assert.equal((await worker({ action: "report", status: "failed", message: "Test" })).status, 400);
+  assert.equal((await publisher({ action: "claim" })).status, 200);
+  const metadata = { category: "Oggetti", article: "LA", syllabification: "lan-ter-na" };
+  const image = readFileSync("public/images/demo/clessidra.webp").toString("base64");
+  assert.equal((await worker({ action: "submit", metadata, image: "YWJj" })).status, 422);
+  assert.equal((await worker({ action: "submit", metadata: { ...metadata, sourceUrl: "https://example.test" }, image })).status, 422);
+  assert.equal((await worker({ action: "submit", metadata, image, claimId: crypto.randomUUID() })).status, 409);
   const { token: newWorkerKey } = await (await queueAdmin({ action: "rotate_key" })).json();
-  assert.equal((await queueWorker(workerKey, { action: "claim" })).status, 401);
+  assert.equal((await worker({ action: "submit", metadata, image })).status, 401);
   const refreshed = await (await queueWorker(newWorkerKey, { action: "claim" })).json();
-  assert.equal(refreshed.batchId, batchId);
-  assert.equal((await report("published", { prNumber: 13 }, newWorkerKey, refreshed.claimId)).status, 409);
-  assert.equal((await report("published", { prNumber: 12 }, newWorkerKey, refreshed.claimId)).status, 200);
-  assert.equal((await report("published", { prNumber: 12 }, newWorkerKey, refreshed.claimId)).status, 200, "final reports are retryable");
-  const queueSnapshot = await (await queueAdmin()).json();
-  assert.equal(queueSnapshot.requests.find(item => item.id === job.id).status, "published");
-  assert.equal(queueSnapshot.token, undefined);
-  console.log("PASS: scheduled images, duplicate detection, atomic claims, PR recovery, token rotation and publication.");
+  assert.equal(refreshed.requests[0].id, job.id);
+  const proposal = { action: "submit", id: job.id, claimId: refreshed.claimId, metadata, image };
+  const submitted = await Promise.all([queueWorker(newWorkerKey, proposal), queueWorker(newWorkerKey, proposal)]);
+  assert.deepEqual(submitted.map(response => response.status).sort(), [200, 409]);
+  assert.equal((await (await publisher({ action: "claim" })).json()).proposal, null, "approval precedes publication");
+  assert.equal((await queueAdmin({ action: "approve", id: job.id, digest: "invalid" })).status, 409);
+  const preview = (cookie, profile) => request(queuePath + "?preview=" + job.id,
+    { headers: { cookie, "x-scheduled-images-profile": profile } });
+  assert.equal((await preview(secondCookie, "adult-b")).status, 403);
+  const reviewed = await (await preview(adminCookie, "adult-a")).json();
+  assert.deepEqual(JSON.parse(reviewed.metadata), metadata);
+  assert.equal(reviewed.image, image);
+  assert.equal((await queueAdmin({ action: "approve", id: job.id, digest: reviewed.digest }, secondCookie, "adult-b")).status, 403);
+  assert.equal((await queueAdmin({ action: "approve", id: job.id, digest: reviewed.digest })).status, 200);
+  const publishing = await (await publisher({ action: "claim" })).json();
+  assert.deepEqual(Object.keys(publishing.proposal).sort(), ["digest", "id", "image", "metadata", "prHead", "prNumber", "status", "word"]);
+  assert.equal(publishing.proposal.id, job.id);
+  assert.equal((await (await publisher({ action: "claim" })).json()).proposal, null, "publisher claim is exclusive");
+  assert.equal((await queueAdmin({ action: "cancel", id: job.id })).status, 409);
+  assert.equal((await (await queueWorker(newWorkerKey, { action: "claim" })).json()).requests.length, 0);
+  const link = { prNumber: 12, prHead: "a".repeat(40) };
+  const publish = (action, extra = {}, lease = publishing.claimId) => publisher({ action, id: job.id, claimId: lease, ...extra });
+  assert.equal((await publish("link", link)).status, 200);
+  assert.equal((await publish("renew", { ...link, prHead: "b".repeat(40) })).status, 409);
+  assert.equal((await publish("renew", link)).status, 200);
+  assert.equal((await publish("confirm")).status, 425, "publication needs the entry in the live catalog");
+  assert.equal((await publish("release", { reason: "anything else" })).status, 400);
+  assert.equal((await publish("release", { reason: "deployment_pending" })).status, 200);
+  const resumed = await (await publisher({ action: "claim" })).json();
+  assert.equal(resumed.proposal.prNumber, 12);
+  assert.equal(resumed.proposal.prHead, link.prHead);
+  assert.equal((await publish("renew", link)).status, 409, "an older claim cannot authorize merge");
+  const snapshot = await (await queueAdmin()).json();
+  assert.equal(snapshot.requests.find(item => item.id === job.id).status, "pull_request");
+  assert.equal(snapshot.token, undefined);
+  console.log("PASS: scheduled images, role separation, approval, bounded proposals, PR and deployment checks.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

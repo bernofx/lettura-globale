@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 22 novembre 2026
+**Aggiornato:** 24 novembre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -8,7 +8,7 @@
 
 ## Completato
 
-- [x] Libreria → Generazione programmata aggiunge la coda D1 per gli amministratori, con deduplicazione, stati di elaborazione, link alle PR e chiave per Codex Cloud. La migrazione 0017 e il task ricorrente richiedono attivazione. Vedi ADR 0026 e il prompt versionato.
+- [x] Libreria → Generazione programmata aggiunge la coda D1 per gli amministratori, con anteprima e approvazione delle proposte. Codex usa una chiave limitata alla generazione. Un workflow GitHub separato verifica il diff del catalogo, attende la CI per lo stesso commit e pubblica tramite PR. Configurazione di isolamento, migrazione 0017 e schedulazione richiedono attivazione. Vedi ADR 0026 e il prompt versionato.
 
 - [x] Prova programmata del catalogo demo con la scheda illustrata Clessidra (Oggetti, LA, cles-si-dra). Nave aveva già un’immagine.
 

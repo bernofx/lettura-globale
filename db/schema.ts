@@ -33,18 +33,18 @@ export const authSessions = sqliteTable("auth_sessions", {
 });
 
 export const scheduledImageWorkers = sqliteTable("scheduled_image_workers", {
-  accountId: text("account_id").primaryKey(), tokenHash: text("token_hash").notNull().unique(), createdAt: integer("created_at").notNull(),
+  accountId: text("account_id").primaryKey(), tokenHash: text("token_hash").unique(), publisherHash: text("publisher_hash").unique(), createdAt: integer("created_at").notNull(),
 });
 
 export const scheduledImageRequests = sqliteTable("scheduled_image_requests", {
   id: text("id").primaryKey(), accountId: text("account_id").notNull(), word: text("word").notNull(), wordKey: text("word_key").notNull(),
   detail: text("detail").notNull().default(""), status: text("status").notNull(), message: text("message").notNull().default(""),
-  prNumber: integer("pr_number"), batchId: text("batch_id"), claimId: text("claim_id"), leaseUntil: integer("lease_until"),
+  prNumber: integer("pr_number"), prHead: text("pr_head"), metadata: text("metadata"), imageBase64: text("image_base64"),
+  proposalDigest: text("proposal_digest"), claimId: text("claim_id"), leaseUntil: integer("lease_until"),
   createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("scheduled_image_requests_word").on(table.accountId, table.wordKey),
   index("scheduled_image_requests_queue").on(table.accountId, table.status, table.leaseUntil, table.createdAt),
-  index("scheduled_image_requests_batch").on(table.accountId, table.batchId, table.leaseUntil),
 ]);
 
 export const therapistCredentials = sqliteTable("therapist_credentials", {

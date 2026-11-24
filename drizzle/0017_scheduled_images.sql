@@ -1,6 +1,7 @@
 CREATE TABLE scheduled_image_workers (
   account_id TEXT PRIMARY KEY NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
+  token_hash TEXT UNIQUE,
+  publisher_hash TEXT UNIQUE,
   created_at INTEGER NOT NULL
 );
 --> statement-breakpoint
@@ -10,10 +11,13 @@ CREATE TABLE scheduled_image_requests (
   word TEXT NOT NULL,
   word_key TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'pull_request', 'published', 'existing', 'needs_review', 'failed', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'generated', 'approved', 'pull_request', 'published', 'existing', 'needs_review', 'failed', 'cancelled')),
   message TEXT NOT NULL DEFAULT '',
   pr_number INTEGER CHECK (pr_number > 0),
-  batch_id TEXT,
+  metadata TEXT,
+  image_base64 TEXT,
+  proposal_digest TEXT,
+  pr_head TEXT,
   claim_id TEXT,
   lease_until INTEGER,
   created_at INTEGER NOT NULL,
@@ -23,5 +27,3 @@ CREATE TABLE scheduled_image_requests (
 CREATE UNIQUE INDEX scheduled_image_requests_word ON scheduled_image_requests (account_id, word_key);
 --> statement-breakpoint
 CREATE INDEX scheduled_image_requests_queue ON scheduled_image_requests (account_id, status, lease_until, created_at);
---> statement-breakpoint
-CREATE INDEX scheduled_image_requests_batch ON scheduled_image_requests (account_id, batch_id, lease_until);

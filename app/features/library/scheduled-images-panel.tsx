@@ -4,16 +4,18 @@ import { Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MAX_SCHEDULED_INPUT_LENGTH, SCHEDULED_IMAGES_URL, SCHEDULED_REPOSITORY,
-  parseScheduledWords, scheduledImageStatuses, type ScheduledImageRequest,
+  parseScheduledWords, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
 } from "../../domain/scheduled-images";
 import { fetchWithTimeout } from "../../shared/cloud-client";
 import { SectionHeading } from "../../shared/ui/headings";
-import { ConfirmDialog } from "../../shared/ui/modal";
+import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 import "./scheduled-images-panel.css";
 
-type Queue = { requests: ScheduledImageRequest[]; workerConfigured: boolean };
+type Queue = { requests: ScheduledImageRequest[]; workerConfigured: boolean; publisherConfigured: boolean };
 type QueueReply = Queue & { accepted: number; submitted: number; token: string };
-const cancellable = new Set(["queued", "needs_review", "failed"]);
+const cancellable = new Set(["queued", "generated", "approved", "needs_review", "failed"]);
+type KeyRole = "generator" | "publisher";
+type Proposal = { id: string; word: string; metadata: ScheduledImageMetadata; image: string; digest: string };
 
 export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   const [words, setWords] = useState("");
@@ -21,8 +23,10 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [token, setToken] = useState("");
-  const [confirmRotation, setConfirmRotation] = useState(false);
+  const [token, setToken] = useState<{ value: string; role: KeyRole }>();
+  const [confirmRotation, setConfirmRotation] = useState<KeyRole>();
+  const [proposal, setProposal] = useState<Proposal>();
+  const [proposalLoaded, setProposalLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const requestId = useRef<symbol | null>(null);
   const mutating = useRef(false);
@@ -96,12 +100,35 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
     });
   }
 
-  function rotateKey() {
-    setConfirmRotation(false);
-    void change({ action: "rotate_key" }, result => {
-      setToken(result.token);
-      setQueue(previous => ({ requests: previous?.requests ?? [], workerConfigured: true }));
+  function rotateKey(role: KeyRole) {
+    setConfirmRotation(undefined);
+    void change({ action: role === "generator" ? "rotate_key" : "rotate_publisher_key" }, result => {
+      setToken({ value: result.token, role });
+      setQueue(result);
     });
+  }
+
+  async function review(id: string) {
+    if (mutating.current) return;
+    mutating.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetchWithTimeout(`${SCHEDULED_IMAGES_URL}?preview=${id}`, {
+        headers: { "x-scheduled-images-profile": profileId }, cache: "no-store",
+      });
+      if (!response.ok) throw new Error("request_changed");
+      const result = await response.json() as Omit<Proposal, "id" | "metadata"> & { metadata: string };
+      const metadata = scheduledImageMetadata(result.word, JSON.parse(result.metadata));
+      if (!metadata) throw new Error("invalid_proposal");
+      setProposalLoaded(false);
+      setProposal({ ...result, id, metadata });
+    } catch {
+      setError("Anteprima non disponibile. Aggiorna la coda e riprova.");
+    } finally {
+      mutating.current = false;
+      setBusy(false);
+    }
   }
 
   const items = queue?.requests ?? [];
@@ -134,6 +161,8 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
           {item.message && <small>{item.message}</small>}
         </div>
         <div className="scheduled-images-actions">
+          {item.status === "generated" && <button type="button" className="primary-button" disabled={busy}
+            onClick={() => void review(item.id)}>Verifica immagine</button>}
           {item.prNumber && <a href={`${SCHEDULED_REPOSITORY}/pull/${item.prNumber}`} target="_blank" rel="noreferrer">PR #{item.prNumber}</a>}
           {(item.status === "needs_review" || item.status === "failed") && <button type="button" className="ghost-button" disabled={busy}
             onClick={() => { setWords(item.detail ? `${item.word} | ${item.detail}` : item.word); document.getElementById("scheduled-images-words")?.focus(); }}>
@@ -148,19 +177,42 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       onClick={() => setExpanded(value => !value)}>{expanded ? "Mostra meno" : "Mostra altre richieste"}</button>}
     <details className="scheduled-images-connection">
       <summary>Collegamento all’automazione</summary>
-      <p>Salva la chiave nei segreti dell’ambiente Codex Cloud come <code>SCHEDULED_IMAGES_TOKEN</code>.</p>
-      <button type="button" className="ghost-button" disabled={busy || !queue}
-        onClick={() => queue?.workerConfigured ? setConfirmRotation(true) : rotateKey()}>
-        {queue?.workerConfigured ? "Sostituisci chiave" : "Crea chiave"}
-      </button>
+      <p>Usa due chiavi separate per la generazione in Codex e la pubblicazione tramite GitHub Actions.</p>
+      <div className="scheduled-images-actions">
+        <button type="button" className="ghost-button" disabled={busy || !queue}
+          onClick={() => queue?.workerConfigured ? setConfirmRotation("generator") : rotateKey("generator")}>
+          {queue?.workerConfigured ? "Sostituisci" : "Crea"} chiave generatore
+        </button>
+        <button type="button" className="ghost-button" disabled={busy || !queue}
+          onClick={() => queue?.publisherConfigured ? setConfirmRotation("publisher") : rotateKey("publisher")}>
+          {queue?.publisherConfigured ? "Sostituisci" : "Crea"} chiave pubblicazione
+        </button>
+      </div>
       {token && <label className="scheduled-images-token">
-        Copia ora la chiave. Dopo aver lasciato la pagina serve crearne un’altra per recuperarla.
-        <input type="text" readOnly value={token} spellCheck={false} autoComplete="off" onFocus={event => event.target.select()} />
+        Copia ora la chiave <code>{token.role === "generator" ? "SCHEDULED_IMAGES_TOKEN" : "SCHEDULED_IMAGES_PUBLISHER_TOKEN"}</code>.
+        <input type="text" readOnly value={token.value} spellCheck={false} autoComplete="off" onFocus={event => event.target.select()} />
       </label>}
     </details>
     {confirmRotation && <ConfirmDialog labelledBy="scheduled-key-confirm" eyebrow="GENERAZIONE PROGRAMMATA" title="Sostituire la chiave dell’automazione?"
-      confirmLabel="Sostituisci chiave" onCancel={() => setConfirmRotation(false)} onConfirm={rotateKey}>
+      confirmLabel="Sostituisci chiave" onCancel={() => setConfirmRotation(undefined)} onConfirm={() => rotateKey(confirmRotation)}>
       La chiave precedente smetterà di funzionare. Le richieste restano salvate.
     </ConfirmDialog>}
+    {proposal && <Modal labelledBy="scheduled-preview-title" onClose={busy ? undefined : () => setProposal(undefined)} closeButton>
+      <ModalTitle id="scheduled-preview-title">{proposal.word}</ModalTitle>
+      {/* Private image already authenticated and size bounded by the queue API. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="scheduled-images-preview" src={`data:image/webp;base64,${proposal.image}`} alt={proposal.word}
+        onLoad={() => setProposalLoaded(true)} onError={() => setProposalLoaded(false)} />
+      <p>{proposal.metadata.category} · {proposal.metadata.syllabification}{proposal.metadata.article ? ` · ${proposal.metadata.article}` : ""}</p>
+      <p>Verifica immagine e dati prima di approvarli per il catalogo condiviso.</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <ModalActions onCancel={() => setProposal(undefined)} cancelDisabled={busy}>
+        <button type="button" className="primary-button" disabled={busy || !proposalLoaded}
+          onClick={() => void change({ action: "approve", id: proposal.id, digest: proposal.digest }, result => {
+            setQueue(result);
+            setProposal(undefined);
+          })}>Approva per la pubblicazione</button>
+      </ModalActions>
+    </Modal>}
   </section>;
 }

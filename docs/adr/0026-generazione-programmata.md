@@ -2,34 +2,14 @@
 
 ## Contesto
 
-La prova di Clessidra ha verificato un ciclo Codex Cloud programmato, dalla
-generazione ImageGen fino alla PR. Serve una lista persistente gestibile in
-Libreria e un modo per riferire gli esiti all’app.
+La prova di Clessidra ha verificato un ciclo programmato dalla generazione ImageGen fino alla PR. La versione iniziale dava allo stesso agente le descrizioni della coda e i permessi di scrittura e merge. Anche una descrizione scritta da un amministratore può contenere testo proveniente da terzi e influenzare le azioni dell’agente.
 
 ## Decisione proposta
 
-La sezione è accessibile agli amministratori dell’account. La UI salva le
-richieste in D1 e mostra stato, eventuale PR ed esito. I termini inseriti
-sono destinati al catalogo condiviso e devono poter essere pubblicati.
-La migrazione additiva `0017` introduce due tabelle dedicate e lascia
-intatti i dati degli esercizi.
+La coda D1 è gestita dagli amministratori dell’account. Conserva le richieste e le proposte da verificare. Ogni proposta contiene un WebP statico limitato a 400.000 byte e metadati da uno schema chiuso. L’immagine temporanea viene rimossa dalla coda quando la proposta è annullata, risulta duplicata o è disponibile a catalogo. Le precisazioni restano visibili all’amministratore e al solo generatore. La sezione riguarda termini destinati a un catalogo pubblico.
 
-L’amministratore può creare o sostituire una chiave opaca limitata alla
-coda del proprio account. D1 conserva soltanto il suo hash. La chiave
-è mostrata una sola volta, per configurarla come segreto di rete di Codex
-Cloud. L’API del task non consente accesso a profili, dati clinici,
-immagini private o altre funzioni dell’app.
+Un ambiente Codex dedicato riceve una chiave che consente soltanto di prendere fino a tre richieste alla volta, inviare le relative proposte o segnalare un esito codificato. L’ambiente deve escludere repository, connettori e credenziali estranee alla generazione. La migrazione additiva `0017` conserva in D1 solo gli hash delle due chiavi. Le prese in carico scadono dopo un’ora, sono atomiche e vengono revocate quando si ruota la chiave del ruolo relativo.
 
-La presa in carico è atomica, con al massimo tre parole per lotto e
-un’ora di validità rinnovata quando si registra la PR. Un ID di lotto stabile
-permette di riprendere un branch già inviato anche se il task si è
-fermato prima di registrare la PR. Le parole sono deduplicate per account.
-Una foto già esistente nella Libreria o nel catalogo demo evita la generazione.
+L’amministratore approva l’anteprima specifica prima che l’immagine sia esposta al publisher. GitHub Actions, con una chiave di pubblicazione e una credenziale GitHub dedicate, trasforma i dati approvati in una voce JSON e in un asset WebP. A parità di parola conserva gli ID delle schede senza foto e rispetta le foto già presenti, incluse quelle private dell’account che ha chiesto la generazione. Le fonti e licenze sono determinate in codice. Solo il publisher verifica il commit, attende i controlli CI, effettua il merge su `main` e conferma la presenza nel catalogo distribuito.
 
-La generazione, il commit e la PR restano nell’ambiente Codex Cloud validato
-con la prova. Il Worker gestisce la coda e il task attende la CI e verifica
-il deploy dopo l’integrazione su `main`. Gli stati finali rimangono
-nell’account per tracciare gli esiti.
-
-La funzionalità e la migrazione sono da approvare e attivare separatamente in
-produzione. La frequenza resta una proprietà del task Codex. [Configurazione e prompt](../PROMPT_GENERAZIONE_PROGRAMMATA.md)
+L’isolamento limita le azioni possibili al generatore, mentre la verifica umana copre la pertinenza dei contenuti. L’applicazione delle protezioni di `main`, la configurazione delle credenziali e l’attivazione della schedulazione in produzione richiedono approvazione. [Configurazione e prompt](../PROMPT_GENERAZIONE_PROGRAMMATA.md)

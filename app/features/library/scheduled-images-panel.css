@@ -35,3 +35,4 @@
 .scheduled-images-connection { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: .75rem; }
 .scheduled-images-connection summary { cursor: pointer; font-weight: 700; }
 .scheduled-images-token { display: grid; gap: .35rem; margin-top: .75rem; }
+.scheduled-images-preview { display: block; width: min(100%, 18rem); max-height: 40dvh; object-fit: contain; margin-inline: auto; }
