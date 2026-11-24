@@ -16,7 +16,8 @@ export function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
 export function hydrateLibrary(items: LibraryItem[]) {
   return mergeById(items, stockItems).map((item) => {
     const demoItem = stockItems.find((candidate) => candidate.id === item.id);
-    const hydratedItem = demoItem?.image && !item.privateUpload ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
+    // Archived placeholders retain the metadata used to remap old references to a private upload.
+    const hydratedItem = demoItem?.image && !item.privateUpload && !item.deleted ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
     const normalizedItem = { ...hydratedItem, category: normalizeLearningCategory(hydratedItem.category) };
     return normalizedItem.contentKind === "sentence" || normalizedItem.categorySymbolOnly ? normalizedItem : hydrateSyllables(normalizedItem);
   });
