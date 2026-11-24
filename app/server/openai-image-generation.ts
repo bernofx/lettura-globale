@@ -1,9 +1,7 @@
-import { Buffer } from "node:buffer";
-import { isScheduledWebp, MAX_SCHEDULED_WEBP_BYTES } from "../domain/scheduled-images";
+import { MAX_SCHEDULED_PREVIEW_BASE64, scheduledImagePreview } from "../domain/scheduled-image-preview";
 import { readBoundedJson } from "./bounded-json";
 
 const endpoint = "https://api.openai.com/v1/images/generations";
-const PROVIDER_OUTPUT_BYTES = 600_000;
 export const openAIImageModel = "gpt-image-2.6-flare";
 
 const moderationCodes = new Set(["moderation_blocked", "content_policy_violation", "safety_violations"]);
@@ -17,7 +15,14 @@ const imageParameters = new Set([
   "model", "prompt", "size", "quality", "background", "n", "output_format", "output_compression", "moderation",
 ]);
 
-type GenerationFailure = { kind: "http" | "network" | "timeout" | "image"; status?: number; code?: string; parameter?: string; requestId?: string };
+type GenerationFailure = {
+  kind: "http" | "network" | "timeout" | "image";
+  status?: number;
+  code?: string;
+  parameter?: string;
+  requestId?: string;
+  imageReason?: "response_body" | "missing_image" | "too_large" | "invalid_image";
+};
 
 export class OpenAIImageError extends Error {
   readonly failure: GenerationFailure;
@@ -35,7 +40,12 @@ export class OpenAIImageError extends Error {
     const { kind, status, code, parameter } = this.failure;
     if (kind === "timeout") return "OpenAI non ha completato la risposta entro il tempo previsto.";
     if (kind === "network") return "Il Worker non è riuscito a contattare OpenAI.";
-    if (kind === "image") return "OpenAI ha risposto, ma l’immagine ricevuta non rispetta il formato o la dimensione previsti.";
+    if (kind === "image") {
+      if (this.failure.imageReason === "response_body" || this.failure.imageReason === "missing_image")
+        return "OpenAI ha risposto, ma dai dati ricevuti non è stato possibile estrarre un’immagine.";
+      if (this.failure.imageReason === "too_large") return "L’immagine ricevuta da OpenAI è troppo grande per l’anteprima.";
+      return "L’immagine ricevuta da OpenAI non è un WebP, PNG o JPEG valido per l’anteprima.";
+    }
     const reference = `(HTTP ${status}${code ? ` · ${code}` : ""})`;
     if (this.needsReview) return `OpenAI ha bloccato la richiesta ${reference}. Rivedi la parola o la precisazione visiva.`;
     if (code && quotaCodes.has(code)) return `Quota API di OpenAI esaurita o fatturazione inattiva ${reference}. Controlla il progetto API.`;
@@ -72,44 +82,6 @@ export function openAIImagePrompt(word: string, detail: string) {
   ].join("\n");
 }
 
-// Some WebP encoders add an extended header or metadata. Keep only the opaque
-// still image chunk and rebuild the container before it enters the catalogue.
-export function normalizeGeneratedWebp(encoded: unknown): string {
-  if (typeof encoded !== "string" || encoded.length > Math.ceil(PROVIDER_OUTPUT_BYTES / 3) * 4) throw new Error("invalid_generated_image");
-  const bytes = Buffer.from(encoded, "base64");
-  if (bytes.length < 30 || bytes.length > PROVIDER_OUTPUT_BYTES) throw new Error("invalid_generated_image");
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const tag = (offset: number) => String.fromCharCode(...bytes.subarray(offset, offset + 4));
-  if (tag(0) !== "RIFF" || tag(8) !== "WEBP" || view.getUint32(4, true) + 8 !== bytes.length) throw new Error("invalid_generated_image");
-
-  let chunk: Uint8Array | undefined;
-  let offset = 12;
-  for (; offset + 8 <= bytes.length;) {
-    const type = tag(offset);
-    const size = view.getUint32(offset + 4, true);
-    const end = offset + 8 + size + size % 2;
-    if (end > bytes.length) throw new Error("invalid_generated_image");
-    if (type === "VP8 " || type === "VP8L") {
-      if (chunk || end - offset + 12 > MAX_SCHEDULED_WEBP_BYTES ||
-        (type === "VP8L" && (bytes[offset + 12] & 16) !== 0)) throw new Error("invalid_generated_image");
-      chunk = bytes.subarray(offset, end);
-    } else if (type === "VP8X") {
-      // Reject animation and alpha. Metadata flags do not affect the pixels.
-      if (offset !== 12 || size !== 10 || (bytes[offset + 8] & 0x12) !== 0) throw new Error("invalid_generated_image");
-    } else if (type !== "ICCP" && type !== "EXIF" && type !== "XMP ") {
-      throw new Error("invalid_generated_image");
-    }
-    offset = end;
-  }
-  if (!chunk || offset !== bytes.length) throw new Error("invalid_generated_image");
-  const result = new Uint8Array(12 + chunk.length);
-  result.set(bytes.subarray(0, 12));
-  new DataView(result.buffer).setUint32(4, result.length - 8, true);
-  result.set(chunk, 12);
-  if (!isScheduledWebp(result)) throw new Error("invalid_generated_image");
-  return Buffer.from(result.buffer).toString("base64");
-}
-
 export async function generateOpenAIImage(key: string, word: string, detail: string) {
   let response: Response;
   const timeout = AbortSignal.timeout(180_000);
@@ -136,11 +108,13 @@ export async function generateOpenAIImage(key: string, word: string, detail: str
   }
   if (!response.ok) throw await readProviderError(response);
 
-  try {
-    const body = await readBoundedJson(response, 825_000);
-    if (!Array.isArray(body.data) || body.data.length !== 1) throw new Error("invalid_generated_image");
-    return normalizeGeneratedWebp(body.data[0]?.b64_json);
-  } catch {
-    throw new OpenAIImageError({ kind: timeout.aborted ? "timeout" : "image", status: response.status, requestId: providerRequestId(response) });
-  }
+  const detailFields = { status: response.status, requestId: providerRequestId(response) };
+  const body = await readBoundedJson(response, MAX_SCHEDULED_PREVIEW_BASE64 + 50_000).catch(() => null);
+  if (!body) throw new OpenAIImageError({ kind: timeout.aborted ? "timeout" : "image", imageReason: "response_body", ...detailFields });
+  const encoded = Array.isArray(body.data) && body.data.length === 1 ? body.data[0]?.b64_json : undefined;
+  if (typeof encoded !== "string") throw new OpenAIImageError({ kind: "image", imageReason: "missing_image", ...detailFields });
+  if (encoded.length > MAX_SCHEDULED_PREVIEW_BASE64) throw new OpenAIImageError({ kind: "image", imageReason: "too_large", ...detailFields });
+  const preview = scheduledImagePreview(encoded);
+  if (!preview) throw new OpenAIImageError({ kind: "image", imageReason: "invalid_image", ...detailFields });
+  return preview.bytes.toString("base64");
 }

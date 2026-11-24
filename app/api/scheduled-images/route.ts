@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { scheduledImagePreview } from "../../domain/scheduled-image-preview";
 import { hashText } from "../../domain/sha256";
 import { parseScheduledWords, scheduledId, scheduledImageMetadata, type ScheduledImageRequest } from "../../domain/scheduled-images";
 import { imageGenerationConfig, imageGenerationUsage, imageProposalDigest, sendImageJobs, wordsWithImages, type ScheduledImageJob } from "../../server/scheduled-image-jobs";
@@ -26,8 +27,10 @@ export async function GET(request: Request) {
   if (!scheduledId.test(id)) return noStoreJson({ error: "invalid_request" }, { status: 400 });
   const proposal = await access.db.prepare(`SELECT word, metadata, image_base64 AS image, proposal_digest AS digest
     FROM scheduled_image_requests WHERE id = ? AND account_id = ? AND status = 'generated'`)
-    .bind(id, access.accountId).first();
-  return proposal ? noStoreJson(proposal) : noStoreJson({ error: "request_changed" }, { status: 409 });
+    .bind(id, access.accountId).first<{ word: string; metadata: string; image: string; digest: string }>();
+  const preview = proposal && scheduledImagePreview(proposal.image);
+  return proposal && preview ? noStoreJson({ ...proposal, imageType: preview.imageType })
+    : noStoreJson({ error: "request_changed" }, { status: 409 });
 }
 
 export async function POST(request: Request) {

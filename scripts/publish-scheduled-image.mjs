@@ -1,3 +1,4 @@
+import { scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -5,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout } from "node:timers/promises";
-import { MAX_SCHEDULED_WEBP_BYTES, isScheduledWebp, scheduledAssetUrl, scheduledId, scheduledWebpFromBase64, scheduledWordKey } from "../app/domain/scheduled-images.ts";
+import { MAX_SCHEDULED_WEBP_BYTES, isScheduledWebp, scheduledAssetUrl, scheduledId, scheduledWordKey } from "../app/domain/scheduled-images.ts";
 import { readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
 import { stockItems } from "../app/shared/seed-data.ts";
 
@@ -33,20 +34,31 @@ async function command(body, pending = false) {
   return response.json();
 }
 
-function normalizeImage(image) {
-  const bytes = scheduledWebpFromBase64(image);
-  if (!bytes) throw new Error("invalid_approved_image");
+export function normalizeScheduledImage(image) {
+  const preview = scheduledImagePreview(image);
+  if (!preview) throw new Error("invalid_approved_image");
+  const { bytes, imageType, width } = preview;
+  const isWebp = imageType === "image/webp";
   const scratch = mkdtempSync(join(tmpdir(), "scheduled-image-"));
   // The decoders receive fixed local filenames and no publisher credentials.
   const env = { PATH: process.env.PATH };
   try {
-    const input = join(scratch, "input.webp");
+    const input = join(scratch, isWebp ? "input.webp" : imageType === "image/png" ? "input.png" : "input.jpg");
     const pixels = join(scratch, "image.png");
     const output = join(scratch, "output.webp");
     writeFileSync(input, bytes);
-    run("dwebp", ["-quiet", input, "-o", pixels], { env, timeout: 15_000 });
-    run("cwebp", ["-quiet", "-q", "86", "-metadata", "none", pixels, "-o", output], { env, timeout: 15_000 });
-    const encoded = readFileSync(output);
+    if (isWebp) run("dwebp", ["-quiet", input, "-o", pixels], { env, timeout: 15_000 });
+    const source = isWebp ? pixels : input;
+    const options = ["-quiet", "-metadata", "none"];
+    const canonicalSource = isWebp && isScheduledWebp(bytes) && (bytes.toString("ascii", 12, 16) !== "VP8L" || (bytes[24] & 16) === 0);
+    if (!canonicalSource) options.push("-blend_alpha", "0xffffff", "-noalpha");
+    if (width > 1024) options.push("-resize", "1024", "1024");
+    run("cwebp", [...options, "-q", "86", source, "-o", output], { env, timeout: 15_000 });
+    let encoded = readFileSync(output);
+    if (encoded.length > MAX_SCHEDULED_WEBP_BYTES) {
+      run("cwebp", [...options, "-size", "390000", "-pass", "6", source, "-o", output], { env, timeout: 15_000 });
+      encoded = readFileSync(output);
+    }
     if (!isScheduledWebp(encoded)) throw new Error("invalid_normalized_image");
     return encoded;
   } finally {
@@ -58,7 +70,7 @@ function createCatalogCommit(proposal, entry, branch) {
   const assetPath = "public" + scheduledAssetUrl(proposal.id);
   const entries = readScheduledCatalog([...JSON.parse(readFileSync(catalogPath, "utf8")), entry]);
   if (existsSync(assetPath) || git("status", "--porcelain")) throw new Error("catalog_checkout_changed");
-  const pixels = normalizeImage(proposal.image);
+  const pixels = normalizeScheduledImage(proposal.image);
   git("switch", "-c", branch);
   mkdirSync("public/images/scheduled", { recursive: true });
   writeFileSync(assetPath, pixels, { flag: "wx" });
@@ -93,7 +105,7 @@ function expectedPaths(assetPath) {
 
 function verifyCommit(proposal, entry, branch) {
   git("fetch", "--no-tags", "origin", "refs/heads/main:refs/remotes/origin/main", `refs/heads/${branch}`);
-  verifyCatalogCommit(proposal.prHead, entry, normalizeImage(proposal.image));
+  verifyCatalogCommit(proposal.prHead, entry, normalizeScheduledImage(proposal.image));
 }
 
 export function verifyCatalogCommit(head, entry, normalizedImage, cwd = process.cwd()) {

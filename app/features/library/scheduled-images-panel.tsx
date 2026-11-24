@@ -6,6 +6,7 @@ import {
   MAX_SCHEDULED_INPUT_LENGTH, SCHEDULED_IMAGES_URL, SCHEDULED_REPOSITORY,
   parseScheduledWords, scheduledCategories, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
 } from "../../domain/scheduled-images";
+import type { SupportedImageType } from "../../domain/image-validation";
 import { fetchWithTimeout } from "../../shared/cloud-client";
 import { SectionHeading } from "../../shared/ui/headings";
 import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
@@ -19,7 +20,7 @@ type Queue = {
 };
 type QueueReply = Queue & { accepted: number; submitted: number; dispatchDelayed: boolean; token: string };
 const cancellable = new Set(["queued", "generated", "approved", "needs_review", "failed"]);
-type Proposal = { id: string; word: string; metadata: ScheduledImageMetadata; image: string; digest: string };
+type Proposal = { id: string; word: string; metadata: ScheduledImageMetadata; image: string; imageType: SupportedImageType; digest: string };
 
 export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   const [words, setWords] = useState("");
@@ -135,7 +136,7 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       if (!response.ok) throw new Error("request_changed");
       const result = await response.json() as Omit<Proposal, "id" | "metadata"> & { metadata: string };
       const metadata = scheduledImageMetadata(result.word, JSON.parse(result.metadata));
-      if (!metadata) throw new Error("invalid_proposal");
+      if (!metadata || !["image/webp", "image/png", "image/jpeg"].includes(result.imageType)) throw new Error("invalid_proposal");
       setProposalLoaded(false);
       setProposal({ ...result, id, metadata });
     } catch {
@@ -216,7 +217,7 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       <ModalTitle id="scheduled-preview-title">{proposal.word}</ModalTitle>
       {/* Private image already authenticated and size bounded by the queue API. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="scheduled-images-preview" src={`data:image/webp;base64,${proposal.image}`} alt={proposal.word}
+      <img className="scheduled-images-preview" src={`data:${proposal.imageType};base64,${proposal.image}`} alt={proposal.word}
         onLoad={() => setProposalLoaded(true)} onError={() => setProposalLoaded(false)} />
       <div className="scheduled-images-metadata">
         <label>Categoria

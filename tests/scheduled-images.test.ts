@@ -4,7 +4,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateOpenAIImage, normalizeGeneratedWebp, OpenAIImageError, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
+import { generateOpenAIImage, OpenAIImageError, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
+import { scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
+import { validateImageBytes } from "../app/domain/image-validation.ts";
 import { verifyCatalogCommit } from "../scripts/publish-scheduled-image.mjs";
 import { addScheduledCatalog, readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
 import { MAX_SCHEDULED_IMAGES, isScheduledWebp, parseScheduledWords, scheduledAssetUrl, scheduledImageMetadata, scheduledWebpFromBase64, scheduledWordKey } from "../app/domain/scheduled-images.ts";
@@ -110,23 +112,34 @@ test("il prompt immagini delimita la descrizione come dati e preserva gli accent
 test("la risposta del provider conserva soltanto i pixel WebP statici", () => {
   const image = readFileSync("public/images/demo/clessidra.webp");
   const original = image.toString("base64");
-  assert.equal(normalizeGeneratedWebp(original), original);
+  assert.deepEqual(scheduledImagePreview(original)?.bytes, image);
+  const dimensions = validateImageBytes(image, "image/webp");
+  assert.ok(dimensions.valid);
   const extended = Buffer.alloc(18);
   extended.write("VP8X");
   extended.writeUInt32LE(10, 4);
   extended[8] = 8; // EXIF metadata.
-  extended.writeUIntLE(1023, 12, 3);
-  extended.writeUIntLE(1023, 15, 3);
-  const extra = Buffer.alloc(12);
+  extended.writeUIntLE(dimensions.width - 1, 12, 3);
+  extended.writeUIntLE(dimensions.height - 1, 15, 3);
+  const extra = Buffer.alloc(700_008);
   extra.write("EXIF");
-  extra.writeUInt32LE(4, 4);
-  extra.write("test", 8);
+  extra.writeUInt32LE(700_000, 4);
   const withMetadata = Buffer.concat([image.subarray(0, 12), extended, image.subarray(12), extra]);
   withMetadata.writeUInt32LE(withMetadata.length - 8, 4);
-  assert.equal(normalizeGeneratedWebp(withMetadata.toString("base64")), original);
+  assert.deepEqual(scheduledImagePreview(withMetadata.toString("base64"))?.bytes, image);
   withMetadata[20] |= 2; // Reject animated WebP.
-  assert.throws(() => normalizeGeneratedWebp(withMetadata.toString("base64")), /invalid_generated_image/);
-  assert.throws(() => normalizeGeneratedWebp("YWJj"), /invalid_generated_image/);
+  assert.equal(scheduledImagePreview(withMetadata.toString("base64")), null);
+  assert.equal(scheduledImagePreview("YWJj"), null);
+  assert.equal(scheduledImagePreview(image.subarray(0, 30).toString("base64")), null);
+});
+
+test("una risposta PNG valida resta disponibile con il proprio tipo per l’anteprima", async (t) => {
+  const png = readFileSync("public/images/demo/mela.png");
+  const encoded = png.toString("base64");
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ b64_json: encoded }] }));
+  assert.equal(await generateOpenAIImage("synthetic-key", "Mela", ""), encoded);
+  assert.deepEqual(scheduledImagePreview(encoded), { imageType: "image/png", width: 768, height: 768, bytes: png });
+  assert.equal(scheduledImagePreview(png.subarray(0, -12).toString("base64")), null);
 });
 
 test("gli errori OpenAI conservano dati diagnostici ammessi senza esporre la risposta grezza", async (t) => {
@@ -157,7 +170,7 @@ test("gli errori OpenAI conservano dati diagnostici ammessi senza esporre la ris
   });
 });
 
-test("la coda distingue permessi del modello, quota OpenAI, rete e WebP incompatibile", async (t) => {
+test("la coda distingue permessi del modello, quota OpenAI, rete e immagini incompatibili", async (t) => {
   const denied = { body: { error: { code: "model_not_found" } }, status: 404, message: /modello immagini.*HTTP 404/ };
   const quota = { body: { error: { code: "insufficient_quota" } }, status: 429, message: /fatturazione.*HTTP 429/ };
   const wrongImage = { body: { data: [{ b64_json: "YWJj" }] }, status: 200, message: /immagine ricevuta/ };
