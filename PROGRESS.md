@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Ricerca Openverse dalla Libreria, verifica sulle API di Wikimedia Commons e pubblicazione diretta con crediti per CC0 e CC BY 4.0. Migrazione 0019 per l’attribuzione.
+
 - [x] Le immagini approvate vengono pubblicate direttamente nel catalogo condiviso D1/R2. Il recupero importa le proposte già approvate, riusando la foto. La migrazione 0018 revoca il publisher GitHub, il cui workflow è stato rimosso.
 
 - [x] Generazione con OpenAI: le immagini WebP con metadati di provenienza C2PA (Content Credentials) o altri blocchi di metadati non vengono più rifiutate come «non valide»; i metadati sono rimossi dall’anteprima. Se un’immagine resta inutilizzabile, il messaggio dice il motivo (formato, dimensioni, non quadrata, animata, struttura) senza esporre il contenuto. Test con un WebP firmato C2PA e con un PNG non quadrato.

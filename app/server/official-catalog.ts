@@ -1,4 +1,6 @@
-import { isScheduledWord, scheduledId, scheduledImageMetadata, scheduledWordKey } from "../domain/scheduled-images";
+import { isScheduledWord, scheduledId, scheduledImageMetadata, scheduledWordKey, type ScheduledImageMetadata } from "../domain/scheduled-images";
+import { commonsFileTitle, commonsLicenses, type CommonsCredit } from "../domain/openverse-catalog";
+import type { SupportedImageType } from "../domain/image-validation";
 import { publishedImageBytes, scheduledImagePreview } from "../domain/scheduled-image-preview";
 import { bundledImageWords, imageProposalDigest } from "./scheduled-image-jobs";
 import { officialImageExtension } from "../domain/scheduled-catalog";
@@ -7,7 +9,7 @@ const leaseMs = 5 * 60 * 1000;
 const pending = "status IN ('approved', 'pull_request')";
 const unclaimed = "(lease_until IS NULL OR lease_until <= ?)";
 
-type CatalogRow = { id: string; word: string; metadata: string; imageType: string };
+type CatalogRow = { id: string; word: string; metadata: string; imageType: string; credits: string | null };
 type ApprovedRow = { word: string; wordKey: string; metadata: string; image: string; digest: string };
 
 function parseMetadata(word: string, raw: string) {
@@ -18,13 +20,42 @@ function parseMetadata(word: string, raw: string) {
   }
 }
 
+function parseCredit(raw: string): CommonsCredit | null {
+  try {
+    const credit = JSON.parse(raw) as CommonsCredit;
+    if (!credit || !Object.hasOwn(commonsLicenses, credit.license) || !commonsFileTitle(credit.sourceUrl) ||
+      !scheduledId.test(credit.providerId) || typeof credit.title !== "string" || !credit.title ||
+      typeof credit.author !== "string" || !credit.author) return null;
+    return { title: credit.title, author: credit.author, sourceUrl: credit.sourceUrl, license: credit.license, providerId: credit.providerId };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveImportedCatalogImage(
+  db: D1Database, bucket: R2Bucket, word: string, metadata: ScheduledImageMetadata,
+  image: { bytes: Uint8Array<ArrayBufferLike>; imageType: SupportedImageType; digest: string; credit: CommonsCredit },
+) {
+  const id = crypto.randomUUID();
+  const objectKey = `official-catalog/${id}/${image.digest}`;
+  await bucket.put(objectKey, image.bytes, { httpMetadata: { contentType: image.imageType } });
+  const inserted = await db.prepare(`INSERT INTO official_catalog_images (id, word_key, word, metadata, image_type, object_key, published_at, credits)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (word_key) DO NOTHING RETURNING id`)
+    .bind(id, scheduledWordKey(word), word, JSON.stringify(metadata), image.imageType, objectKey, Date.now(), JSON.stringify(image.credit))
+    .first<{ id: string }>();
+  if (!inserted) await bucket.delete(objectKey).catch(() => undefined);
+  return inserted;
+}
+
 export async function readOfficialCatalog(db: D1Database) {
-  const { results } = await db.prepare(`SELECT id, word, metadata, image_type AS imageType
+  const { results } = await db.prepare(`SELECT id, word, metadata, image_type AS imageType, credits
     FROM official_catalog_images ORDER BY published_at, id`).all<CatalogRow>();
-  return results.flatMap(({ id, word, metadata, imageType }) => {
+  return results.flatMap(({ id, word, metadata, imageType, credits }) => {
     const details = parseMetadata(word, metadata);
     const extension = officialImageExtension(imageType);
-    return details && extension && scheduledId.test(id) ? [{ assetId: id, word, metadata: details, extension }] : [];
+    const credit = credits ? parseCredit(credits) : null;
+    return details && extension && scheduledId.test(id) && (!credits || credit)
+      ? [{ assetId: id, word, metadata: details, extension, ...(credit ? { credit } : {}) }] : [];
   });
 }
 

@@ -46,7 +46,7 @@ export const scheduledImageRequests = sqliteTable("scheduled_image_requests", {
 export const officialCatalogImages = sqliteTable("official_catalog_images", {
   id: text("id").primaryKey().notNull(), wordKey: text("word_key").notNull().unique(), word: text("word").notNull(),
   metadata: text("metadata").notNull(), imageType: text("image_type").notNull(), objectKey: text("object_key").notNull().unique(),
-  publishedAt: integer("published_at").notNull(),
+  publishedAt: integer("published_at").notNull(), credits: text("credits"),
 });
 
 export const scheduledImageUsage = sqliteTable("scheduled_image_usage", {

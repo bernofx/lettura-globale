@@ -1,6 +1,7 @@
 import entries from "./scheduled-catalog.json" with { type: "json" };
 import { isScheduledWord, scheduledAssetUrl, scheduledId, scheduledImageMetadata, scheduledWordKey } from "./scheduled-images.ts";
 import { countSyllables } from "./syllabification.ts";
+import { commonsLicenses, type CommonsCredit } from "./openverse-catalog.ts";
 import type { LibraryItem } from "../shared/types";
 
 type CatalogEntry = { assetId: string; word: string; metadata: unknown };
@@ -23,7 +24,7 @@ export function readScheduledCatalog(source: unknown) {
 
 export const OFFICIAL_CATALOG_URL = "/api/official-catalog";
 
-export type OfficialCatalogEntry = ReturnType<typeof readScheduledCatalog>[number] & { extension: "webp" | "png" | "jpeg" };
+export type OfficialCatalogEntry = ReturnType<typeof readScheduledCatalog>[number] & { extension: "webp" | "png" | "jpeg"; credit?: CommonsCredit };
 
 export function officialImageExtension(imageType: string): OfficialCatalogEntry["extension"] | null {
   if (imageType === "image/webp") return "webp";
@@ -44,7 +45,7 @@ export function addScheduledCatalog(base: LibraryItem[], source: unknown = entri
   return applyCatalog(base, readScheduledCatalog(source), entry => scheduledAssetUrl(entry.assetId));
 }
 
-function applyCatalog<T extends ReturnType<typeof readScheduledCatalog>[number]>(base: LibraryItem[], source: T[], imagePath: (entry: T) => string) {
+function applyCatalog<T extends ReturnType<typeof readScheduledCatalog>[number] & { credit?: CommonsCredit }>(base: LibraryItem[], source: T[], imagePath: (entry: T) => string) {
   const catalog = [...base];
   for (const entry of source) {
     const { assetId, word, metadata } = entry;
@@ -53,10 +54,14 @@ function applyCatalog<T extends ReturnType<typeof readScheduledCatalog>[number]>
     const existing = catalog[existingIndex];
     if (existing?.image) continue;
     const id = existing?.id ?? `scheduled-${assetId}`;
+    const credit = entry.credit;
     const item: LibraryItem = {
       id, word, image: imagePath(entry), ...metadata,
       syllableCount: countSyllables(metadata.syllabification), syllableStatus: "verified",
-      source: "OpenAI ImageGen", author: "OpenAI ImageGen", license: "Uso interno del progetto",
+      ...(credit ? {
+        source: `Wikimedia Commons · ${credit.title}`, sourceUrl: credit.sourceUrl, author: credit.author,
+        license: commonsLicenses[credit.license].name, licenseUrl: commonsLicenses[credit.license].url,
+      } : { source: "OpenAI ImageGen", author: "OpenAI ImageGen", license: "Uso interno del progetto" }),
     };
     if (existing) catalog[existingIndex] = item;
     else catalog.push(item);

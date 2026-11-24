@@ -134,6 +134,13 @@
       "when": 1795532400000,
       "tag": "0018_official_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1795543200000,
+      "tag": "0019_openverse_credits",
+      "breakpoints": true
     }
   ]
 }

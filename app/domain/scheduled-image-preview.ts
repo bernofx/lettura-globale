@@ -142,13 +142,14 @@ export function publishedImageBytes(preview: Preview) {
   return preview.bytes;
 }
 
-function checkDimensions(imageType: SupportedImageType, width: number, height: number): PreviewRejection | null {
-  if (width !== height) return { reason: "not_square", imageType, width, height };
-  return width >= 256 && width <= MAX_SIDE ? null : { reason: "dimensions", imageType, width, height };
+function checkDimensions(imageType: SupportedImageType, width: number, height: number, square: boolean): PreviewRejection | null {
+  if (square && width !== height) return { reason: "not_square", imageType, width, height };
+  const minimum = square ? 256 : 128;
+  return width >= minimum && height >= minimum && width <= MAX_SIDE && height <= MAX_SIDE ? null : { reason: "dimensions", imageType, width, height };
 }
 
 /** Validate a provider image for the private preview, or say why it cannot be used. */
-export function inspectScheduledImage(encoded: unknown): Preview | PreviewRejection {
+export function inspectScheduledImage(encoded: unknown, { square = true }: { square?: boolean } = {}): Preview | PreviewRejection {
   if (typeof encoded !== "string" || encoded.length > MAX_SCHEDULED_PREVIEW_BASE64 ||
     encoded.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(encoded)) return { reason: "encoding" };
   const bytes = Buffer.from(encoded, "base64");
@@ -157,14 +158,14 @@ export function inspectScheduledImage(encoded: unknown): Preview | PreviewReject
   if (bytes.toString("latin1", 0, 4) === "RIFF") {
     const webp = inspectWebp(bytes);
     if ("reason" in webp) return webp;
-    return checkDimensions("image/webp", webp.width, webp.height) ?? { ...webp, imageType: "image/webp" };
+    return checkDimensions("image/webp", webp.width, webp.height, square) ?? { ...webp, imageType: "image/webp" };
   }
   const imageType = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg"
     : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? "image/png" : null;
   if (!imageType) return { reason: "format" };
   const dimensions = validateImageBytes(bytes, imageType);
   if (!dimensions.valid) return { reason: "structure", imageType };
-  const rejected = checkDimensions(imageType, dimensions.width, dimensions.height);
+  const rejected = checkDimensions(imageType, dimensions.width, dimensions.height, square);
   if (rejected) return rejected;
   if (imageType === "image/png" ? !staticPng(bytes) : !bytes.subarray(-2).equals(Buffer.from([0xff, 0xd9]))) {
     return { reason: imageType === "image/png" && pngAnimated(bytes) ? "animated" : "structure", imageType };

@@ -6,6 +6,7 @@ import { caaCachedMedia } from "../caa-cache";
 import { androidBridge } from "../domain/android-bridge";
 import { AndroidPrintError, printAndroidCaa } from "../domain/android-print";
 import { ARASAAC_CREDIT, caaCutSheets, caaDisplayText, caaPageSize, caaPrintSheetSize, caaPages, caaSymbolSize, caaSymbolUrl, type CaaPage, type CaaStory, type CaaSymbol } from "../domain/caa-stories";
+import { commonsCreditLinks } from "../domain/openverse-catalog";
 import { CaaImageScaleOption } from "./caa-format-options";
 
 export const CaaSharedImages = createContext<string | null>(null);
@@ -23,12 +24,19 @@ export function CaaArtwork({ symbol,owner,alt }: { symbol: CaaSymbol; owner: str
   return <img src={src} alt={alt} referrerPolicy="no-referrer" draggable={false} />;
 }
 function credits(story: CaaStory) {
-  const result = new Set<string>();
+  const result = new Map<string, ReactNode>();
   for (const sentence of story.sentences) for (const token of sentence.tokens) {
-    if (token.symbol?.kind === "arasaac") result.add(ARASAAC_CREDIT);
-    else if (token.symbol) result.add(`${token.symbol.source} · ${token.symbol.author} · ${token.symbol.license}`);
+    const symbol = token.symbol;
+    if (!symbol) continue;
+    if (symbol.kind === "arasaac") {
+      result.set(ARASAAC_CREDIT, ARASAAC_CREDIT);
+      continue;
+    }
+    const key = `${symbol.source} · ${symbol.author} · ${symbol.license}`;
+    const links = symbol.kind === "bundled" && commonsCreditLinks(symbol.sourceUrl, symbol.licenseUrl);
+    result.set(key, links ? <><a href={links.sourceUrl}>{symbol.source}</a> · {symbol.author} · <a href={links.licenseUrl}>{symbol.license}</a> · Ridimensionata</> : key);
   }
-  return [...result].join(" — ");
+  return [...result.entries()].map(([key, value], index) => <span key={key}>{index > 0 && " — "}{value}</span>);
 }
 export function CaaPrintedPage({ story,page,owner }: { story: CaaStory; page: CaaPage | null; owner: string }) {
   if (!page) return <div className="caa-paper caa-blank" />;

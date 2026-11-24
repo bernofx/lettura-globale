@@ -288,3 +288,7 @@ body.lg-session-active .session-screen{height:100dvh}
 @media(pointer:coarse){.sequence-toggle{min-height:44px}}
 /* Text for assistive technologies only (e.g. inside live regions). */
 .visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+.session-version-credits { display: flex; gap: .35rem; align-items: center; }
+.session-image-credits { display: inline-grid; place-items: center; min-inline-size: 24px; min-block-size: 24px; padding: 3px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: .4rem; }
+.session-image-credits:focus-visible { outline: 2px solid var(--violet); }
