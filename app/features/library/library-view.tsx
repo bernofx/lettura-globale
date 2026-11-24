@@ -7,6 +7,7 @@ import { type SoundPreferences } from "../../domain/sound-preferences";
 import { SoundSettingsPanel } from "../settings/appearance-view";
 import { GameSoundtrackPanel } from "./game-soundtrack-panel";
 import { PuzzleLibraryPanel } from "./puzzle-library-panel";
+import { ScheduledImagesPanel } from "./scheduled-images-panel";
 import type { PuzzleLibrary } from "../games/use-puzzle-library";
 import { Artwork } from "../../shared/artwork";
 import { prepareUploadedImage } from "../../shared/media-storage";
@@ -17,7 +18,7 @@ import { CheckLine } from "../../shared/ui/form-controls";
 import "./library-layout.css";
 import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
-export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUpload, items, search, setSearch, onUpload, onEdit, onDelete, sounds, onSoundsChange, puzzles, soundtrackUploadOpen, onSoundtrackUploadClose }: { puzzles: PuzzleLibrary; soundtrackUploadOpen: boolean; onSoundtrackUploadClose: () => void; categorySymbols: CategorySymbols; onCategorySymbol: (category: string, id: string) => void; onCategoryUpload: (category: string, image: string) => Promise<void>; items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: (kind: "word" | "sentence" | "puzzle" | "soundtrack") => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
+export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUpload, items, search, setSearch, onUpload, onEdit, onDelete, sounds, onSoundsChange, puzzles, soundtrackUploadOpen, onSoundtrackUploadClose, scheduledImagesProfile }: { puzzles: PuzzleLibrary; soundtrackUploadOpen: boolean; onSoundtrackUploadClose: () => void; scheduledImagesProfile?: string; categorySymbols: CategorySymbols; onCategorySymbol: (category: string, id: string) => void; onCategoryUpload: (category: string, image: string) => Promise<void>; items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: (kind: "word" | "sentence" | "puzzle" | "soundtrack") => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [wordsExpanded, setWordsExpanded] = useState(false);
   const [sentencesExpanded, setSentencesExpanded] = useState(false);
@@ -48,6 +49,7 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
       {!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}
       {expansion("immagini", filteredWords, visibleWords, wordsExpanded, setWordsExpanded)}
     </section>
+    {scheduledImagesProfile && <ScheduledImagesPanel key={scheduledImagesProfile} profileId={scheduledImagesProfile} />}
     <section className="panel library-area sentence-library-area" aria-labelledby="library-scenes">
       <SectionHeading id="library-scenes" title="Scene soggetto + verbo" description="Immagini d’azione usate da Abbina la frase.">
         <button type="button" className="primary-button" onClick={() => onUpload("sentence")}><Plus size={18} aria-hidden="true" />Aggiungi frase</button>

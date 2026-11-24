@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Libreria → Generazione programmata aggiunge la coda D1 per gli amministratori, con deduplicazione, stati di elaborazione, link alle PR e chiave per Codex Cloud. La migrazione 0017 e il task ricorrente richiedono attivazione. Vedi ADR 0026 e il prompt versionato.
+
 - [x] Prova programmata del catalogo demo con la scheda illustrata Clessidra (Oggetti, LA, cles-si-dra). Nave aveva già un’immagine.
 
 - [x] Due immagini WebP in Libreria per Pirata (Persone) e Nave (Trasporti), con articoli IL e LA, sillabazione verificata e i rispettivi esercizi «Trova il pirata» e «Trova la nave».
