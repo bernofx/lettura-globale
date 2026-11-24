@@ -280,12 +280,10 @@ try {
     headers: { cookie: key, "x-scheduled-images-profile": profile, "content-type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const queuePublisher = (token, body) => request(queuePath + "/publisher", {
-    method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify(body),
-  });
   assert.equal((await request(queuePath)).status, 401);
   assert.equal((await queueAdmin(undefined, secondCookie, "adult-b")).status, 403);
-  assert.equal((await queuePublisher("0".repeat(64), { action: "claim" })).status, 401);
+  assert.equal((await request(queuePath + "/publisher", { method: "POST" })).status, 404, "the GitHub publisher endpoint is gone");
+  assert.equal((await queueAdmin({ action: "rotate_publisher_key" })).status, 400);
   assert.equal((await request(queuePath + "/worker", { method: "POST" })).status, 404, "generation has no public worker route");
   const manualCard = {
     id: crypto.randomUUID(), word: "Rocchetto", category: "Oggetti", contentKind: "word",
@@ -341,9 +339,11 @@ try {
   const producer = await mf.getQueueProducer("SCHEDULED_IMAGE_JOBS");
   const { generationId } = await db.prepare("SELECT generation_id AS generationId FROM scheduled_image_requests WHERE id = ?").bind(job.id).first();
   await producer.sendBatch([{ body: { id: job.id, generationId } }, { body: { id: job.id, generationId } }]);
-  const { token: publisherKey } = await (await queueAdmin({ action: "rotate_publisher_key" })).json();
-  const publisher = (body, token = publisherKey) => queuePublisher(token, body);
-  assert.equal((await (await publisher({ action: "claim" })).json()).proposal, null, "approval precedes publication");
+  const listedCatalog = async () => (await (await request("/api/official-catalog")).json()).entries;
+  assert.deepEqual(await listedCatalog(), [], "generated drafts stay private");
+  assert.equal((await request(`/images/catalog/${job.id}.png`)).status, 404);
+  assert.equal((await queueAdmin({ action: "publish", id: job.id })).status, 200);
+  assert.deepEqual(await listedCatalog(), [], "retry uses only previously approved proposals");
   const metadata = { category: "Oggetti", article: "LA", syllabification: "lan-ter-na" };
   const preview = (sessionCookie, profile) => request(queuePath + "?preview=" + job.id,
     { headers: { cookie: sessionCookie, "x-scheduled-images-profile": profile } });
@@ -356,7 +356,21 @@ try {
   assert.equal((await queueAdmin({ ...approval, digest: "invalid" })).status, 409);
   assert.equal((await queueAdmin(approval, secondCookie, "adult-b")).status, 403);
   assert.equal((await queueAdmin({ ...approval, metadata: { ...metadata, category: "Azione" } })).status, 422);
-  assert.equal((await queueAdmin(approval)).status, 200);
+  const concurrentApprovals = await Promise.all([queueAdmin(approval), queueAdmin(approval)]);
+  assert.deepEqual(concurrentApprovals.map(response => response.status).sort(), [200, 409]);
+  const result = await concurrentApprovals.find(response => response.ok).json();
+  assert.equal(result.requests.find(item => item.id === job.id).status, "published");
+  assert.deepEqual(await listedCatalog(), [{ assetId: job.id, word: "Lanterna", metadata, extension: "png" }]);
+  const publicImage = await request(`/images/catalog/${job.id}.png`);
+  assert.equal(publicImage.status, 200);
+  assert.equal(publicImage.headers.get("content-type"), "image/png");
+  assert.equal(publicImage.headers.get("x-content-type-options"), "nosniff");
+  assert.ok((await publicImage.arrayBuffer()).byteLength);
+  assert.equal((await request(`/images/catalog/${job.id}.webp`)).status, 404);
+  assert.equal(await db.prepare("SELECT image_base64 FROM scheduled_image_requests WHERE id = ?").bind(job.id).first("image_base64"), null);
+  assert.equal((await queueAdmin({ action: "generate", words: "LANterna" })).status, 200);
+  assert.equal(imageApiCalls.length, 1, "the shared catalog prevents regeneration");
+
   await queueAdmin({ action: "generate", words: "Ombrello" });
   assert.match((await waitForQueueStatus("Ombrello", "needs_review")).message, /HTTP 400 · moderation_blocked/);
   await queueAdmin({ action: "generate", words: "Ventaglio" });
@@ -371,6 +385,14 @@ try {
     db.prepare(`INSERT INTO scheduled_image_requests (id, account_id, word, word_key, generation_id, status, lease_until, created_at, updated_at)
       VALUES (?, ?, 'Portacandele', 'portacandele', ?, 'processing', ?, ?, ?)`).bind(expired, account, crypto.randomUUID(), now - 1000, now, now),
   ]);
+  const oldImage = readFileSync("public/images/demo/clessidra.webp").toString("base64");
+  for (const [word, syllabification, status] of [["Lanterna marina", "lan-ter-na ma-ri-na", "approved"], ["Scatola", "sca-to-la", "pull_request"]]) {
+    const approvedMetadata = { category: "Oggetti", article: "LA", syllabification };
+    const digest = createHash("sha256").update(JSON.stringify([approvedMetadata, oldImage])).digest("hex");
+    await db.prepare(`INSERT INTO scheduled_image_requests (id, account_id, word, word_key, status, metadata, image_base64, proposal_digest, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), account, word, word.toLowerCase(), status,
+      JSON.stringify(approvedMetadata), oldImage, digest, now, now).run();
+  }
   const recovery = await request("/cdn-cgi/handler/scheduled?cron=" + encodeURIComponent("*/5 * * * *"));
   assert.equal(recovery.status, 200);
   const [recoveredDelivery, expiredCall] = await Promise.all([
@@ -379,34 +401,18 @@ try {
   assert.match(recoveredDelivery.message, /Limite mensile/);
   assert.match(expiredCall.message, /Generazione interrotta/);
   assert.equal(imageApiCalls.length, 2, "recovery respects the cap and does not repeat uncertain API calls");
-  const publishing = await (await publisher({ action: "claim" })).json();
-  assert.deepEqual(Object.keys(publishing.proposal).sort(), ["digest", "id", "image", "metadata", "prHead", "prNumber", "status", "word"]);
-  assert.equal(publishing.proposal.id, job.id);
-  assert.equal((await (await publisher({ action: "claim" })).json()).proposal, null, "publisher claim is exclusive");
+  await Promise.all([waitForQueueStatus("Lanterna marina", "published"), waitForQueueStatus("Scatola", "published")]);
+  assert.equal((await listedCatalog()).length, 3);
+  assert.equal(imageApiCalls.length, 2, "backfill never invokes the image provider");
   assert.equal((await queueAdmin({ action: "cancel", id: job.id })).status, 409);
-  assert.deepEqual(JSON.parse(publishing.proposal.metadata), metadata);
-  assert.notEqual(publishing.proposal.digest, reviewed.digest, "edited educational metadata changes the approved digest");
-  const link = { prNumber: 12, prHead: "a".repeat(40) };
-  const publish = (action, extra = {}, lease = publishing.claimId) => publisher({ action, id: job.id, claimId: lease, ...extra });
-  assert.equal((await publish("link", link)).status, 200);
-  assert.equal((await publish("renew", { ...link, prHead: "b".repeat(40) })).status, 409);
-  assert.equal((await publish("renew", link)).status, 200);
-  assert.equal((await publish("confirm")).status, 425, "publication needs the entry in the live catalog");
-  assert.equal((await publish("release", { reason: "anything else" })).status, 400);
-  assert.equal((await publish("release", { reason: "deployment_pending" })).status, 200);
-  const resumed = await (await publisher({ action: "claim" })).json();
-  assert.equal(resumed.proposal.prNumber, 12);
-  assert.equal(resumed.proposal.prHead, link.prHead);
-  assert.equal((await publish("renew", link)).status, 409, "an older claim cannot authorize merge");
   await db.prepare(`INSERT INTO scheduled_image_requests (id, account_id, word, word_key, status, created_at, updated_at)
     SELECT ?, account_id, 'Girandola', 'girandola', 'existing', 1, 1 FROM scheduled_image_requests WHERE id = ?`).bind(crypto.randomUUID(), job.id).run();
   const regenerated = await (await queueAdmin({ action: "generate", words: "Girandola" })).json();
   assert.equal(regenerated.accepted, 1, "a word marked as illustrated can be requested again once it has no image");
   assert.notEqual(regenerated.requests.find(item => item.word === "Girandola").status, "existing");
   const snapshot = await (await queueAdmin()).json();
-  assert.equal(snapshot.requests.find(item => item.id === job.id).status, "pull_request");
-  assert.equal(snapshot.token, undefined);
-  console.log("PASS: manual card and photo save bypass OpenAI, explicit single and batch generation, quota, recovery and approval.");
+  assert.equal(snapshot.requests.find(item => item.id === job.id).status, "published");
+  console.log("PASS: manual card and photo save bypass OpenAI, explicit single and batch generation, quota, private previews, direct publication and legacy recovery.");
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }

@@ -73,6 +73,10 @@ try {
   const patch = await request("/api/state/changes", { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(buildStateChange(before.state, updated, crypto.randomUUID(), before.revision)) });
   assert.equal(patch.status, 200);
   const revision = (await patch.json()).revision;
+  const officialId = "00000000-0000-4000-8000-000000000098";
+  await db.prepare(`INSERT INTO official_catalog_images (id, word_key, word, metadata, image_type, object_key, published_at)
+    VALUES (?, 'lanterna', 'Lanterna', ?, 'image/webp', 'synthetic-official-lanterna', ?)`)
+    .bind(officialId, JSON.stringify({ category: "Oggetti", article: "LA", syllabification: "lan-ter-na" }), now).run();
   const fresh = await share(revision);
   assert.equal(fresh.status, 201);
   const freshPayload = await (await request(`/api/shared-launch/${(await fresh.json()).token}`)).json();
@@ -80,6 +84,11 @@ try {
   assert.equal(freshPayload.exercises[0].id, "random");
   assert.equal(freshPayload.exercises[0].recognitionMode, "random");
   assert.equal(freshPayload.exercises[0].distractorSource, "mixed");
+  const published = freshPayload.library.find(item => item.word === "Lanterna");
+  assert.equal(published?.image, `/images/catalog/${officialId}.webp`);
+  assert.equal(published.remoteImageId, undefined);
+  const firstAgain = await (await request(`/api/shared-launch/${firstToken}`)).json();
+  assert.equal(firstAgain.library.some(item => item.word === "Lanterna"), false, "old links keep their original catalog");
   assert.equal((await share(before.revision)).status, 409, "stale revisions do not mint an old snapshot");
   const oldToken = "00000000-0000-4000-8000-000000000123";
   const brokenPayload = { schemaVersion: 1, kind: "exercise", title: "Incomplete", exercises: [fixed], library: library.filter((item) => !item.deleted) };

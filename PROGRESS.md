@@ -8,15 +8,17 @@
 
 ## Completato
 
+- [x] Le immagini approvate vengono pubblicate direttamente nel catalogo condiviso D1/R2. Il recupero importa le proposte già approvate, riusando la foto. La migrazione 0018 revoca il publisher GitHub, il cui workflow è stato rimosso.
+
 - [x] Generazione con OpenAI: le immagini WebP con metadati di provenienza C2PA (Content Credentials) o altri blocchi di metadati non vengono più rifiutate come «non valide»; i metadati sono rimossi dall’anteprima. Se un’immagine resta inutilizzabile, il messaggio dice il motivo (formato, dimensioni, non quadrata, animata, struttura) senza esporre il contenuto. Test con un WebP firmato C2PA e con un PNG non quadrato.
 - [x] Correzioni dalla revisione della generazione immagini (PR #44–#50). La build sceglie la configurazione Wrangler dell’ambiente con `LETTURA_WRANGLER_CONFIG` (produzione predefinita, `wrangler.staging.jsonc` per staging), verificata anche dal controllo della CI. Scartare un’immagine generata chiede conferma; una parola «Già presente» o «Pubblicata» si può richiedere di nuovo quando non ha più un’immagine; la conferma di pubblicazione chiude come «Già presente» se nel frattempo il catalogo ha un’altra immagine per la parola. Pagina rinnovata: riquadri «Nuove parole» e «Richieste», stati colorati con in alto quelli che aspettano una scelta, righe a griglia, termini meno tecnici (In pubblicazione, generazioni usate con barra, riferimento HTTP in secondo piano), «Aggiorna» con icona in linea, verifica con istruzione in alto, «Scarta» e «Chiudi», sillabe a tutta larghezza, «Non usare nell’esercizio», pulsante «Copia» per la chiave, errore non duplicato. «Trova il girasole» non propone più «sole». Cache PWA v87.
-- [x] Le proposte della generazione conservano un’anteprima privata degli output quadrati statici WebP, PNG e JPEG fino a 1.350.000 byte. Il publisher li converte in WebP per il catalogo dopo l’approvazione.
+- [x] Le proposte della generazione conservano un’anteprima privata degli output quadrati statici WebP, PNG e JPEG fino a 1.350.000 byte. I file pubblicati conservano il formato convalidato e vengono ripuliti dai metadati.
 
 - [x] La coda immagini distingue gli errori HTTP di OpenAI, moderazione, quota, accesso, problemi di rete e risposte immagine incompatibili. La richiesta descrive lo sfondo opaco nel prompt. I messaggi conservano solo i codici e i parametri previsti.
 
 - [x] Il build da Git genera la configurazione Wrangler dal file di produzione. Il deploy automatico risolve la coda immagini di produzione e include il trigger di recupero. La CI verifica la configurazione generata.
 
-- [x] Libreria apre una sezione dedicata **Generazione con OpenAI**. Il pulsante esplicito di generazione invia a Cloudflare Queues solo le parole mancanti, una singola parola o un elenco. **Aggiungi parola o foto** salva soltanto nella Libreria. Il Worker genera una proposta con OpenAI Images e applica un limite mensile ai tentativi. L’amministratore può correggere i metadati prima di approvare. Un workflow GitHub separato verifica il diff del catalogo, attende la CI per lo stesso commit e pubblica tramite PR. La coda Cloudflare, la migrazione 0017, le credenziali del provider e il publisher richiedono attivazione. Vedi ADR 0026.
+- [x] Libreria apre una sezione dedicata **Generazione con OpenAI**. Il pulsante esplicito di generazione invia a Cloudflare Queues solo le parole mancanti, una singola parola o un elenco. **Aggiungi parola o foto** salva soltanto nella Libreria. Il Worker genera una proposta con OpenAI Images e applica un limite mensile ai tentativi. L’amministratore può correggere i metadati prima di approvare. La coda Cloudflare, la migrazione 0017 e le credenziali del provider richiedono attivazione. Vedi ADR 0026.
 
 - [x] Prova programmata del catalogo demo con la scheda illustrata Clessidra (Oggetti, LA, cles-si-dra). Nave aveva già un’immagine.
 

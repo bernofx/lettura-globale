@@ -1,3 +1,7 @@
+import { env } from "cloudflare:workers";
+import { mergeOfficialLibrary } from "../../shared/state-hydration";
+import { readOfficialCatalog } from "../../server/official-catalog";
+import type { LibraryItem } from "../../shared/types";
 import { snapshotCategorySymbols, type CategorySymbols } from "../../domain/category-images";
 import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { getDb } from "../../../db";
@@ -7,10 +11,10 @@ import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabi
 import { hasArtwork } from "../../domain/library-availability";
 import { isWordCategoryContent, wordCategoryNames } from "../../domain/word-category-content";
 import { sharedLaunchExpiresAt } from "../../domain/shared-launch-policy";
-import { deduplicateLibraryPlaceholders, type DeduplicableLibraryItem } from "../../domain/library-deduplication";
+import { deduplicateLibraryPlaceholders } from "../../domain/library-deduplication";
 import { remapExerciseReferences } from "../../domain/exercise-library-references";
 import { validateSharedExercises } from "../../domain/shared-preview-validation";
-import type { SessionExercise, SessionPlanLibraryItem } from "../../domain/session-compilation";
+import type { SessionExercise } from "../../domain/session-compilation";
 
 type LaunchKind = "exercise" | "sequence";
 type SharedExercise = Record<string, unknown> & {
@@ -83,7 +87,9 @@ export async function POST(request: Request) {
   if (!selectedExercises.length) return Response.json({ error: "content_not_found" }, { status: 404 });
 
   if (input.kind === "sequence" && selectedExercises.length !== sequence?.exerciseIds?.length) return Response.json({ error: "incomplete_exercise" }, { status: 422 });
-  const repaired = deduplicateLibraryPlaceholders((state.library ?? []) as (SessionPlanLibraryItem & DeduplicableLibraryItem)[]);
+  const official = env.DB ? await readOfficialCatalog(env.DB) : [];
+  const library = mergeOfficialLibrary((state.library ?? []) as LibraryItem[], official);
+  const repaired = deduplicateLibraryPlaceholders(library);
   for (let index = 0; index < selectedExercises.length; index++) selectedExercises[index] = remapExerciseReferences(selectedExercises[index], repaired.replacements);
   const availableLibrary = repaired.items.filter((item) => !item.deleted);
   const availableById = new Map(availableLibrary.map((item) => [item.id, item]));

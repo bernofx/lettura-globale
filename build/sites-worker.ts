@@ -3,6 +3,7 @@ import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 import { upgradeRealtime } from "../realtime/gateway";
 import { processImageJob, recoverImageJobs, type ScheduledImageJob } from "../app/server/scheduled-image-jobs";
+import { recoverApprovedCatalogImages } from "../app/server/official-catalog";
 export { RealtimeSession } from "../realtime/worker";
 
 export default {
@@ -14,6 +15,7 @@ export default {
   },
   scheduled(_event: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
     ctx.waitUntil(recoverImageJobs(env));
+    ctx.waitUntil(recoverApprovedCatalogImages(env));
   },
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     const url = new URL(request.url);

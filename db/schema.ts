@@ -32,10 +32,6 @@ export const authSessions = sqliteTable("auth_sessions", {
   adultProfileId: text("adult_profile_id"),
 });
 
-export const scheduledImageWorkers = sqliteTable("scheduled_image_workers", {
-  accountId: text("account_id").primaryKey(), publisherHash: text("publisher_hash").notNull().unique(), createdAt: integer("created_at").notNull(),
-});
-
 export const scheduledImageRequests = sqliteTable("scheduled_image_requests", {
   id: text("id").primaryKey(), accountId: text("account_id").notNull(), word: text("word").notNull(), wordKey: text("word_key").notNull(),
   detail: text("detail").notNull().default(""), status: text("status").notNull(), message: text("message").notNull().default(""),
@@ -46,6 +42,12 @@ export const scheduledImageRequests = sqliteTable("scheduled_image_requests", {
   uniqueIndex("scheduled_image_requests_word").on(table.accountId, table.wordKey),
   index("scheduled_image_requests_queue").on(table.accountId, table.status, table.leaseUntil, table.createdAt),
 ]);
+
+export const officialCatalogImages = sqliteTable("official_catalog_images", {
+  id: text("id").primaryKey().notNull(), wordKey: text("word_key").notNull().unique(), word: text("word").notNull(),
+  metadata: text("metadata").notNull(), imageType: text("image_type").notNull(), objectKey: text("object_key").notNull().unique(),
+  publishedAt: integer("published_at").notNull(),
+});
 
 export const scheduledImageUsage = sqliteTable("scheduled_image_usage", {
   month: text("month").primaryKey().notNull(), attempts: integer("attempts").notNull(),

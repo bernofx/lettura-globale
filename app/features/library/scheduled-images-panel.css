@@ -5,10 +5,10 @@
 }
 
 .scheduled-images-form button { justify-self: start; }
-.scheduled-images-form label, .scheduled-images-token label { font-weight: 700; }
+.scheduled-images-form label { font-weight: 700; }
 .scheduled-images-form small, .scheduled-images-item small, .scheduled-images-usage small { color: var(--muted); }
 
-.scheduled-images-form textarea, .scheduled-images-token input {
+.scheduled-images-form textarea {
   min-width: 0;
   width: 100%;
   border: 1px solid var(--line);
@@ -64,9 +64,6 @@
 }
 .scheduled-images-connection { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: .75rem; }
 .scheduled-images-connection summary { cursor: pointer; font-weight: 700; }
-.scheduled-images-token { display: grid; gap: .35rem; margin-top: .75rem; }
-.scheduled-images-token > div { display: flex; gap: .5rem; }
-.scheduled-images-token .ghost-button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .scheduled-images-preview { display: block; width: min(100%, 18rem); max-height: 40dvh; object-fit: contain; margin-inline: auto; }
 .scheduled-images-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 .scheduled-images-metadata label { display: grid; gap: .3rem; }

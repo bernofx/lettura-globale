@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type CategorySymbols } from "../../domain/category-images";
 import { seedDefaultCategorySymbols } from "../../domain/category-symbol-catalog";
+import { OFFICIAL_CATALOG_URL, type OfficialCatalogEntry } from "../../domain/scheduled-catalog";
+import { fetchWithTimeout } from "../../shared/cloud-client";
 import { deduplicateLibraryPlaceholders } from "../../domain/library-deduplication";
 import { type SessionHistoryRecord } from "../../domain/session-history";
 import { type AppearanceSettings, defaultAppearance, hydrateAppearance } from "../../domain/appearance";
@@ -8,7 +10,7 @@ import { defaultSoundPreferences, hydrateSoundPreferences, type SoundPreferences
 import { useStoredState } from "../../shared/hooks";
 import { readLibraryImage, storeLibraryImage } from "../../shared/media-storage";
 import { initialAdministrator, initialChildren, initialExercises, initialSequences, initialTherapists, stockItems } from "../../shared/seed-data";
-import { hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, remapExerciseLibraryIds } from "../../shared/state-hydration";
+import { hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, mergeOfficialLibrary, remapExerciseLibraryIds } from "../../shared/state-hydration";
 import { type Attempt, type BackendState, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Sequence, type Therapist } from "../../shared/types";
 
 type ApplyBackendStateOptions = {
@@ -44,6 +46,38 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [tracingOrderRequired, setTracingOrderRequired, tracingOrderLoaded] = useStoredState<boolean>("lg-tracing-order-required", false, saved => saved === true);
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
+
+  const officialCatalog = useRef<{ entries: OfficialCatalogEntry[]; snapshot: string }>({ entries: [], snapshot: "[]" });
+  const catalogRequestId = useRef(0);
+  const refreshOfficialCatalog = useCallback(async () => {
+    const requestId = ++catalogRequestId.current;
+    try {
+      const response = await fetchWithTimeout(OFFICIAL_CATALOG_URL, { cache: "no-store" });
+      if (!response.ok) return;
+      const { entries } = await response.json() as { entries: OfficialCatalogEntry[] };
+      if (!Array.isArray(entries) || requestId !== catalogRequestId.current) return;
+      const snapshot = JSON.stringify(entries);
+      if (snapshot === officialCatalog.current.snapshot) return;
+      officialCatalog.current = { entries, snapshot };
+      setLibrary(previous => mergeOfficialLibrary(previous, entries));
+    } catch {
+      // The stored library remains usable until the network is back.
+    }
+  }, [setLibrary]);
+
+  useEffect(() => {
+    if (!libraryLoaded) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) void refreshOfficialCatalog();
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [libraryLoaded, refreshOfficialCatalog]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +124,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     setTherapists(mergeById(state.therapists ?? [], [initialAdministrator]));
     setChildren(state.children?.length ? state.children : initialChildren);
     setActiveChildId(state.activeChildId || state.children?.[0]?.id || initialChildren[0].id);
-    setLibrary(hydrateLibrary(options.library ?? state.library ?? stockItems).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
+    setLibrary(hydrateLibrary(options.library ?? state.library ?? stockItems, officialCatalog.current.entries).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
     setExercises(hydrateExercises(state.exercises ?? []));
     setSequences(hydrateSequences(state.sequences ?? []));
     setActiveSequenceId(state.activeSequenceId || state.sequences?.[0]?.id || initialSequences[0].id);
@@ -108,7 +142,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     library, setLibrary, exercises, setExercises, sequences, setSequences, activeSequenceId, setActiveSequenceId,
     attempts, setAttempts, helps, setHelps, sessionHistory, setSessionHistory, appearance, setAppearance,
     categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, tracingOrderRequired, setTracingOrderRequired,
-    allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, applyBackendState,
+    allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, applyBackendState, refreshOfficialCatalog,
   };
 }
 

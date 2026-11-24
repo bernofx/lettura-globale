@@ -82,19 +82,64 @@ function pngAnimated(bytes: Buffer) {
   return bytes.includes(Buffer.from("acTL", "latin1"));
 }
 
-function staticPng(bytes: Buffer) {
+function staticPng(bytes: Buffer, stripMetadata = false) {
   let offset = 8;
   let hasData = false;
+  const chunks = [bytes.subarray(0, 8)];
   for (; offset + 12 <= bytes.length;) {
     const size = bytes.readUInt32BE(offset);
     const type = bytes.toString("latin1", offset + 4, offset + 8);
     const end = offset + 12 + size;
-    if (end > bytes.length || type === "acTL" || type === "fcTL" || type === "fdAT") return false;
+    if (end > bytes.length || type === "acTL" || type === "fcTL" || type === "fdAT") return null;
+    if (stripMetadata && ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"].includes(type)) chunks.push(bytes.subarray(offset, end));
     if (type === "IDAT") hasData = true;
-    if (type === "IEND") return size === 0 && end === bytes.length && hasData;
+    if (type === "IEND") return size === 0 && end === bytes.length && hasData ? (stripMetadata ? Buffer.concat(chunks) : bytes) : null;
     offset = end;
   }
-  return false;
+  return null;
+}
+
+/** Preserve the JPEG frame and scans while dropping comment and application segments. */
+function jpegPixels(bytes: Buffer) {
+  const chunks = [bytes.subarray(0, 2)];
+  let offset = 2;
+  let hasScan = false;
+  while (offset + 1 < bytes.length) {
+    const start = offset;
+    if (bytes[offset++] !== 0xff) return null;
+    while (bytes[offset] === 0xff) offset++;
+    const marker = bytes[offset++];
+    if (marker === 0xd9) {
+      if (!hasScan || offset !== bytes.length) return null;
+      chunks.push(bytes.subarray(start, offset));
+      return Buffer.concat(chunks);
+    }
+    if (!marker || marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || offset + 2 > bytes.length) return null;
+    const length = bytes.readUInt16BE(offset);
+    if (length < 2 || offset + length > bytes.length) return null;
+    offset += length;
+    if (marker === 0xda) {
+      hasScan = true;
+      // Find the next segment (a scan may include stuffed FF bytes and restart markers).
+      let next = bytes.indexOf(0xff, offset);
+      while (next !== -1) {
+        let code = next + 1;
+        while (bytes[code] === 0xff) code++;
+        if (bytes[code] !== 0 && !(bytes[code] >= 0xd0 && bytes[code] <= 0xd7)) break;
+        next = bytes.indexOf(0xff, code + 1);
+      }
+      if (next === -1) return null;
+      offset = next;
+    }
+    if (marker !== 0xfe && (marker < 0xe0 || marker > 0xef)) chunks.push(bytes.subarray(start, offset));
+  }
+  return null;
+}
+
+export function publishedImageBytes(preview: Preview) {
+  if (preview.imageType === "image/png") return staticPng(preview.bytes, true);
+  if (preview.imageType === "image/jpeg") return jpegPixels(preview.bytes);
+  return preview.bytes;
 }
 
 function checkDimensions(imageType: SupportedImageType, width: number, height: number): PreviewRejection | null {
