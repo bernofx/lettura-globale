@@ -21,16 +21,40 @@ export function readScheduledCatalog(source: unknown) {
   });
 }
 
+export const OFFICIAL_CATALOG_URL = "/api/official-catalog";
+
+export type OfficialCatalogEntry = ReturnType<typeof readScheduledCatalog>[number] & { extension: "webp" | "png" | "jpeg" };
+
+export function officialImageExtension(imageType: string): OfficialCatalogEntry["extension"] | null {
+  if (imageType === "image/webp") return "webp";
+  if (imageType === "image/png") return "png";
+  if (imageType === "image/jpeg") return "jpeg";
+  return null;
+}
+
+export function officialCatalogImageUrl(id: string, extension: OfficialCatalogEntry["extension"]) {
+  return `/images/catalog/${id}.${extension}`;
+}
+
+export function addOfficialCatalog(base: LibraryItem[], source: OfficialCatalogEntry[]) {
+  return applyCatalog(base, source, (entry) => officialCatalogImageUrl(entry.assetId, entry.extension));
+}
+
 export function addScheduledCatalog(base: LibraryItem[], source: unknown = entries) {
+  return applyCatalog(base, readScheduledCatalog(source), entry => scheduledAssetUrl(entry.assetId));
+}
+
+function applyCatalog<T extends ReturnType<typeof readScheduledCatalog>[number]>(base: LibraryItem[], source: T[], imagePath: (entry: T) => string) {
   const catalog = [...base];
-  for (const { assetId, word, metadata } of readScheduledCatalog(source)) {
+  for (const entry of source) {
+    const { assetId, word, metadata } = entry;
     const key = scheduledWordKey(word);
     const existingIndex = catalog.findIndex(item => !item.categorySymbolOnly && item.contentKind !== "sentence" && scheduledWordKey(item.word) === key);
     const existing = catalog[existingIndex];
     if (existing?.image) continue;
     const id = existing?.id ?? `scheduled-${assetId}`;
     const item: LibraryItem = {
-      id, word, image: scheduledAssetUrl(assetId), ...metadata,
+      id, word, image: imagePath(entry), ...metadata,
       syllableCount: countSyllables(metadata.syllabification), syllableStatus: "verified",
       source: "OpenAI ImageGen", author: "OpenAI ImageGen", license: "Uso interno del progetto",
     };

@@ -3,6 +3,7 @@ import { type CategorySymbols } from "../domain/category-images";
 import { articleFor } from "../domain/article-classification";
 import { remapExerciseReferences } from "../domain/exercise-library-references";
 import { discardForeignNewSequences } from "../domain/sequence-access";
+import { addOfficialCatalog, type OfficialCatalogEntry } from "../domain/scheduled-catalog";
 import { hydrateSyllables } from "../domain/syllabification";
 import { compileSessionPlan } from "../domain/session-compilation";
 import { initialAdministrator, initialExercises, stockItems } from "./seed-data";
@@ -13,8 +14,20 @@ export function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
   return [...saved, ...seeded.filter((item) => !existingIds.has(item.id))];
 }
 
-export function hydrateLibrary(items: LibraryItem[]) {
-  return mergeById(items, stockItems).map((item) => {
+/** Apply the shared catalog like seed data, preserving each account’s edits and archives. */
+export function mergeOfficialLibrary(items: LibraryItem[], entries: OfficialCatalogEntry[]) {
+  if (!entries.length) return items;
+  const official = addOfficialCatalog(stockItems, entries).filter(item => item.image?.startsWith("/images/catalog/"));
+  const byId = new Map(official.map(item => [item.id, item]));
+  return mergeById(items, official).map(item => {
+    const entry = byId.get(item.id);
+    if (!entry || item.deleted || item.privateUpload || item.image || item.imageKey || item.remoteImageId) return item;
+    return { ...item, ...entry, emoji: undefined };
+  });
+}
+
+export function hydrateLibrary(items: LibraryItem[], official: OfficialCatalogEntry[] = []) {
+  const merged = mergeById(items, stockItems).map((item) => {
     const demoItem = stockItems.find((candidate) => candidate.id === item.id);
     // Archived placeholders retain the metadata used to remap old references to a private upload.
     const hydratedItem = demoItem?.image && !item.privateUpload && !item.deleted ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
@@ -26,6 +39,7 @@ export function hydrateLibrary(items: LibraryItem[]) {
     const normalizedItem = { ...currentItem, category: normalizeLearningCategory(currentItem.category) };
     return normalizedItem.contentKind === "sentence" || normalizedItem.categorySymbolOnly ? normalizedItem : hydrateSyllables(normalizedItem);
   });
+  return mergeOfficialLibrary(merged, official);
 }
 
 export function hydrateExercises(items: Exercise[]) {

@@ -53,8 +53,7 @@ export async function recoverImageJobs(env: Cloudflare.Env) {
 }
 
 const wordCards = stockItems.filter(item => !item.categorySymbolOnly && item.contentKind !== "sentence");
-const bundledImageWords = wordCards.filter(item => item.image)
-  .map(item => scheduledWordKey(item.word));
+export const bundledImageWords = new Set(wordCards.filter(item => item.image).map(item => scheduledWordKey(item.word)));
 
 export async function wordsWithImages(db: D1Database, accountId: string) {
   const { results } = await db.prepare(`
@@ -65,6 +64,7 @@ export async function wordsWithImages(db: D1Database, accountId: string) {
       AND COALESCE(json_extract(item.value, '$.categorySymbolOnly'), 0) = 0
       AND json_extract(item.value, '$.contentKind') IS NOT 'sentence'
       AND (COALESCE(json_extract(item.value, '$.image'), '') <> '' OR COALESCE(json_extract(item.value, '$.remoteImageId'), '') <> '')
+    UNION ALL SELECT word FROM official_catalog_images
   `).bind(accountId).all<{ word: string }>();
   return new Set([...bundledImageWords, ...results.filter(item => typeof item.word === "string").map(item => scheduledWordKey(item.word))]);
 }

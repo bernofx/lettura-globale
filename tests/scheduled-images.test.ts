@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { generateOpenAIImage, OpenAIImageError, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
-import { inspectScheduledImage, scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
+import { inspectScheduledImage, publishedImageBytes, scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
 import { validateImageBytes } from "../app/domain/image-validation.ts";
-import { verifyCatalogCommit } from "../scripts/publish-scheduled-image.mjs";
-import { addScheduledCatalog, readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
-import { MAX_SCHEDULED_IMAGES, isScheduledWebp, parseScheduledWords, scheduledAssetUrl, scheduledImageMetadata, scheduledWebpFromBase64, scheduledWordKey } from "../app/domain/scheduled-images.ts";
+import { mergeOfficialLibrary } from "../app/shared/state-hydration.ts";
+import { stockItems } from "../app/shared/seed-data.ts";
+import { addScheduledCatalog, officialCatalogImageUrl, readScheduledCatalog, type OfficialCatalogEntry } from "../app/domain/scheduled-catalog.ts";
+import { MAX_SCHEDULED_IMAGES, parseScheduledWords, scheduledAssetUrl, scheduledImageMetadata, scheduledWordKey } from "../app/domain/scheduled-images.ts";
 
 test("la coda unifica maiuscole, spazi, apostrofi e forme Unicode equivalenti", () => {
   assert.deepEqual(parseScheduledWords(" Clessidra \n CLESSIDRA \n Pesca | il frutto \n L’acqua \n l'acqua"), [
@@ -38,18 +36,6 @@ test("i metadati della proposta accettano solo categoria, articolo e sillabazion
   assert.throws(() => parseScheduledWords("Pesca | il\u202efrutto"), /invalid_words/);
 });
 
-test("le immagini programmate sono WebP semplici con dimensione e lunghezza controllate", () => {
-  const image = readFileSync("public/images/demo/clessidra.webp");
-  assert.ok(isScheduledWebp(image));
-  assert.ok(scheduledWebpFromBase64(image.toString("base64")));
-  assert.equal(isScheduledWebp(Buffer.concat([image, Buffer.from("extra")])), false);
-  assert.equal(isScheduledWebp(image.subarray(0, 30)), false);
-  const extended = Buffer.from(image);
-  extended.write("VP8X", 12);
-  assert.equal(isScheduledWebp(extended), false);
-  assert.equal(scheduledWebpFromBase64("A".repeat(600_000)), null);
-});
-
 test("il catalogo dà priorità alle foto esistenti e mantiene gli ID delle schede senza foto", () => {
   const assetId = "12345678-1234-4321-abcd-1234567890ab";
   const entry = { assetId, word: "Lanterna", metadata: { category: "Oggetti", article: "LA", syllabification: "lan-ter-na" } };
@@ -65,41 +51,35 @@ test("il catalogo dà priorità alle foto esistenti e mantiene gli ID delle sche
   assert.throws(() => readScheduledCatalog([entry, { ...entry, word: "LANTERNA" }]), /invalid_scheduled_entry/);
 });
 
-test("il publisher autorizza solo il WebP e la voce approvati sul commit esatto", t => {
-  const path = mkdtempSync(join(tmpdir(), "scheduled-catalog-"));
-  t.after(() => rmSync(path, { force: true, recursive: true }));
-  const git = (...args: string[]) => execFileSync("git", ["-C", path, ...args],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  git("init", "-b", "main");
-  git("config", "user.name", "Test");
-  git("config", "user.email", "test@example.test");
-  const catalog = "app/domain/scheduled-catalog.json";
-  const entry = { assetId: "12345678-1234-4321-abcd-1234567890ab", word: "Lanterna",
-    metadata: { category: "Oggetti", article: "LA", syllabification: "lan-ter-na" } };
-  const asset = "public" + scheduledAssetUrl(entry.assetId);
-  mkdirSync(join(path, "app/domain"), { recursive: true });
-  mkdirSync(join(path, "public/images/scheduled"), { recursive: true });
-  writeFileSync(join(path, catalog), "[]\n");
-  git("add", catalog);
-  git("commit", "-m", "Base");
-  git("update-ref", "refs/remotes/origin/main", "HEAD");
-  git("switch", "-c", "candidate");
-  const image = readFileSync("public/images/demo/clessidra.webp");
-  writeFileSync(join(path, asset), image);
-  writeFileSync(join(path, catalog), JSON.stringify([entry], null, 2) + "\n");
-  git("add", catalog, asset);
-  git("commit", "-m", "Approved entry");
-  const approved = git("rev-parse", "HEAD");
-  assert.doesNotThrow(() => verifyCatalogCommit(approved, entry, image, path));
+test("il catalogo online mantiene l’ID del segnaposto senza riaprire le schede archiviate", () => {
+  const entry: OfficialCatalogEntry = { assetId: "12345678-1234-4321-abcd-1234567890ab", word: "Tazza", extension: "png",
+    metadata: { category: "Casa", article: "LA", syllabification: "taz-za" } };
+  const old = stockItems.find(item => item.id === "tazza");
+  assert.ok(old && !old.image);
+  const [current] = mergeOfficialLibrary([old], [entry]);
+  assert.equal(current.id, old.id);
+  assert.equal(current.image, officialCatalogImageUrl(entry.assetId, entry.extension));
+  assert.equal(current.article, "LA");
+  const archived = { ...old, deleted: true };
+  const photo = { ...old, privateUpload: true, remoteImageId: "private-image" };
+  assert.equal(mergeOfficialLibrary([archived], [entry])[0], archived);
+  assert.equal(mergeOfficialLibrary([photo], [entry])[0], photo);
+});
 
-  const otherImage = readFileSync("public/images/demo/nave.webp");
-  assert.throws(() => verifyCatalogCommit(approved, entry, otherImage, path), /unexpected_catalog_image/);
-  assert.throws(() => verifyCatalogCommit(approved, { ...entry, metadata: { ...entry.metadata, category: "Casa" } }, image, path), /unexpected_catalog_contents/);
-
-  writeFileSync(join(path, "README.md"), "Un file estraneo al catalogo\n");
-  git("add", "README.md");
-  git("commit", "--amend", "--no-edit");
-  assert.throws(() => verifyCatalogCommit(git("rev-parse", "HEAD"), entry, image, path), /unexpected_catalog_diff/);
+test("la pubblicazione PNG elimina i metadati senza perdere i pixel", () => {
+  const image = readFileSync("public/images/demo/mela.png");
+  const comment = Buffer.from("testo temporaneo");
+  const chunk = Buffer.alloc(comment.length + 12);
+  chunk.writeUInt32BE(comment.length, 0);
+  chunk.write("tEXt", 4);
+  comment.copy(chunk, 8);
+  const annotated = Buffer.concat([image.subarray(0, -12), chunk, image.subarray(-12)]);
+  const preview = scheduledImagePreview(annotated.toString("base64"));
+  assert.ok(preview);
+  const published = publishedImageBytes(preview);
+  assert.ok(published);
+  assert.equal(published.includes(comment), false);
+  assert.deepEqual(validateImageBytes(published, "image/png"), { valid: true, width: 768, height: 768 });
 });
 
 test("il prompt immagini delimita la descrizione come dati e preserva gli accenti", () => {

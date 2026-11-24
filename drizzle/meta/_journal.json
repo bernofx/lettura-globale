@@ -127,6 +127,13 @@
       "when": 1795510800000,
       "tag": "0017_scheduled_images",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1795532400000,
+      "tag": "0018_official_catalog",
+      "breakpoints": true
     }
   ]
 }

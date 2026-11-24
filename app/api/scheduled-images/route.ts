@@ -1,22 +1,19 @@
 import { env } from "cloudflare:workers";
 import { scheduledImagePreview } from "../../domain/scheduled-image-preview";
-import { hashText } from "../../domain/sha256";
 import { parseScheduledWords, scheduledId, scheduledImageMetadata, type ScheduledImageRequest } from "../../domain/scheduled-images";
 import { imageGenerationConfig, imageGenerationUsage, imageProposalDigest, sendImageJobs, wordsWithImages, type ScheduledImageJob } from "../../server/scheduled-image-jobs";
+import { catalogPublicationAvailable, publishApprovedCatalogImage } from "../../server/official-catalog";
 import { noStoreJson } from "../controller/_shared";
 import { readQueueBody, requestFields, scheduledImagesAdmin } from "./_shared";
 
 async function queue(db: D1Database, accountId: string) {
-  const [items, worker] = await db.batch<ScheduledImageRequest | { enabled: number }>([
-    db.prepare(`SELECT ${requestFields} FROM scheduled_image_requests WHERE account_id = ?
-      ORDER BY CASE WHEN status IN ('queued', 'processing', 'generated', 'approved', 'pull_request', 'needs_review', 'failed') THEN 0 ELSE 1 END,
-        updated_at DESC, id
-      LIMIT 100`).bind(accountId),
-    db.prepare("SELECT 1 AS enabled FROM scheduled_image_workers WHERE account_id = ?").bind(accountId),
-  ]);
+  const items = await db.prepare(`SELECT ${requestFields} FROM scheduled_image_requests WHERE account_id = ?
+    ORDER BY CASE WHEN status IN ('queued', 'processing', 'generated', 'approved', 'pull_request', 'needs_review', 'failed') THEN 0 ELSE 1 END,
+      updated_at DESC, id
+    LIMIT 100`).bind(accountId).all<ScheduledImageRequest>();
   const config = imageGenerationConfig(env);
   const generation = config?.accountId === accountId ? await imageGenerationUsage(db, config.limit) : null;
-  return { requests: items.results as ScheduledImageRequest[], publisherConfigured: worker.results.length > 0, generation, accountId };
+  return { requests: items.results, generation, accountId };
 }
 
 export async function GET(request: Request) {
@@ -40,19 +37,6 @@ export async function POST(request: Request) {
   const body = await readQueueBody(request).catch(() => null);
   if (!body) return noStoreJson({ error: "invalid_body" }, { status: 400 });
   const now = Date.now();
-
-  if (body.action === "rotate_publisher_key") {
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    const token = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
-    await db.batch([
-      db.prepare(`INSERT INTO scheduled_image_workers (account_id, publisher_hash, created_at) VALUES (?, ?, ?)
-        ON CONFLICT (account_id) DO UPDATE SET publisher_hash = excluded.publisher_hash, created_at = excluded.created_at`)
-        .bind(accountId, await hashText(token), now),
-      db.prepare(`UPDATE scheduled_image_requests SET claim_id = NULL, lease_until = NULL
-        WHERE account_id = ? AND lease_until IS NOT NULL AND status IN ('approved', 'pull_request')`).bind(accountId),
-    ]);
-    return noStoreJson({ ...await queue(db, accountId), token });
-  }
 
   if (body.action === "generate") {
     const config = imageGenerationConfig(env);
@@ -81,7 +65,14 @@ export async function POST(request: Request) {
     return noStoreJson({ ...await queue(db, accountId), accepted: accepted.length, submitted: words.length, dispatchDelayed });
   }
 
-  if (body.action === "approve" && typeof body.id === "string" && typeof body.digest === "string") {
+  if (body.action === "publish" && typeof body.id === "string" && scheduledId.test(body.id)) {
+    if (!catalogPublicationAvailable(env, accountId)) return noStoreJson({ error: "publication_unavailable" }, { status: 503 });
+    await publishApprovedCatalogImage(env, accountId, body.id);
+    return noStoreJson(await queue(db, accountId));
+  }
+
+  if (body.action === "approve" && typeof body.id === "string" && scheduledId.test(body.id) && typeof body.digest === "string") {
+    if (!catalogPublicationAvailable(env, accountId)) return noStoreJson({ error: "publication_unavailable" }, { status: 503 });
     const match = "account_id = ? AND id = ? AND status = 'generated' AND proposal_digest = ?";
     const binds = [accountId, body.id, body.digest] as const;
     const proposal = await db.prepare(`SELECT word, image_base64 AS image FROM scheduled_image_requests WHERE ${match}`)
@@ -94,6 +85,7 @@ export async function POST(request: Request) {
       SET status = 'approved', metadata = ?, proposal_digest = ?, updated_at = ? WHERE ${match}`)
       .bind(JSON.stringify(metadata), digest, now, ...binds).run();
     if (!result.meta.changes) return noStoreJson({ error: "request_changed" }, { status: 409 });
+    await publishApprovedCatalogImage(env, accountId, body.id);
     return noStoreJson(await queue(db, accountId));
   }
 
