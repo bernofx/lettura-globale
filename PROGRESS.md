@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Le proposte della generazione conservano un’anteprima privata degli output quadrati statici WebP, PNG e JPEG fino a 1.350.000 byte. Il publisher li converte in WebP per il catalogo dopo l’approvazione.
+
 - [x] La coda immagini distingue gli errori HTTP di OpenAI, moderazione, quota, accesso, problemi di rete e risposte immagine incompatibili. La richiesta descrive lo sfondo opaco nel prompt. I messaggi conservano solo i codici e i parametri previsti.
 
 - [x] Il build da Git genera la configurazione Wrangler dal file di produzione. Il deploy automatico risolve la coda immagini di produzione e include il trigger di recupero. La CI verifica la configurazione generata.

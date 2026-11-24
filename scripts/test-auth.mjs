@@ -24,7 +24,7 @@ crypto.subtle.deriveBits = function(algorithm, key, length) {
   if (algorithm.name === 'PBKDF2' && algorithm.iterations > 100000) return Promise.reject(new DOMException('Synthetic production PBKDF2 cap', 'NotSupportedError'));
   return originalDeriveBits(algorithm, key, length);
 };\n` + modules[0].contents;
-const apiImage = readFileSync("public/images/demo/clessidra.webp").toString("base64");
+const apiImage = readFileSync("public/images/demo/mela.png").toString("base64");
 const imageApiCalls = [];
 const mf = new Miniflare({ name: "auth-test", compatibilityDate: "2026-05-15", compatibilityFlags: ["nodejs_compat"], modules,
   durableObjects: { SESSIONS: { className: "RealtimeSession", useSQLite: true } }, d1Databases: { DB: "synthetic-auth-d1" },
@@ -313,7 +313,7 @@ try {
   const mediaId = crypto.randomUUID();
   const uploadPhoto = await request("/api/media", {
     method: "POST", headers: { cookie: adminCookie, "content-type": "image/webp", "x-media-id": mediaId },
-    body: Buffer.from(apiImage, "base64"),
+    body: readFileSync("public/images/demo/clessidra.webp"),
   });
   assert.equal(uploadPhoto.status, 201);
   await saveManualCard({
@@ -351,6 +351,7 @@ try {
   const reviewed = await (await preview(adminCookie, "adult-a")).json();
   assert.deepEqual(JSON.parse(reviewed.metadata), { ...metadata, article: null }, "new nouns get an editable local draft");
   assert.equal(reviewed.image, apiImage);
+  assert.equal(reviewed.imageType, "image/png");
   const approval = { action: "approve", id: job.id, digest: reviewed.digest, metadata };
   assert.equal((await queueAdmin({ ...approval, digest: "invalid" })).status, 409);
   assert.equal((await queueAdmin(approval, secondCookie, "adult-b")).status, 403);
