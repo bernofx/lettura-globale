@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { normalizeGeneratedWebp, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
 import { verifyCatalogCommit } from "../scripts/publish-scheduled-image.mjs";
 import { addScheduledCatalog, readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
 import { MAX_SCHEDULED_IMAGES, isScheduledWebp, parseScheduledWords, scheduledAssetUrl, scheduledImageMetadata, scheduledWebpFromBase64, scheduledWordKey } from "../app/domain/scheduled-images.ts";
@@ -97,4 +98,33 @@ test("il publisher autorizza solo il WebP e la voce approvati sul commit esatto"
   git("add", "README.md");
   git("commit", "--amend", "--no-edit");
   assert.throws(() => verifyCatalogCommit(git("rev-parse", "HEAD"), entry, image, path), /unexpected_catalog_diff/);
+});
+
+test("il prompt immagini delimita la descrizione come dati e preserva gli accenti", () => {
+  const detail = 'il frutto, con una foglia "verde"';
+  const prompt = openAIImagePrompt("Pèsca", detail);
+  assert.deepEqual(JSON.parse(prompt.split("\n").at(-1)!), { parola: "Pèsca", precisazione_visiva: detail });
+  assert.throws(() => parseScheduledWords("Pesca | nome@example.test"), /invalid_words/);
+});
+
+test("la risposta del provider conserva soltanto i pixel WebP statici", () => {
+  const image = readFileSync("public/images/demo/clessidra.webp");
+  const original = image.toString("base64");
+  assert.equal(normalizeGeneratedWebp(original), original);
+  const extended = Buffer.alloc(18);
+  extended.write("VP8X");
+  extended.writeUInt32LE(10, 4);
+  extended[8] = 8; // EXIF metadata.
+  extended.writeUIntLE(1023, 12, 3);
+  extended.writeUIntLE(1023, 15, 3);
+  const extra = Buffer.alloc(12);
+  extra.write("EXIF");
+  extra.writeUInt32LE(4, 4);
+  extra.write("test", 8);
+  const withMetadata = Buffer.concat([image.subarray(0, 12), extended, image.subarray(12), extra]);
+  withMetadata.writeUInt32LE(withMetadata.length - 8, 4);
+  assert.equal(normalizeGeneratedWebp(withMetadata.toString("base64")), original);
+  withMetadata[20] |= 2; // Reject animated WebP.
+  assert.throws(() => normalizeGeneratedWebp(withMetadata.toString("base64")), /invalid_generated_image/);
+  assert.throws(() => normalizeGeneratedWebp("YWJj"), /invalid_generated_image/);
 });

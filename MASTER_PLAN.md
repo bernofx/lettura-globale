@@ -37,23 +37,9 @@ La sezione Giochi è accessibile dal pannello adulto anche senza scegliere un ba
 
 Il catalogo attuale è esclusivamente dimostrativo. Prima di integrare immagini stock reali occorre un ADR sul provider e sulle licenze.
 
-### Opzione futura — Generazione immagini AI
+### Generazione immagini AI per il catalogo condiviso
 
-La generazione AI è una funzione facoltativa della libreria, non un requisito dell'MVP. L'adulto inserisce una descrizione breve, per esempio `paperella di gomma verde`; il backend la combina con un modello di prompt fisso per produrre un'immagine semplice, fotorealistica, con un solo soggetto, sfondo neutro e senza testo o marchi. L'immagine viene mostrata in anteprima e salvata nella libreria soltanto dopo conferma esplicita.
-
-Vincoli previsti:
-
-- chiamata al provider esclusivamente server-side e chiave API conservata nei secrets dell'ambiente;
-- una sola proposta per richiesta, rigenerazione manuale e nessuna generazione automatica;
-- formato WebP compresso e salvataggio nel bucket R2 privato già associato all'utente;
-- parola, categoria e assegnazione `IL / LA` confermate prima dell'import;
-- limite mensile, rate limit, contatore dei consumi e blocco al raggiungimento del budget;
-- riuso di risultati già approvati per descrizioni equivalenti, quando appropriato;
-- nessun nome, volto, fotografia o altro dato personale del bambino nei prompt;
-- registrazione di provider, modello, prompt normalizzato, costo/uso restituito dall'API e data di creazione;
-- disponibilità subordinata a un ADR dedicato su provider, trattamento dati, moderazione, costi e retention.
-
-Configurazione iniziale proposta per la valutazione: OpenAI Images API con modello rapido/economico, qualità bassa, immagine quadrata e tetto di spesa configurabile. La scelta del provider resta aperta fino all'approvazione dell'ADR; l'abbonamento ChatGPT personale non viene considerato una credenziale API dell'applicazione.
+L’amministratore dell’account abilitato può avviare la generazione di una proposta per parola. Il Worker invia la richiesta in background tramite Cloudflare Queues, con deduplicazione e un limite mensile ai tentativi. La chiamata OpenAI Images è server-side e usa soltanto il termine e un’eventuale precisazione visiva generica. L’anteprima WebP è privata. Categoria, articolo e sillabazione sono modificabili prima dell’approvazione esplicita. La pubblicazione via PR è separata e richiede la CI. Il flusso è disattivato in assenza della configurazione del provider e dell’account. Vedi ADR 0026.
 
 ### Prima versione — Storie in CAA
 

@@ -9,6 +9,11 @@
   "no_bundle": true,
   "keep_vars": true,
   "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "RealtimeSession" }] },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "queues": {
+    "producers": [{ "binding": "SCHEDULED_IMAGE_JOBS", "queue": "lettura-globale-images" }],
+    "consumers": [{ "queue": "lettura-globale-images", "max_batch_size": 1, "max_batch_timeout": 1, "max_concurrency": 2, "max_retries": 3 }]
+  },
   "migrations": [{ "tag": "realtime-v1", "new_sqlite_classes": ["RealtimeSession"] }],
   "rules": [
     {

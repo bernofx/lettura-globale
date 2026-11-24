@@ -1,15 +1,17 @@
-# ADR 0026 — Coda per le immagini del catalogo condiviso
+# ADR 0026 — Generazione di immagini per il catalogo condiviso
 
 ## Contesto
 
-La prova di Clessidra ha verificato un ciclo programmato dalla generazione ImageGen fino alla PR. La versione iniziale dava allo stesso agente le descrizioni della coda e i permessi di scrittura e merge. Anche una descrizione scritta da un amministratore può contenere testo proveniente da terzi e influenzare le azioni dell’agente.
+La prova di Clessidra ha verificato il ciclo ImageGen e PR. Un task Codex che leggeva le note della coda e accedeva a GitHub avrebbe richiesto un ambiente isolato. Su richiesta dell’utente, la proposta passa alla chiamata diretta all’API OpenAI, avviata dal modulo di Libreria.
 
-## Decisione proposta
+## Decisione
 
-La coda D1 è gestita dagli amministratori dell’account. Conserva le richieste e le proposte da verificare. Ogni proposta contiene un WebP statico limitato a 400.000 byte e metadati da uno schema chiuso. L’immagine temporanea viene rimossa dalla coda quando la proposta è annullata, risulta duplicata o è disponibile a catalogo. Le precisazioni restano visibili all’amministratore e al solo generatore. La sezione riguarda termini destinati a un catalogo pubblico.
+Un amministratore dell’account abilitato accoda parole destinate al catalogo pubblico. D1 deduplica le richieste e Cloudflare Queues avvia il lavoro con il solo ID della richiesta e del tentativo. Un trigger automatico recupera consegne mancate e sblocca tentativi interrotti. La migrazione `0017` è additiva e indipendente dai dati didattici degli esercizi.
 
-Un ambiente Codex dedicato riceve una chiave che consente soltanto di prendere fino a tre richieste alla volta, inviare le relative proposte o segnalare un esito codificato. L’ambiente deve escludere repository, connettori e credenziali estranee alla generazione. La migrazione additiva `0017` conserva in D1 solo gli hash delle due chiavi. Le prese in carico scadono dopo un’ora, sono atomiche e vengono revocate quando si ruota la chiave del ruolo relativo.
+Il Worker chiama direttamente l’endpoint OpenAI Images con GPT-Image-2.6 Flare, formato quadrato WebP, qualità bassa e moderazione automatica. Invia solo la parola e un’eventuale precisazione visiva adatta alla pubblicazione e lascia al provider soltanto la generazione dell’immagine. La chiave API è un secret del Worker. L’account e il massimo mensile di tentativi devono essere configurati esplicitamente. I tentativi sono conteggiati in D1 su mesi UTC prima di contattare il provider. La funzionalità parte disattivata e i tentativi d’esito incerto richiedono un nuovo invio esplicito.
 
-L’amministratore approva l’anteprima specifica prima che l’immagine sia esposta al publisher. GitHub Actions, con una chiave di pubblicazione e una credenziale GitHub dedicate, trasforma i dati approvati in una voce JSON e in un asset WebP. A parità di parola conserva gli ID delle schede senza foto e rispetta le foto già presenti, incluse quelle private dell’account che ha chiesto la generazione. Le fonti e licenze sono determinate in codice. Solo il publisher verifica il commit, attende i controlli CI, effettua il merge su `main` e conferma la presenza nel catalogo distribuito.
+La sezione riguarda termini generici. L’interfaccia chiede di escludere dati personali, contatti, link e immagini di minori. Il worker scarta URL e altri campi restituiti dal provider, convalida il WebP e conserva soltanto il contenitore ripulito in un’anteprima privata. Il limite è 400.000 byte. Il contenuto temporaneo viene rimosso quando la proposta è annullata, risulta duplicata o è pubblicata. Rimane uno storico della richiesta e dei suoi stati.
 
-L’isolamento limita le azioni possibili al generatore, mentre la verifica umana copre la pertinenza dei contenuti. L’applicazione delle protezioni di `main`, la configurazione delle credenziali e l’attivazione della schedulazione in produzione richiedono approvazione. [Configurazione e prompt](../PROMPT_GENERAZIONE_PROGRAMMATA.md)
+I metadati didattici provengono dal catalogo o dall’analisi locale della parola. L’amministratore li può correggere nell’anteprima e approva esplicitamente l’immagine e i metadati prima della pubblicazione. Le fonti e le licenze seguono le schede ImageGen del catalogo. GitHub Actions usa una chiave di pubblicazione distinta custodita in GitHub per preparare un commit con la voce JSON e il WebP, controlla il contenuto del commit, attende la CI e integra su `main`. La conferma richiede che l’asset sia nel catalogo attivo.
+
+Il collaudo con un account reale, la creazione delle risorse, le protezioni di `main` e l’attivazione del provider in produzione richiedono configurazione e approvazione. [Configurazione](../GENERAZIONE_IMMAGINI.md)

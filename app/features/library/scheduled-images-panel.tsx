@@ -4,17 +4,21 @@ import { Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MAX_SCHEDULED_INPUT_LENGTH, SCHEDULED_IMAGES_URL, SCHEDULED_REPOSITORY,
-  parseScheduledWords, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
+  parseScheduledWords, scheduledCategories, scheduledImageMetadata, scheduledImageStatuses, type ScheduledImageMetadata, type ScheduledImageRequest,
 } from "../../domain/scheduled-images";
 import { fetchWithTimeout } from "../../shared/cloud-client";
 import { SectionHeading } from "../../shared/ui/headings";
 import { ConfirmDialog, Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 import "./scheduled-images-panel.css";
 
-type Queue = { requests: ScheduledImageRequest[]; workerConfigured: boolean; publisherConfigured: boolean };
-type QueueReply = Queue & { accepted: number; submitted: number; token: string };
+type Queue = {
+  requests: ScheduledImageRequest[];
+  generation: { used: number; limit: number } | null;
+  publisherConfigured: boolean;
+  accountId: string;
+};
+type QueueReply = Queue & { accepted: number; submitted: number; dispatchDelayed: boolean; token: string };
 const cancellable = new Set(["queued", "generated", "approved", "needs_review", "failed"]);
-type KeyRole = "generator" | "publisher";
 type Proposal = { id: string; word: string; metadata: ScheduledImageMetadata; image: string; digest: string };
 
 export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
@@ -23,20 +27,25 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [token, setToken] = useState<{ value: string; role: KeyRole }>();
-  const [confirmRotation, setConfirmRotation] = useState<KeyRole>();
+  const [token, setToken] = useState("");
+  const [confirmRotation, setConfirmRotation] = useState(false);
   const [proposal, setProposal] = useState<Proposal>();
   const [proposalLoaded, setProposalLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const requestId = useRef<symbol | null>(null);
   const mutating = useRef(false);
 
+  const pending = queue?.requests.some(item => item.status === "queued" || item.status === "processing") ?? false;
+
   const request = useCallback(async (body?: Record<string, unknown>) => {
     const headers = { "x-scheduled-images-profile": profileId, ...(body ? { "content-type": "application/json" } : {}) };
     const response = await fetchWithTimeout(SCHEDULED_IMAGES_URL, {
       headers, cache: "no-store", method: body ? "POST" : "GET", body: body ? JSON.stringify(body) : undefined,
     });
-    if (!response.ok) throw new Error(response.status === 409 ? "request_changed" : "queue_unavailable");
+    if (!response.ok) {
+      const failure = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(failure?.error ?? "queue_unavailable");
+    }
     return await response.json() as QueueReply;
   }, [profileId]);
 
@@ -59,7 +68,7 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
     const initial = window.setTimeout(() => void refresh(), 0);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible" && navigator.onLine) void refresh();
-    }, 30_000);
+    }, pending ? 5_000 : 30_000);
     window.addEventListener("online", refresh);
     return () => {
       requestId.current = null;
@@ -67,7 +76,7 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       window.clearInterval(timer);
       window.removeEventListener("online", refresh);
     };
-  }, [refresh]);
+  }, [refresh, pending]);
 
   async function change(body: Record<string, unknown>, apply: (result: QueueReply) => void) {
     if (mutating.current) return;
@@ -81,8 +90,13 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       const result = await request(body);
       if (current === requestId.current) apply(result);
     } catch (cause) {
-      if (current === requestId.current) setError(cause instanceof Error && cause.message === "request_changed"
-        ? "La richiesta è già cambiata. Aggiorna la lista." : "Modifica non salvata nel cloud. Riprova.");
+      const reason = cause instanceof Error ? cause.message : "";
+      if (current === requestId.current) setError(
+        reason === "request_changed" ? "La richiesta è già cambiata. Aggiorna la lista."
+          : reason === "invalid_metadata" ? "Controlla categoria, articolo e sillabazione."
+            : reason === "generation_unavailable" ? "La generazione di immagini è disattivata per questo account."
+              : "Modifica non salvata nel cloud. Riprova.");
+
     } finally {
       mutating.current = false;
       if (current === requestId.current) setBusy(false);
@@ -91,19 +105,20 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
 
   function enqueue() {
     try { parseScheduledWords(words); }
-    catch { setError("Inserisci da 1 a 20 parole o locuzioni, una per riga. Se serve, aggiungi una precisazione dopo il simbolo |."); return; }
+    catch { setError("Inserisci da 1 a 20 parole o locuzioni, una per riga. Dopo | puoi aggiungere una precisazione visiva senza contatti o link."); return; }
     void change({ action: "enqueue", words }, result => {
       setQueue(result);
       setWords("");
       const ignored = result.submitted - result.accepted;
-      setMessage(ignored ? `Richieste registrate ${result.accepted}. Già registrate ${ignored}.` : `Richieste registrate ${result.accepted}.`);
+      const recorded = ignored ? `Richieste registrate ${result.accepted}. Già registrate ${ignored}.` : `Richieste registrate ${result.accepted}.`;
+      setMessage(result.dispatchDelayed ? `${recorded} L’avvio verrà riprovato in automatico.` : recorded);
     });
   }
 
-  function rotateKey(role: KeyRole) {
-    setConfirmRotation(undefined);
-    void change({ action: role === "generator" ? "rotate_key" : "rotate_publisher_key" }, result => {
-      setToken({ value: result.token, role });
+  function rotateKey() {
+    setConfirmRotation(false);
+    void change({ action: "rotate_publisher_key" }, result => {
+      setToken(result.token);
       setQueue(result);
     });
   }
@@ -132,21 +147,27 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
   }
 
   const items = queue?.requests ?? [];
+  const generation = queue?.generation;
+  const limitReached = Boolean(generation && generation.used >= generation.limit);
+  const canGenerate = Boolean(generation && !limitReached);
+  const validMetadata = proposal ? scheduledImageMetadata(proposal.word, proposal.metadata) : null;
   const visible = expanded ? items : items.slice(0, 6);
   return <section className="panel library-area scheduled-images-panel" aria-labelledby="scheduled-images-title">
-    <SectionHeading id="scheduled-images-title" title="Generazione programmata"
-      description="Accoda parole per le immagini del catalogo condiviso. Usa soltanto termini e descrizioni che possono essere pubblicati.">
+    <SectionHeading id="scheduled-images-title" title="Generazione immagini"
+      description="Genera proposte per il catalogo condiviso. Inserisci solo parole e descrizioni generiche destinate alla pubblicazione.">
       <button type="button" className="ghost-button" onClick={() => void refresh()} disabled={busy}>
         <RefreshCw size={16} aria-hidden="true" />Aggiorna
       </button>
     </SectionHeading>
+    {generation && <p>{generation.used} / {generation.limit} richieste all’API questo mese.{limitReached && " Limite mensile raggiunto."}</p>}
+    {queue && !generation && <p>Generazione disattivata per questo account.</p>}
     <form className="scheduled-images-form" onSubmit={event => { event.preventDefault(); enqueue(); }}>
       <label htmlFor="scheduled-images-words">Parole da illustrare</label>
       <textarea id="scheduled-images-words" rows={3} value={words} onChange={event => setWords(event.target.value)}
-        placeholder={"Clessidra\nPesca | il frutto"} maxLength={MAX_SCHEDULED_INPUT_LENGTH} aria-describedby="scheduled-images-hint" disabled={busy} />
-      <small id="scheduled-images-hint">Una parola per riga. Per chiarire il significato, scrivi una breve descrizione dopo |.</small>
-      <button type="submit" className="primary-button" disabled={busy || !words.trim()}>
-        <Plus size={18} aria-hidden="true" />Aggiungi alla coda
+        placeholder={"Clessidra\nPesca | il frutto"} maxLength={MAX_SCHEDULED_INPUT_LENGTH} aria-describedby="scheduled-images-hint" disabled={busy || !canGenerate} />
+      <small id="scheduled-images-hint">Una parola per riga. Dopo | puoi aggiungere una precisazione visiva. Usa descrizioni generiche senza nomi o dati personali.</small>
+      <button type="submit" className="primary-button" disabled={busy || !canGenerate || !words.trim()}>
+        <Plus size={18} aria-hidden="true" />Genera immagini
       </button>
     </form>
     {error && <p className="form-error" role="alert">{error}</p>}
@@ -164,7 +185,7 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
           {item.status === "generated" && <button type="button" className="primary-button" disabled={busy}
             onClick={() => void review(item.id)}>Verifica immagine</button>}
           {item.prNumber && <a href={`${SCHEDULED_REPOSITORY}/pull/${item.prNumber}`} target="_blank" rel="noreferrer">PR #{item.prNumber}</a>}
-          {(item.status === "needs_review" || item.status === "failed") && <button type="button" className="ghost-button" disabled={busy}
+          {(item.status === "needs_review" || item.status === "failed") && <button type="button" className="ghost-button" disabled={busy || !canGenerate}
             onClick={() => { setWords(item.detail ? `${item.word} | ${item.detail}` : item.word); document.getElementById("scheduled-images-words")?.focus(); }}>
             Riproponi
           </button>}
@@ -176,25 +197,19 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
     {items.length > 6 && <button type="button" className="ghost-button" aria-expanded={expanded}
       onClick={() => setExpanded(value => !value)}>{expanded ? "Mostra meno" : "Mostra altre richieste"}</button>}
     <details className="scheduled-images-connection">
-      <summary>Collegamento all’automazione</summary>
-      <p>Usa due chiavi separate per la generazione in Codex e la pubblicazione tramite GitHub Actions.</p>
-      <div className="scheduled-images-actions">
-        <button type="button" className="ghost-button" disabled={busy || !queue}
-          onClick={() => queue?.workerConfigured ? setConfirmRotation("generator") : rotateKey("generator")}>
-          {queue?.workerConfigured ? "Sostituisci" : "Crea"} chiave generatore
-        </button>
-        <button type="button" className="ghost-button" disabled={busy || !queue}
-          onClick={() => queue?.publisherConfigured ? setConfirmRotation("publisher") : rotateKey("publisher")}>
-          {queue?.publisherConfigured ? "Sostituisci" : "Crea"} chiave pubblicazione
-        </button>
-      </div>
+      <summary>Configurazione pubblicazione</summary>
+      {queue && <p>Identificativo account <code>{queue.accountId}</code></p>}
+      <button type="button" className="ghost-button" disabled={busy || !queue}
+        onClick={() => queue?.publisherConfigured ? setConfirmRotation(true) : rotateKey()}>
+        {queue?.publisherConfigured ? "Sostituisci" : "Crea"} chiave di pubblicazione
+      </button>
       {token && <label className="scheduled-images-token">
-        Copia ora la chiave <code>{token.role === "generator" ? "SCHEDULED_IMAGES_TOKEN" : "SCHEDULED_IMAGES_PUBLISHER_TOKEN"}</code>.
-        <input type="text" readOnly value={token.value} spellCheck={false} autoComplete="off" onFocus={event => event.target.select()} />
+        Copia ora la chiave <code>SCHEDULED_IMAGES_PUBLISHER_TOKEN</code>.
+        <input type="text" readOnly value={token} spellCheck={false} autoComplete="off" onFocus={event => event.target.select()} />
       </label>}
     </details>
-    {confirmRotation && <ConfirmDialog labelledBy="scheduled-key-confirm" eyebrow="GENERAZIONE PROGRAMMATA" title="Sostituire la chiave dell’automazione?"
-      confirmLabel="Sostituisci chiave" onCancel={() => setConfirmRotation(undefined)} onConfirm={() => rotateKey(confirmRotation)}>
+    {confirmRotation && <ConfirmDialog labelledBy="scheduled-key-confirm" eyebrow="GENERAZIONE IMMAGINI" title="Sostituire la chiave di pubblicazione?"
+      confirmLabel="Sostituisci chiave" onCancel={() => setConfirmRotation(false)} onConfirm={rotateKey}>
       La chiave precedente smetterà di funzionare. Le richieste restano salvate.
     </ConfirmDialog>}
     {proposal && <Modal labelledBy="scheduled-preview-title" onClose={busy ? undefined : () => setProposal(undefined)} closeButton>
@@ -203,12 +218,37 @@ export function ScheduledImagesPanel({ profileId }: { profileId: string }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className="scheduled-images-preview" src={`data:image/webp;base64,${proposal.image}`} alt={proposal.word}
         onLoad={() => setProposalLoaded(true)} onError={() => setProposalLoaded(false)} />
-      <p>{proposal.metadata.category} · {proposal.metadata.syllabification}{proposal.metadata.article ? ` · ${proposal.metadata.article}` : ""}</p>
-      <p>Verifica immagine e dati prima di approvarli per il catalogo condiviso.</p>
+      <div className="scheduled-images-metadata">
+        <label>Categoria
+          <select value={proposal.metadata.category} disabled={busy} onChange={event => {
+            const category = scheduledCategories.find(value => value === event.target.value);
+            if (category) setProposal({ ...proposal, metadata: { ...proposal.metadata, category } });
+          }}>
+            {scheduledCategories.map(category => <option key={category}>{category}</option>)}
+          </select>
+        </label>
+        <label>Articolo nell’esercizio IL / LA
+          <select value={proposal.metadata.article ?? ""} disabled={busy} onChange={event => {
+            const value = event.target.value;
+            const article = value === "IL" || value === "LA" ? value : null;
+            setProposal({ ...proposal, metadata: { ...proposal.metadata, article } });
+          }}>
+            <option value="">Nessuno</option>
+            <option>IL</option>
+            <option>LA</option>
+          </select>
+        </label>
+        <label>Divisione in sillabe
+          <input value={proposal.metadata.syllabification} maxLength={96} disabled={busy}
+            onChange={event => setProposal({ ...proposal, metadata: { ...proposal.metadata, syllabification: event.target.value } })}
+            aria-invalid={!validMetadata} />
+        </label>
+      </div>
+      <p>Verifica che l’immagine rappresenti la parola. Nel campo delle sillabe usa i trattini, per esempio lan-ter-na.</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <ModalActions onCancel={() => setProposal(undefined)} cancelDisabled={busy}>
-        <button type="button" className="primary-button" disabled={busy || !proposalLoaded}
-          onClick={() => void change({ action: "approve", id: proposal.id, digest: proposal.digest }, result => {
+        <button type="button" className="primary-button" disabled={busy || !proposalLoaded || !validMetadata}
+          onClick={() => void change({ action: "approve", id: proposal.id, digest: proposal.digest, metadata: validMetadata }, result => {
             setQueue(result);
             setProposal(undefined);
           })}>Approva per la pubblicazione</button>

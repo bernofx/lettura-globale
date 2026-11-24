@@ -1,10 +1,11 @@
+import { wordsWithImages } from "../../../server/scheduled-image-jobs";
 import { scheduledAssetUrl, scheduledId, scheduledWordKey } from "../../../domain/scheduled-images";
 import { stockItems } from "../../../shared/seed-data";
 import { noStoreJson } from "../../controller/_shared";
-import { readQueueBody, scheduledLeaseMs, scheduledWorker, wordsWithImages } from "../_shared";
+import { readQueueBody, scheduledLeaseMs, scheduledPublisher } from "../_shared";
 
 export async function POST(request: Request) {
-  const access = await scheduledWorker(request, "publisher");
+  const access = await scheduledPublisher(request);
   if (access instanceof Response) return access;
   const { db, accountId, tokenHash, stillAuthorized } = access;
   const body = await readQueueBody(request).catch(() => null);

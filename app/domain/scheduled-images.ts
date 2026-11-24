@@ -31,7 +31,6 @@ export type ScheduledImageRequest = {
 
 export const scheduledCategories = categorySymbolCatalog.map(item => item.category);
 export const MAX_SCHEDULED_WEBP_BYTES = 400_000;
-export const MAX_SCHEDULED_IMAGE_BODY = 540_000;
 export const scheduledId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![\s\S])/;
 export const scheduledAssetUrl = (id: string) => `/images/scheduled/${id}.webp`;
 
@@ -52,7 +51,7 @@ export function scheduledImageMetadata(word: string, metadata: unknown): Schedul
   if (Object.keys(metadata).length !== 3 || !scheduledCategories.includes(category) ||
     (article !== "IL" && article !== "LA" && article !== null) ||
     typeof syllabification !== "string" || !isScheduledWord(syllabification.replaceAll("-", "")) ||
-    syllabification.split(" ").some(part => !/^[a-zàèéìòóù]+(?:[-'’][a-zàèéìòóù]+)*$/iu.test(part)) ||
+    syllabification.split(" ").some(part => !isScheduledWord(part)) ||
     scheduledWordKey(syllabification.replaceAll("-", "")) !== scheduledWordKey(word.replaceAll("-", ""))) return null;
   return { category, article, syllabification };
 }
@@ -94,7 +93,7 @@ export function parseScheduledWords(input: unknown) {
     const [label, hint = "", ...extra] = line.split("|");
     const word = label.trim().normalize("NFC").replace(/\s+/g, " ");
     const detail = hint.trim();
-    if (extra.length || !isScheduledWord(word) || detail.length > 200 || /[\p{C}]/u.test(detail)) {
+    if (extra.length || !isScheduledWord(word) || detail.length > 200 || /[\p{C}@]|https?:|www\.|\d(?:[ .+()-]*\d){6}/iu.test(detail)) {
       throw new Error("invalid_words");
     }
     const key = scheduledWordKey(word);
