@@ -2,9 +2,19 @@ import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 import { upgradeRealtime } from "../realtime/gateway";
+import { processImageJob, recoverImageJobs, type ScheduledImageJob } from "../app/server/scheduled-image-jobs";
 export { RealtimeSession } from "../realtime/worker";
 
 export default {
+  async queue(batch: MessageBatch<ScheduledImageJob>, env: Cloudflare.Env) {
+    for (const message of batch.messages) {
+      await processImageJob(message.body, env);
+      message.ack();
+    }
+  },
+  scheduled(_event: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
+    ctx.waitUntil(recoverImageJobs(env));
+  },
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     const url = new URL(request.url);
     if (url.pathname === "/api/controller/realtime/connect") {

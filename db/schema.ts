@@ -32,6 +32,25 @@ export const authSessions = sqliteTable("auth_sessions", {
   adultProfileId: text("adult_profile_id"),
 });
 
+export const scheduledImageWorkers = sqliteTable("scheduled_image_workers", {
+  accountId: text("account_id").primaryKey(), publisherHash: text("publisher_hash").notNull().unique(), createdAt: integer("created_at").notNull(),
+});
+
+export const scheduledImageRequests = sqliteTable("scheduled_image_requests", {
+  id: text("id").primaryKey(), accountId: text("account_id").notNull(), word: text("word").notNull(), wordKey: text("word_key").notNull(),
+  detail: text("detail").notNull().default(""), status: text("status").notNull(), message: text("message").notNull().default(""),
+  prNumber: integer("pr_number"), prHead: text("pr_head"), metadata: text("metadata"), imageBase64: text("image_base64"),
+  proposalDigest: text("proposal_digest"), generationId: text("generation_id"), dispatchedAt: integer("dispatched_at"), claimId: text("claim_id"), leaseUntil: integer("lease_until"),
+  createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("scheduled_image_requests_word").on(table.accountId, table.wordKey),
+  index("scheduled_image_requests_queue").on(table.accountId, table.status, table.leaseUntil, table.createdAt),
+]);
+
+export const scheduledImageUsage = sqliteTable("scheduled_image_usage", {
+  month: text("month").primaryKey().notNull(), attempts: integer("attempts").notNull(),
+});
+
 export const therapistCredentials = sqliteTable("therapist_credentials", {
   loginEmail: text("login_email").primaryKey(),
   ownerUserId: text("owner_user_id").notNull(),

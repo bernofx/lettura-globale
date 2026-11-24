@@ -27,6 +27,10 @@ const localBindingConfig = {
   compatibility_flags: ["nodejs_compat"],
   durable_objects: { bindings: [{ name: "SESSIONS", class_name: "RealtimeSession" }] },
   migrations: [{ tag: "realtime-v1", new_sqlite_classes: ["RealtimeSession"] }],
+  queues: {
+    producers: [{ binding: "SCHEDULED_IMAGE_JOBS", queue: "lettura-globale-images-local" }],
+    consumers: [{ queue: "lettura-globale-images-local", max_batch_size: 1, max_batch_timeout: 1, max_retries: 3 }],
+  },
   d1_databases: d1
     ? [
         {

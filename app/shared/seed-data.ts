@@ -1,10 +1,11 @@
+import { addScheduledCatalog } from "../domain/scheduled-catalog";
 import { categorySymbolCatalog } from "../domain/category-symbol-catalog";
 import { countSyllables } from "../domain/syllabification";
 import { wordOnlyCatalog } from "../domain/word-catalog";
 import { actionSceneCatalog } from "../domain/action-scene-catalog";
-import { type ChildProfile, type Exercise, type LibraryItem, type Sequence, type Therapist } from "./types";
+import { type ChildProfile, type Exercise, type Sequence, type Therapist } from "./types";
 
-export const stockItems: LibraryItem[] = [
+export const stockItems = addScheduledCatalog([
   ...categorySymbolCatalog,
   ...actionSceneCatalog,
   { id: "mela", word: "Mela", image: "/images/demo/mela.png", category: "Cibi", source: "OpenAI ImageGen", license: "Uso interno del progetto", author: "OpenAI ImageGen" },
@@ -109,7 +110,7 @@ export const stockItems: LibraryItem[] = [
   { id: "pesca", word: "Pesca", emoji: "🍑", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
   { id: "noce", word: "Noce", emoji: "🌰", category: "Cibi", source: "Immagine da aggiungere", license: "Da definire", author: "—", article: "LA" },
   ...wordOnlyCatalog.map((item) => ({ ...item, syllableCount: countSyllables(item.syllabification), syllableStatus: "verified" as const, source: "Catalogo parole", license: "Nessuna immagine", author: "—", article: null })),
-];
+]);
 
 const initialRecognitionExercises: Exercise[] = [
   { id: "ex-mela", title: "Trova la mela", promptId: "mela", optionIds: ["mela", "gatto", "pane"], updatedAt: "Oggi" },

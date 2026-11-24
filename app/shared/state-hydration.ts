@@ -18,7 +18,12 @@ export function hydrateLibrary(items: LibraryItem[]) {
     const demoItem = stockItems.find((candidate) => candidate.id === item.id);
     // Archived placeholders retain the metadata used to remap old references to a private upload.
     const hydratedItem = demoItem?.image && !item.privateUpload && !item.deleted ? { ...item, image: demoItem.image, emoji: undefined, source: demoItem.source, sourceUrl: demoItem.sourceUrl, license: demoItem.license, licenseUrl: demoItem.licenseUrl, author: demoItem.author } : item;
-    const normalizedItem = { ...hydratedItem, category: normalizeLearningCategory(hydratedItem.category) };
+    const illustratedPlaceholder = demoItem?.image?.startsWith("/images/scheduled/") && !item.image && !item.remoteImageId &&
+      !item.privateUpload && !item.deleted;
+    const currentItem = illustratedPlaceholder && demoItem ? { ...hydratedItem, article: demoItem.article,
+      syllabification: demoItem.syllabification, syllableStatus: demoItem.syllableStatus,
+      syllableCount: demoItem.syllableCount, category: demoItem.category } : hydratedItem;
+    const normalizedItem = { ...currentItem, category: normalizeLearningCategory(currentItem.category) };
     return normalizedItem.contentKind === "sentence" || normalizedItem.categorySymbolOnly ? normalizedItem : hydrateSyllables(normalizedItem);
   });
 }

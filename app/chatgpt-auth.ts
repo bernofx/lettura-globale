@@ -3,6 +3,9 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "../db";
 import { authSessions } from "../db/schema";
+import { hashText } from "./domain/sha256";
+
+export { hashText } from "./domain/sha256";
 
 export type ChatGPTUser = {
   userId: string;
@@ -54,11 +57,6 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
 
 async function stableEmailId(email: string): Promise<string> {
   return `email-${await hashText(email.trim().toLowerCase())}`;
-}
-
-export async function hashText(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function createCloudSession(user: ChatGPTUser, adultProfileId?: string): Promise<string> {

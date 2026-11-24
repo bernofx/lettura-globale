@@ -11,9 +11,17 @@
 
 .library-sections .section-heading h2 { margin: 0 0 5px; }
 .library-sections .section-heading .primary-button { flex: 0 0 auto; min-height: 44px; }
+.library-header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
 .library-sections .modal .file-picker { margin-top: 16px; }
 
 @media (max-width: 540px) {
+  .library-header-action { align-self: flex-start; }
   .library-sections .section-heading { flex-direction: column; align-items: stretch; }
   .library-sections .section-heading .primary-button { align-self: flex-start; }
 }

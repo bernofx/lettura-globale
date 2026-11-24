@@ -1,0 +1,21 @@
+# Generazione immagini in Libreria
+
+Da **Libreria → Generazione con OpenAI**, l’amministratore inserisce una parola o un elenco e preme **Genera con OpenAI** per inviare la richiesta. Per salvare una parola e aggiungere in seguito una foto propria si usa **Aggiungi parola o foto**, che salva soltanto nella Libreria. La Libreria salta le voci già illustrate e invia subito le altre a Cloudflare Queues. Il Worker genera una proposta con OpenAI Images. In **Verifica immagine** l’amministratore può correggere categoria, articolo e sillabazione e approvare per la pubblicazione.
+
+## Attivazione
+
+1. Collauda su staging con risorse e credenziali separate. Su Cloudflare, crea la coda `lettura-globale-images-staging` e usa `wrangler.staging.jsonc.example` come riferimento. Per la produzione crea la coda `lettura-globale-images` prima di integrare la PR. Applica la migrazione D1 `0017_scheduled_images` all’ambiente corrispondente, poi distribuisci il codice.
+2. Apri **Libreria → Generazione con OpenAI → Configurazione pubblicazione** e copia **Identificativo account**. In Cloudflare imposta `SCHEDULED_IMAGES_ACCOUNT_ID` a quel valore, `SCHEDULED_IMAGES_MONTHLY_LIMIT` al numero massimo di tentativi autorizzati per mese UTC e `OPENAI_API_KEY` come secret del Worker. Usa una chiave API OpenAI dedicata, custodita lato server. Per il primo collaudo imposta il limite a una singola chiamata e usa una parola mancante.
+3. Su GitHub crea l’ambiente `scheduled-image-publisher`, riservato a `main`. Crea la chiave di pubblicazione dalla Libreria e salvala nell’ambiente GitHub come `SCHEDULED_IMAGES_PUBLISHER_TOKEN`. Aggiungi `SCHEDULED_IMAGES_GITHUB_TOKEN` con una credenziale dedicata al repository `bernofx/lettura-globale`, **Contents** e **Pull requests** in lettura/scrittura, **Actions** in lettura e nessun bypass delle regole di `main`.
+4. Su `main` rendi obbligatori la PR e il controllo `verify` della CI. Abilita squash merge. Attiva il publisher con la variabile del repository `SCHEDULED_IMAGES_PUBLISHER_ENABLED=true`. GitHub verifica le proposte approvate ai minuti 23 e 53 di ogni ora, oppure a richiesta da **Actions → Pubblica immagini approvate → Run workflow** su `main`.
+5. In Libreria verifica l’anteprima e i dati didattici, approva e controlla che la PR venga integrata dopo la CI. Lo stato diventa **Pubblicata** quando l’asset è incluso nel catalogo attivo su Cloudflare.
+
+## Generazione, budget e pubblicazione
+
+La generazione inizia con il pulsante **Genera con OpenAI** nella sezione dedicata. Il trigger Cloudflare ogni cinque minuti recupera i messaggi di coda non consegnati e segnala i tentativi interrotti. Un tentativo che potrebbe aver già raggiunto OpenAI richiede un nuovo invio esplicito prima di essere ripetuto. La prova Codex della Clessidra resta disattivata.
+
+Ogni chiamata prenota atomicamente un’unità del limite prima di contattare OpenAI, compresi tentativi non riusciti o d’esito incerto. L’app mostra il conteggio amministrativo. È un limite di **chiamate**, mentre l’importo fatturato dipende dalle tariffe e dall’uso del progetto API. Rimuovere `OPENAI_API_KEY` oppure impostare il limite a `0` disattiva la generazione. Impostare la variabile GitHub a `false` arresta la pubblicazione automatica.
+
+Il provider riceve soltanto la parola e l’eventuale precisazione visiva. Il Worker chiama un endpoint fisso, richiede un solo WebP e convalida e ripulisce il contenitore. Per parole nuove propone la sillabazione con l’algoritmo italiano e lascia modificabili i dati in anteprima. L’approvazione lega con un hash l’immagine e i metadati finali. GitHub Actions usa il codice di `main`, verifica il diff e la CI sullo stesso SHA, poi pubblica soltanto la voce JSON e il WebP approvati.
+
+Riferimenti [OpenAI Images API](https://developers.openai.com/api/reference/resources/images/methods/generate) e [modello GPT-Image-2.6 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare).
