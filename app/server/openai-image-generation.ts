@@ -1,4 +1,4 @@
-import { MAX_SCHEDULED_PREVIEW_BASE64, scheduledImagePreview } from "../domain/scheduled-image-preview";
+import { inspectScheduledImage, MAX_SCHEDULED_PREVIEW_BASE64, type PreviewRejection } from "../domain/scheduled-image-preview";
 import { readBoundedJson } from "./bounded-json";
 
 const endpoint = "https://api.openai.com/v1/images/generations";
@@ -22,6 +22,8 @@ type GenerationFailure = {
   parameter?: string;
   requestId?: string;
   imageReason?: "response_body" | "missing_image" | "too_large" | "invalid_image";
+  /** Only for invalid_image: what the received file was and why it was refused. */
+  image?: PreviewRejection;
 };
 
 export class OpenAIImageError extends Error {
@@ -44,7 +46,7 @@ export class OpenAIImageError extends Error {
       if (this.failure.imageReason === "response_body" || this.failure.imageReason === "missing_image")
         return "OpenAI ha risposto, ma dai dati ricevuti non è stato possibile estrarre un’immagine.";
       if (this.failure.imageReason === "too_large") return "L’immagine ricevuta da OpenAI è troppo grande per l’anteprima.";
-      return "L’immagine ricevuta da OpenAI non è un WebP, PNG o JPEG valido per l’anteprima.";
+      return invalidImageMessage(this.failure.image);
     }
     const reference = `(HTTP ${status}${code ? ` · ${code}` : ""})`;
     if (this.needsReview) return `OpenAI ha bloccato la richiesta ${reference}. Rivedi la parola o la precisazione visiva.`;
@@ -55,6 +57,22 @@ export class OpenAIImageError extends Error {
     if (status === 429) return `OpenAI segnala un limite di utilizzo ${reference}. Controlla il progetto API prima di riprovare.`;
     if (parameter) return `OpenAI ha rifiutato il parametro ${parameter} ${reference}.`;
     return status && status >= 500 ? `OpenAI ha restituito un errore di servizio ${reference}.` : `OpenAI ha rifiutato la richiesta ${reference}.`;
+  }
+}
+
+const formatNames = { "image/webp": "WebP", "image/png": "PNG", "image/jpeg": "JPEG" } as const;
+
+function invalidImageMessage(image: PreviewRejection | undefined) {
+  const format = image?.imageType ? formatNames[image.imageType] : "";
+  const size = image?.width && image.height ? ` ${image.width}×${image.height}` : "";
+  const received = format ? `L’immagine ricevuta da OpenAI (${format}${size})` : "L’immagine ricevuta da OpenAI";
+  switch (image?.reason) {
+    case "not_square": return `${received} non è quadrata.`;
+    case "dimensions": return `${received} ha dimensioni fuori dai limiti dell’anteprima (da 256 a 2048 pixel per lato).`;
+    case "animated": return `${received} è animata: serve un’immagine statica.`;
+    case "format": return "L’immagine ricevuta da OpenAI non è un file WebP, PNG o JPEG.";
+    case "encoding": return "L’immagine ricevuta da OpenAI è incompleta o codificata in modo non valido.";
+    default: return `${received} ha una struttura non riconosciuta e non può essere mostrata in anteprima.`;
   }
 }
 
@@ -114,7 +132,7 @@ export async function generateOpenAIImage(key: string, word: string, detail: str
   const encoded = Array.isArray(body.data) && body.data.length === 1 ? body.data[0]?.b64_json : undefined;
   if (typeof encoded !== "string") throw new OpenAIImageError({ kind: "image", imageReason: "missing_image", ...detailFields });
   if (encoded.length > MAX_SCHEDULED_PREVIEW_BASE64) throw new OpenAIImageError({ kind: "image", imageReason: "too_large", ...detailFields });
-  const preview = scheduledImagePreview(encoded);
-  if (!preview) throw new OpenAIImageError({ kind: "image", imageReason: "invalid_image", ...detailFields });
+  const preview = inspectScheduledImage(encoded);
+  if ("reason" in preview) throw new OpenAIImageError({ kind: "image", imageReason: "invalid_image", image: preview, ...detailFields });
   return preview.bytes.toString("base64");
 }
