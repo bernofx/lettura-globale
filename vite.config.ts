@@ -10,20 +10,19 @@ import { execFileSync } from "node:child_process";
 // distinguishes branch/rebuilt versions without exposing configuration/secrets.
 const appVersion = `r${execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim()}-${execFileSync("git", ["rev-parse", "--short=7", "HEAD"], { encoding: "utf8" }).trim()}`;
 
-// Resource identifiers are public configuration, not credentials. Vinext copies
-// this value into dist/server/wrangler.json, which Cloudflare Workers Builds
-// uses when uploading a version from Git.
+// Miniflare uses local storage for these bindings when Vite serves the app.
 const CLOUDFLARE_D1_DATABASE_ID =
   "10bf2c2e-ebb4-4943-8363-19784390955e";
 
 const { d1, r2 } = hostingConfig;
+const workerEntry = "./build/sites-worker.ts";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
 
 const localBindingConfig = {
-  main: "./build/sites-worker.ts",
+  main: workerEntry,
   compatibility_flags: ["nodejs_compat"],
   durable_objects: { bindings: [{ name: "SESSIONS", class_name: "RealtimeSession" }] },
   migrations: [{ tag: "realtime-v1", new_sqlite_classes: ["RealtimeSession"] }],
@@ -82,10 +81,13 @@ export default defineConfig(async ({ command }) => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
-        config: {
-          ...localBindingConfig,
-          ...(command === "serve"
-            ? {
+        // Workers Builds can use bare `wrangler deploy`, which follows Vite's
+        // generated config. Build that artifact from the production config.
+        ...(command === "build"
+          ? { configPath: "./wrangler.production.jsonc", config: { main: workerEntry } }
+          : {
+              config: {
+                ...localBindingConfig,
                 services: [
                   {
                     binding: "CONNECTORS",
@@ -93,9 +95,8 @@ export default defineConfig(async ({ command }) => {
                     entrypoint: "ConnectorPreview",
                   },
                 ],
-              }
-            : {}),
-        },
+              },
+            }),
         ...(command === "serve"
           ? {
               auxiliaryWorkers: [
