@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Il build da Git genera la configurazione Wrangler dal file di produzione. Il deploy automatico risolve la coda immagini di produzione e include il trigger di recupero. La CI verifica la configurazione generata.
+
 - [x] Libreria apre una sezione dedicata **Generazione con OpenAI**. Il pulsante esplicito di generazione invia a Cloudflare Queues solo le parole mancanti, una singola parola o un elenco. **Aggiungi parola o foto** salva soltanto nella Libreria. Il Worker genera una proposta con OpenAI Images e applica un limite mensile ai tentativi. L’amministratore può correggere i metadati prima di approvare. Un workflow GitHub separato verifica il diff del catalogo, attende la CI per lo stesso commit e pubblica tramite PR. La coda Cloudflare, la migrazione 0017, le credenziali del provider e il publisher richiedono attivazione. Vedi ADR 0026.
 
 - [x] Prova programmata del catalogo demo con la scheda illustrata Clessidra (Oggetti, LA, cles-si-dra). Nave aveva già un’immagine.
