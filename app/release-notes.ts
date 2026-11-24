@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove immagini in Libreria",
   items: [
+    "Generazione con OpenAI: le immagini con le credenziali di provenienza non vengono più scartate come non valide; se un’immagine non è utilizzabile, il messaggio ne spiega il motivo.",
     "Generazione con OpenAI più chiara: stati colorati, richieste da verificare in alto, conferma prima di scartare un’immagine e possibilità di richiedere di nuovo una parola rimasta senza immagine.",
     "Pirata e nave sono disponibili in Libreria, nelle categorie Persone e Trasporti. In Esercizi trovi anche «Trova il pirata» e «Trova la nave».",
     "Pera, banana e girasole ora hanno immagini dedicate. Le trovi nelle categorie Cibi e Oggetti della natura, con articoli e sillabe pronti per gli esercizi.",

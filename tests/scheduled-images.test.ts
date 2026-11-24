@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateOpenAIImage, OpenAIImageError, openAIImagePrompt } from "../app/server/openai-image-generation.ts";
-import { scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
+import { inspectScheduledImage, scheduledImagePreview } from "../app/domain/scheduled-image-preview.ts";
 import { validateImageBytes } from "../app/domain/image-validation.ts";
 import { verifyCatalogCommit } from "../scripts/publish-scheduled-image.mjs";
 import { addScheduledCatalog, readScheduledCatalog } from "../app/domain/scheduled-catalog.ts";
@@ -188,6 +188,41 @@ test("la coda distingue permessi del modello, quota OpenAI, rete e immagini inco
     assert.ok(error instanceof OpenAIImageError);
     assert.deepEqual(error.failure, { kind: "network" });
     assert.match(error.userMessage, /contattare OpenAI/);
+    return true;
+  });
+});
+
+test("un WebP con le credenziali di provenienza C2PA di OpenAI viene accettato senza i metadati", async (t) => {
+  const image = readFileSync("public/images/demo/clessidra.webp");
+  const dimensions = validateImageBytes(image, "image/webp");
+  assert.ok(dimensions.valid);
+  const extended = Buffer.alloc(18);
+  extended.write("VP8X");
+  extended.writeUInt32LE(10, 4);
+  extended.writeUIntLE(dimensions.width - 1, 12, 3);
+  extended.writeUIntLE(dimensions.height - 1, 15, 3);
+  const provenance = Buffer.alloc(8 + 301);
+  provenance.write("C2PA");
+  provenance.writeUInt32LE(301, 4);
+  const signed = Buffer.concat([image.subarray(0, 12), extended, image.subarray(12), provenance, Buffer.alloc(1)]);
+  signed.writeUInt32LE(signed.length - 8, 4);
+  const encoded = signed.toString("base64");
+  assert.deepEqual(scheduledImagePreview(encoded)?.bytes, image, "the provenance chunk (odd size, padded) is dropped");
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ b64_json: encoded }] }));
+  assert.equal(await generateOpenAIImage("synthetic-key", "Clessidra", ""), image.toString("base64"));
+});
+
+test("un’immagine non utilizzabile spiega il motivo senza esporre il contenuto", async (t) => {
+  const png = readFileSync("public/images/demo/mela.png");
+  const wide = Buffer.from(png);
+  wide.writeUInt32BE(1536, 16);
+  assert.deepEqual(inspectScheduledImage(wide.toString("base64")), { reason: "not_square", imageType: "image/png", width: 1536, height: 768 });
+  assert.deepEqual(inspectScheduledImage(Buffer.from("GIF89a" + "x".repeat(40)).toString("base64")), { reason: "format" });
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ b64_json: wide.toString("base64") }] }));
+  await assert.rejects(generateOpenAIImage("synthetic-key", "Mela", ""), error => {
+    assert.ok(error instanceof OpenAIImageError);
+    assert.equal(error.userMessage, "L’immagine ricevuta da OpenAI (PNG 1536×768) non è quadrata.");
+    assert.deepEqual(error.failure.image, { reason: "not_square", imageType: "image/png", width: 1536, height: 768 });
     return true;
   });
 });
