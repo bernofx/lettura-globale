@@ -398,6 +398,11 @@ try {
   assert.equal(resumed.proposal.prNumber, 12);
   assert.equal(resumed.proposal.prHead, link.prHead);
   assert.equal((await publish("renew", link)).status, 409, "an older claim cannot authorize merge");
+  await db.prepare(`INSERT INTO scheduled_image_requests (id, account_id, word, word_key, status, created_at, updated_at)
+    SELECT ?, account_id, 'Girandola', 'girandola', 'existing', 1, 1 FROM scheduled_image_requests WHERE id = ?`).bind(crypto.randomUUID(), job.id).run();
+  const regenerated = await (await queueAdmin({ action: "generate", words: "Girandola" })).json();
+  assert.equal(regenerated.accepted, 1, "a word marked as illustrated can be requested again once it has no image");
+  assert.notEqual(regenerated.requests.find(item => item.word === "Girandola").status, "existing");
   const snapshot = await (await queueAdmin()).json();
   assert.equal(snapshot.requests.find(item => item.id === job.id).status, "pull_request");
   assert.equal(snapshot.token, undefined);

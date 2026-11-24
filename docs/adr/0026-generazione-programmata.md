@@ -14,4 +14,6 @@ La sezione riguarda termini generici. L’interfaccia chiede di escludere dati p
 
 I metadati didattici provengono dal catalogo o dall’analisi locale della parola. L’amministratore li può correggere nell’anteprima e approva esplicitamente l’immagine e i metadati prima della pubblicazione. Le fonti e le licenze seguono le schede ImageGen del catalogo. GitHub Actions usa una chiave di pubblicazione distinta custodita in GitHub per preparare un commit con la voce JSON e il WebP, controlla il contenuto del commit, attende la CI e integra su `main`. La conferma richiede che l’asset sia nel catalogo attivo.
 
+Ogni ambiente compila con la propria configurazione Wrangler (`LETTURA_WRANGLER_CONFIG`, predefinita produzione), così Worker, coda e trigger non si mescolano tra staging e produzione. Una parola segnata come già illustrata può essere richiesta di nuovo se non ha più un’immagine.
+
 Il collaudo con un account reale, la creazione delle risorse, le protezioni di `main` e l’attivazione del provider in produzione richiedono configurazione e approvazione. [Configurazione](../GENERAZIONE_IMMAGINI.md)

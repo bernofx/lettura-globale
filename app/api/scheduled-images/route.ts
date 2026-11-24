@@ -69,6 +69,8 @@ export async function POST(request: Request) {
         pr_number = NULL, pr_head = NULL, metadata = NULL, image_base64 = NULL, proposal_digest = NULL,
         generation_id = excluded.generation_id, dispatched_at = NULL, claim_id = NULL, lease_until = NULL, updated_at = excluded.updated_at
       WHERE scheduled_image_requests.status IN ('cancelled', 'needs_review', 'failed')
+        -- A word marked as illustrated can be requested again once it no longer has an image.
+        OR (scheduled_image_requests.status IN ('existing', 'published') AND excluded.status = 'queued')
       RETURNING id, generation_id AS generationId, status
     `).bind(crypto.randomUUID(), accountId, word, key, detail, images.has(key) ? "existing" : "queued", crypto.randomUUID(), now, now)));
     const accepted = inserts.flatMap(result => result.results);

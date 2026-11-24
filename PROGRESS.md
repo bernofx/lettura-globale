@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Correzioni dalla revisione della generazione immagini (PR #44–#50). La build sceglie la configurazione Wrangler dell’ambiente con `LETTURA_WRANGLER_CONFIG` (produzione predefinita, `wrangler.staging.jsonc` per staging), verificata anche dal controllo della CI. Scartare un’immagine generata chiede conferma; una parola «Già presente» o «Pubblicata» si può richiedere di nuovo quando non ha più un’immagine; la conferma di pubblicazione chiude come «Già presente» se nel frattempo il catalogo ha un’altra immagine per la parola. Pagina rinnovata: riquadri «Nuove parole» e «Richieste», stati colorati con in alto quelli che aspettano una scelta, righe a griglia, termini meno tecnici (In pubblicazione, generazioni usate con barra, riferimento HTTP in secondo piano), «Aggiorna» con icona in linea, verifica con istruzione in alto, «Scarta» e «Chiudi», sillabe a tutta larghezza, «Non usare nell’esercizio», pulsante «Copia» per la chiave, errore non duplicato. «Trova il girasole» non propone più «sole». Cache PWA v87.
 - [x] Le proposte della generazione conservano un’anteprima privata degli output quadrati statici WebP, PNG e JPEG fino a 1.350.000 byte. Il publisher li converte in WebP per il catalogo dopo l’approvazione.
 
 - [x] La coda immagini distingue gli errori HTTP di OpenAI, moderazione, quota, accesso, problemi di rete e risposte immagine incompatibili. La richiesta descrive lo sfondo opaco nel prompt. I messaggi conservano solo i codici e i parametri previsti.

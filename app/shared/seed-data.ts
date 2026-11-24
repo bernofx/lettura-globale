@@ -122,7 +122,7 @@ const initialRecognitionExercises: Exercise[] = [
   { id: "ex-uccello", title: "Trova l’uccello", promptId: "uccello", optionIds: ["uccello", "pesce", "mucca"], updatedAt: "Oggi" },
   { id: "ex-banana", title: "Trova la banana", promptId: "banana", optionIds: ["banana", "pera", "mela"], updatedAt: "Oggi" },
   { id: "ex-pera", title: "Trova la pera", promptId: "pera", optionIds: ["pera", "banana", "pane"], updatedAt: "Oggi" },
-  { id: "ex-girasole", title: "Trova il girasole", promptId: "girasole", optionIds: ["girasole", "sole", "albero"], updatedAt: "Oggi" },
+  { id: "ex-girasole", title: "Trova il girasole", promptId: "girasole", optionIds: ["girasole", "albero", "mela"], updatedAt: "Oggi" },
   { id: "ex-pirata", title: "Trova il pirata", promptId: "pirata", optionIds: ["pirata", "nave", "gatto"], updatedAt: "Oggi" },
   { id: "ex-nave", title: "Trova la nave", promptId: "nave", optionIds: ["nave", "auto", "camion"], updatedAt: "Oggi" },
   { id: "ex-latte", title: "Trova il latte", promptId: "latte", optionIds: ["latte", "acqua", "pane"], updatedAt: "Oggi" },
