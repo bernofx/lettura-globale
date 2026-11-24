@@ -28,12 +28,14 @@ test("le nuove parole sono distribuite tra due, tre e quattro sillabe", () => {
   assert.deepEqual(counts, { 2: 34, 3: 33, 4: 33 });
 });
 
-test("le foto aggiornano il catalogo esistente e i tre vocaboli entrano negli esercizi per immagini", () => {
+test("le foto aggiornano il catalogo esistente e i vocaboli entrano negli esercizi per immagini", () => {
   const library = hydrateLibrary([oldPear, oldBanana]);
   const expected = [
     { id: "pera", category: "Cibi", article: "LA", syllables: "pe-ra" },
     { id: "banana", category: "Cibi", article: "LA", syllables: "ba-na-na" },
     { id: "girasole", category: "Oggetti della natura", article: "IL", syllables: "gi-ra-so-le" },
+    { id: "pirata", category: "Persone", article: "IL", syllables: "pi-ra-ta" },
+    { id: "nave", category: "Trasporti", article: "LA", syllables: "na-ve" },
   ];
   for (const { id, category, article, syllables } of expected) {
     const items = library.filter(item => item.id === id);
@@ -53,17 +55,17 @@ test("le foto aggiornano il catalogo esistente e i tre vocaboli entrano negli es
   }
 
   const ids = expected.map(item => item.id);
-  const base: Exercise = { id: "catalog-test", title: "Catalogo", promptId: "", optionIds: [], rounds: 3, updatedAt: "Oggi" };
-  const categories = ["Cibi", "Oggetti della natura"];
+  const base: Exercise = { id: "catalog-test", title: "Catalogo", promptId: "", optionIds: [], rounds: ids.length, updatedAt: "Oggi" };
+  const categories = ["Cibi", "Oggetti della natura", "Persone", "Trasporti"];
   const symbolMap = seedDefaultCategorySymbols({}, []);
   const rounds = (config: Partial<Exercise>) => compileExercises([{ ...base, ...config }], library, symbolMap);
   assert.deepEqual(new Set(rounds({ kind: "articles", articleItemIds: ids }).flatMap(turn => turn.articleItemIds)), new Set(ids));
   assert.deepEqual(new Set(rounds({ kind: "naming", namingItemIds: ids }).flatMap(turn => turn.namingItemIds)), new Set(ids));
   const categoryRounds = rounds({ kind: "word-categories", categoryItemIds: ids, categoryNames: categories, categoryShowSymbols: true, categoryShowTargetImage: true });
   assert.deepEqual(new Set(categoryRounds.flatMap(turn => turn.categoryItemIds)), new Set(ids));
-  assert.deepEqual(categoryRounds[0].categorySymbolIds, { Cibi: "simbolo-generico-cibi", "Oggetti della natura": "simbolo-generico-natura" });
-  const recognition = rounds({ kind: "recognition", recognitionMode: "random", recognitionItemIds: ids, distractorCount: 2, presentation: "images" });
-  assert.equal(recognition.length, 3);
+  assert.deepEqual(categoryRounds[0].categorySymbolIds, { Cibi: "simbolo-generico-cibi", "Oggetti della natura": "simbolo-generico-natura", Persone: "simbolo-generico-persone", Trasporti: "simbolo-generico-trasporti" });
+  const recognition = rounds({ kind: "recognition", recognitionMode: "random", recognitionItemIds: ids, distractorCount: 4, presentation: "images" });
+  assert.equal(recognition.length, ids.length);
   for (const turn of recognition) assert.deepEqual(new Set(turn.optionIds), new Set(ids));
 
   for (const id of ids) {

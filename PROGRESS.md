@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Due immagini WebP in Libreria per Pirata (Persone) e Nave (Trasporti), con articoli IL e LA, sillabazione verificata e i rispettivi esercizi «Trova il pirata» e «Trova la nave».
+
 - [x] Tre immagini WebP in Libreria per Pera e Banana (Cibi) e Girasole (Oggetti della natura). Articoli LA, LA e IL e sillabazione verificata. Le foto di pera e banana riusano le schede esistenti. È incluso l’esercizio «Trova il girasole».
 
 - [x] Ripassa con ordine obbligatorio: il dito si stacca solo quando serve. Un tratto che inizia sull’inchiostro già tracciato si raggiunge scorrendo lungo l’inchiostro (percorso più breve tra raccordi, incroci e anelli), proseguendo lo stesso gesto o ripartendo da un punto qualsiasi dell’inchiostro: A, B, D, E, F, J, P, R e T senza staccare; H 2 stacchi, I, K, Q, X, Y, 1 e 4 uno solo. Uscire dall’avvicinamento dopo un tratto completato equivale a sollevare il dito. Sostituisce il raccordo limitato a B e R. Test che scrive tutte le 36 guide contando gli stacchi; test browser per «Λ» e B continua.
