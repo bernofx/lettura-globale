@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import { type SyllableFilter } from "../../domain/syllabification";
 import { type CategoryOptions, type DistractorSource, type Presentation } from "../../shared/types";
 import { CheckLine } from "../../shared/ui/form-controls";
@@ -11,7 +12,7 @@ export function CategoryExerciseOptions({ value, onChange }: { value: CategoryOp
 }
 
 export function WizardBack({ onClick }: { onClick: () => void }) {
-  return <button className="wizard-back" type="button" onClick={onClick}>← Indietro</button>;
+  return <button className="ghost-button wizard-back" type="button" onClick={onClick}><ArrowLeft aria-hidden="true" />Indietro</button>;
 }
 
 export function CorrectMatchPronunciation({ kind, checked, onChange }: { kind: "articles" | "word-categories"; checked: boolean; onChange: (value: boolean) => void }) {

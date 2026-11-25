@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Correzioni dalla revisione UI/UX completa. Pulsanti secondari con icona e testo sempre in linea («Link condivisi» e altri); lente della ricerca Storie in CAA che non copre più il testo; Storie in CAA senza titolo duplicato su tablet e telefono e avviso d’errore distanziato; modulo dell’Avvio rapido allineato con la casella «Pronuncia automatica» accanto al testo; pulsante «Indietro» con icona come negli altri «Torna…»; accuratezza «—» senza prove in Progressi; in Oggi parole contate senza simboli di categoria e frasi, con quante hanno un’immagine, scorciatoia «Aggiungi parola o foto» e riquadro più compatto senza sequenze; versione non più mostrata nella schermata dell’esercizio; messaggio comprensibile e niente «Scansiona…» senza QR nella schermata «Pronti?»; azioni «Nuovo esercizio» dello stesso stile ed «Elimina» distanziato; intestazione di Giochi come le altre pagine; spiegazione dello stato cloud nel menu solo quando serve; campi dei Profili uniformi e sezioni etichettate; Aspetto chiarisce che la palette personalizza il tema. Test browser aggiornato al pulsante «Aggiungi parola o foto».
 - [x] Ricerca Openverse dalla Libreria, verifica sulle API di Wikimedia Commons e pubblicazione diretta con crediti per CC0 e CC BY 4.0. Migrazione 0019 per l’attribuzione.
 
 - [x] Le immagini approvate vengono pubblicate direttamente nel catalogo condiviso D1/R2. Il recupero importa le proposte già approvate, riusando la foto. La migrazione 0018 revoca il publisher GitHub, il cui workflow è stato rimosso.

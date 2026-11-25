@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove immagini in Libreria",
   items: [
+    "Interfaccia rifinita: pulsanti più ordinati, Avvio rapido allineato, Progressi senza percentuali vuote, schermata dell’esercizio senza dati tecnici e Profili con campi uniformi.",
     "Generazione con OpenAI: le immagini con le credenziali di provenienza non vengono più scartate come non valide; se un’immagine non è utilizzabile, il messaggio ne spiega il motivo.",
     "Generazione con OpenAI più chiara: stati colorati, richieste da verificare in alto, conferma prima di scartare un’immagine e possibilità di richiedere di nuovo una parola rimasta senza immagine.",
     "Pirata e nave sono disponibili in Libreria, nelle categorie Persone e Trasporti. In Esercizi trovi anche «Trova il pirata» e «Trova la nave».",

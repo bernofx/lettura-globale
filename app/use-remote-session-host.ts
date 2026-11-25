@@ -60,7 +60,7 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
         url = resumed.url;
       } else {
         const response = await fetch("/api/controller/realtime", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", sessionId, childId, snapshot: current.current.snapshot }) });
-        if (!response.ok) throw new Error("Collegamento Realtime non disponibile. Riprova o inizia dal PC.");
+        if (!response.ok) throw new Error("Il telefono non si può collegare ora: puoi iniziare da qui.");
         const result = await response.json() as { token: string; latestSequence?: number };
         latestSequence.current = result.latestSequence ?? 0;
         url = realtimeControllerUrl(window.location.origin, result.token, sessionId);
@@ -98,7 +98,7 @@ export function useRemoteSessionHost({ enabled, sessionId, childId, snapshot, on
         },
       });
     } catch (error) {
-      if (attempt === generation.current) { setResumingController(false); setSavedStatus("error"); setState((old) => ({ ...old, status: "error", error: error instanceof Error ? error.message : "Realtime non disponibile" })); }
+      if (attempt === generation.current) { setResumingController(false); setSavedStatus("error"); setState((old) => ({ ...old, status: "error", error: error instanceof Error ? error.message : "Il telefono non si può collegare ora: puoi iniziare da qui." })); }
     }
   }, [enabled, sessionId, childId, setSavedPairing, setSavedSequence, setSavedStatus]);
   useEffect(() => {

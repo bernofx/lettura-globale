@@ -5,9 +5,9 @@ import { type RemoteHostState } from "../../use-remote-session-host";
 /* QRCode generates an in-memory data URL; Next Image cannot optimize this transient asset. */
 /* eslint-disable @next/next/no-img-element */
 export function ReadyPairing({ host }: { host: RemoteHostState }) {
-  return <aside className="ready-pairing" aria-label="Collega il telefono con QR Realtime">
+  return <aside className="ready-pairing" aria-label="Collega il telefono con un codice QR">
     {host.qrDataUrl ? <img src={host.qrDataUrl} width={240} height={240} alt="Scansiona per collegare il telefono e avviare la sessione" /> : <span role="status">{host.status === "error" ? host.error : "Preparazione QR…"}</span>}
-    <small role="status">{host.status === "connected" ? "Telefono collegato · puoi premere Inizia" : "Scansiona per collegare il telefono"}</small>
+    {host.qrDataUrl && <small role="status">{host.status === "connected" ? "Telefono collegato · puoi premere Inizia" : "Scansiona per collegare il telefono"}</small>}
     {host.status === "error" && <button type="button" className="ghost-button" onClick={() => void host.refreshPairing()}>Rigenera QR</button>}
   </aside>;
 }

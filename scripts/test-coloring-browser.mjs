@@ -566,7 +566,7 @@ try {
   await button("Libreria");
   await wait("document.querySelectorAll('.library-sections > .library-area.panel > .section-heading').length === 6");
   const testPhoto = "../public/images/categories/casa.webp";
-  for (const action of ["Aggiungi immagine", "Aggiungi frase"]) {
+  for (const action of ["Aggiungi parola o foto", "Aggiungi frase"]) {
     await button(action);
     await wait("document.querySelector('#upload-library-title ~ .file-picker .drop-zone')");
     await chooseFixture("#upload-library-title ~ .file-picker input[type=file]", testPhoto);
