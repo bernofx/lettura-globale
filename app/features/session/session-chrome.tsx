@@ -1,7 +1,6 @@
 import { ChevronLeft, ChevronRight, CircleHelp, Volume2, VolumeX } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { ImageCreditsButton } from "./session-image-credits";
-import { AppVersionBadge } from "../../components/app-update";
 import { RemoteHostBadge } from "../remote/remote-host";
 import { type SessionNavigationProps } from "./session-view";
 import { PROTECTED_EXIT_HOLD_MS, helpTypes } from "../../shared/constants";
@@ -9,7 +8,7 @@ import { AudioVolumeContext, RemoteHostContext } from "../../shared/hooks";
 
 export function SessionTools({ onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
   const remoteHost = useContext(RemoteHostContext);
-  return <div className="session-controls-stack"><div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div><div className="session-version-credits"><AppVersionBadge /><ImageCreditsButton /></div></div>;
+  return <div className="session-controls-stack"><div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div><div className="session-version-credits"><ImageCreditsButton /></div></div>;
 }
 
 function VolumeControl() {

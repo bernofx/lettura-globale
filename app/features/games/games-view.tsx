@@ -115,7 +115,7 @@ export function GamesView({ library, puzzleImages, soundVolume, coloringStorage,
 
   return (
     <div className="page games-page">
-      <PageHeader title={selectedGame?.title ?? "Giochi"} />
+      <PageHeader eyebrow="TEMPO LIBERO" title={selectedGame?.title ?? "Giochi"} description={selectedGame ? undefined : "Giochi liberi da fare insieme, separati da esercizi e progressi."} />
       {selectedGame && (
         <button className="ghost-button game-picker-back" type="button" onClick={closeColoringGallery}>
           <ArrowLeft size={18} aria-hidden="true" /><span>Torna ai giochi</span>

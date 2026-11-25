@@ -9,6 +9,7 @@ type DashboardProps = {
   therapist: Therapist;
   child: ChildProfile;
   libraryCount: number;
+  illustratedCount: number;
   exerciseCount: number;
   sequenceTotal: number;
   activeSequence?: ActiveSequenceSummary;
@@ -18,7 +19,7 @@ type DashboardProps = {
   onNavigate: (view: View) => void;
 };
 
-export function Dashboard({ therapist, child, libraryCount, exerciseCount, sequenceTotal, activeSequence, accuracy, attemptCount, onStart, onNavigate }: DashboardProps) {
+export function Dashboard({ therapist, child, libraryCount, illustratedCount, exerciseCount, sequenceTotal, activeSequence, accuracy, attemptCount, onStart, onNavigate }: DashboardProps) {
   const sequenceLength = activeSequence?.exerciseTitles.length ?? 0;
   const minutes = Math.max(5, Math.round(sequenceLength * 1.5));
   const hasSequence = Boolean(activeSequence && sequenceLength);
@@ -47,11 +48,11 @@ export function Dashboard({ therapist, child, libraryCount, exerciseCount, seque
       <Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" />
       <Metric icon={<BarChart3 />} label="Accuratezza" value={attemptCount ? `${accuracy}%` : "—"} detail={attemptCount ? "sui primi tentativi" : "nessun tentativo ancora"} tone="mint" />
       <Metric icon={<BookOpenCheck />} label="Esercizi pronti" value={String(exerciseCount)} detail={sequenceTotal === 1 ? "1 sequenza salvata" : `${sequenceTotal} sequenze salvate`} tone="peach" />
-      <Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail="con immagini e licenze" tone="sky" />
+      <Metric icon={<FolderHeart />} label="Parole in libreria" value={String(libraryCount)} detail={`${illustratedCount} con immagine`} tone="sky" />
     </section>
     <section className="two-columns">
       <div className="panel"><PanelHeading level={3} eyebrow="ACCESSO RAPIDO" title="Prepara la prossima attività" /><div className="quick-list">
-        <Quick icon={<ImagePlus />} title="Aggiungi una parola" detail="Carica un’immagine privata" onClick={() => onNavigate("library")} />
+        <Quick icon={<ImagePlus />} title="Aggiungi parola o foto" detail="Dalla Libreria, anche foto del dispositivo" onClick={() => onNavigate("library")} />
         <Quick icon={<BookOpenCheck />} title="Crea un esercizio" detail="Scegli parola e alternative" onClick={() => onNavigate("exercises")} />
         <Quick icon={<BarChart3 />} title="Guarda i progressi" detail="Primi tentativi e aiuti" onClick={() => onNavigate("stats")} />
       </div></div>
