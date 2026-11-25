@@ -47,7 +47,6 @@ export function RecognitionSession({ previewLabel, mode, manualAdvance = false, 
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className={`session-body ${presentation === "words" ? "words-session" : ""}`}>
-      <p className="instruction">{presentation === "images" ? "Tocca l’immagine corretta oppure trascina la parola sopra l’immagine." : "Tocca la parola corretta oppure trascina la parola nel box."}</p>
       <button
         type="button"
         className={`draggable-word-prompt ${wordDrag.offset.active ? "pointer-dragging" : ""}`}
@@ -62,7 +61,7 @@ export function RecognitionSession({ previewLabel, mode, manualAdvance = false, 
         onPointerMove={wordDrag.onPointerMove}
         onPointerUp={wordDrag.onPointerUp}
         onPointerCancel={wordDrag.onPointerCancel}
-      ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>{presentation === "images" ? "Trascina sulle immagini" : "Trascina sulle parole · tocca per ascoltare"}</small></button>
+      ><strong>{prompt.word.toLocaleUpperCase("it-IT")}</strong><small>{presentation === "images" ? "Tocca o trascina sull’immagine giusta" : "Trascina sulla parola giusta · tocca per ascoltare"}</small></button>
       <div className={`answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
         const item = library.find((entry) => entry.id === id);
         if (!item) return null;

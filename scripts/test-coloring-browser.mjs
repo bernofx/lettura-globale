@@ -550,10 +550,14 @@ try {
   await wait("document.querySelector('.topbar .child-pill strong')?.textContent === 'AlessandroMassimiliano'");
   for (const width of [320, 360, 390, 430, 568, 768]) {
     await viewport(width, width === 568 ? 320 : 800);
-    for (const view of ["Oggi", "Libreria", "Configurazione", "Sessione", "Giochi", "Storie in CAA", "Progressi", "Aspetto", "Profili"]) {
+    for (const [view, tab] of [["Oggi"], ["Libreria"], ["Esercizi"], ["Sessione"], ["Giochi"], ["Storie in CAA"], ["Progressi"], ["Impostazioni", "Profili"], ["Impostazioni", "Aspetto"]]) {
       await button("Apri menu");
       await button(view);
       await wait(`document.querySelector('.nav-item.active')?.textContent === ${JSON.stringify(view)}`);
+      if (tab) {
+        await button(tab);
+        await wait(`document.querySelector('.settings-tabs [aria-current=page]')?.textContent === ${JSON.stringify(tab)}`);
+      }
       if (!await evaluate(documentFitsWidth)) {
         const overflow = await evaluate(`[...document.querySelectorAll("main *")].filter(element => element.getBoundingClientRect().right > ${width} + 1)
           .slice(0, 12).map(element => [element.tagName, String(element.className), Math.round(element.getBoundingClientRect().right)])`);
@@ -795,10 +799,10 @@ try {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '1');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
-  await button("Continua");
-  await wait("document.querySelector('.review-step')");
+  assert.ok(await evaluate("document.querySelector('.session-wizard').textContent.includes('Modalità della sessione')"), "quick start chooses the mode on the same page");
   await button("Continua");
   await wait("document.querySelector('.ready-screen')");
+  assert.equal(await evaluate("Boolean(document.querySelector('.review-step'))"), false, "quick start skips the summary step");
   await button("Inizia");
   await wait("document.querySelector('.quantity-session')");
   await button("Numero errato");
