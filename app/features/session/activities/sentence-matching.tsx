@@ -29,7 +29,6 @@ export function SentenceMatchingSession({ previewLabel, mode, manualAdvance = fa
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="session-body">
-      <p className="instruction">Tocca l’immagine corretta oppure trascina la frase sopra l’immagine.</p>
       <button
         type="button"
         className={`sentence-prompt ${sentenceDrag.offset.active ? "pointer-dragging" : ""}`}
@@ -44,7 +43,7 @@ export function SentenceMatchingSession({ previewLabel, mode, manualAdvance = fa
         onPointerUp={sentenceDrag.onPointerUp}
         onPointerCancel={sentenceDrag.onPointerCancel}
         aria-label={`${prompt.word}. Trascina la frase sull’immagine corretta oppure tocca per ascoltarla`}
-      ><strong>{prompt.word}</strong><Volume2 /><small>Trascina sulle immagini · tocca per riascoltare</small></button>
+      ><strong>{prompt.word}</strong><Volume2 /><small>Trascina sull’immagine giusta · tocca qui per riascoltare</small></button>
       <div className={`answer-grid sentence-answer-grid options-${optionIds.length}`}>{optionIds.map((id) => {
         const item = library.find((candidate) => candidate.id === id);
         if (!item) return null;

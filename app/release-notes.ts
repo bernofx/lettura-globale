@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove immagini in Libreria",
   items: [
+    "Avvio rapido più veloce: scegli Insegnamento o Valutazione nella stessa pagina e passi subito a «Pronti?». Il menu ha «Esercizi» e «Impostazioni» (Profili e Aspetto), la Libreria ha i collegamenti alle sezioni.",
     "Interfaccia rifinita: pulsanti più ordinati, Avvio rapido allineato, Progressi senza percentuali vuote, schermata dell’esercizio senza dati tecnici e Profili con campi uniformi.",
     "Generazione con OpenAI: le immagini con le credenziali di provenienza non vengono più scartate come non valide; se un’immagine non è utilizzabile, il messaggio ne spiega il motivo.",
     "Generazione con OpenAI più chiara: stati colorati, richieste da verificare in alto, conferma prima di scartare un’immagine e possibilità di richiedere di nuovo una parola rimasta senza immagine.",

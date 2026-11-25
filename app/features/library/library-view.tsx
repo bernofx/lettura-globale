@@ -19,6 +19,11 @@ import { CheckLine } from "../../shared/ui/form-controls";
 import "./library-layout.css";
 import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
+const librarySections = [
+  ["library-words", "Parole"], ["library-scenes", "Scene"], ["library-categories", "Categorie"],
+  ["puzzle-library-title", "Puzzle"], ["library-exercise-sounds", "Suoni"], ["library-game-soundtrack", "Colonna sonora"],
+] as const;
+
 export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUpload, items, search, setSearch, onUpload, onEdit, onDelete, sounds, onSoundsChange, puzzles, soundtrackUploadOpen, onSoundtrackUploadClose, scheduledImagesProfile, onCatalogPublished }: { puzzles: PuzzleLibrary; soundtrackUploadOpen: boolean; onSoundtrackUploadClose: () => void; scheduledImagesProfile?: string; onCatalogPublished: () => Promise<void>; categorySymbols: CategorySymbols; onCategorySymbol: (category: string, id: string) => void; onCategoryUpload: (category: string, image: string) => Promise<void>; items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: (kind: "word" | "sentence" | "puzzle" | "soundtrack") => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [wordsExpanded, setWordsExpanded] = useState(false);
@@ -85,6 +90,9 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
       <label className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca nei contenuti…" /></label>
       <div className="provider-note"><Sparkles size={16} />Catalogo demo autorizzato</div>
     </div>
+    <nav className="library-jump" aria-label="Vai a una sezione della Libreria">
+      {librarySections.map(([id, label]) => <button key={id} type="button" className="filter-chip" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{label}</button>)}
+    </nav>
     <section className="panel library-area" aria-labelledby="library-words">
       <SectionHeading id="library-words" title="Parole e immagini" description="Inserisci una parola e, se vuoi, carica una foto dal dispositivo anche in seguito.">
         <button type="button" className="primary-button" onClick={() => onUpload("word")}><Plus size={18} aria-hidden="true" />Aggiungi parola o foto</button>
