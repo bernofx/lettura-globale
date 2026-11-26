@@ -241,6 +241,10 @@
 10. Approvare ADR 0024 e spostare gli APK fuori dal repository.
 11. Verificare su tablet Android reale menu a cassetto, target touch e intestazione degli esercizi; sostituire le emoji del catalogo dimostrativo con immagini dotate di licenza.
 12. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
+13. Completare gli stili dell’interfaccia Studio e Giocoso con le impaginazioni proposte nella tela di design (oggi cambiano colori, caratteri, forme, menu e pannelli sulle stesse pagine). Ogni pezzo è una variante della pagina che riusa logica e dati di quella attuale, con test dedicati:
+    - Studio: Libreria come tabella con filtri rapidi (senza immagine, sillabe da verificare, foto private); Progressi con tabella parole × attività e schede Valutazione/Insegnamento in alto; Esercizi con la sequenza in un pannello laterale; ultime sessioni del bambino in Oggi.
+    - Giocoso: sequenza come percorso di cerchi numerati; Progressi a carte «Sicura», «In crescita», «Da rinforzare»; Libreria a carte grandi con etichette colorate; pagine interne aperte dai riquadri delle aree con pulsante di ritorno.
+    - Entrambi: barra di navigazione in basso sul telefono (5 voci più «Altro»); avanzamento dell’esercizio a pallini (Giocoso) o barra con turno (Studio).
 
 ## Verifiche della versione corrente
 
