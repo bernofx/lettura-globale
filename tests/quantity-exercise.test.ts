@@ -88,3 +88,9 @@ test("le tre illustrazioni WebP sono distribuite nella cache offline", () => {
     assert.equal(file.toString("ascii", 8, 12), "WEBP");
   }
 });
+
+test("Numero quantità usa tre colonne solo sui telefoni in verticale", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.quantity-field\{[^}]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media \(max-width: 760px\) and \(orientation: portrait\)\s*\{\s*\.quantity-field\s*\{\s*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+});
