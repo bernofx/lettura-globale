@@ -1,7 +1,8 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Correzioni a Progressi e alle sequenze",
+  title: "Nuove illustrazioni in Numero quantità",
   items: [
+    "In Numero quantità, caramelle, coccinelle e sassolini hanno nuove illustrazioni. I dieci oggetti sono disposti in due file da cinque.",
     "Progressi mostra gli avvii rapidi nella loro attività quando lo storico è disponibile. Il grafico lascia uno spazio nei mesi senza prove.",
     "Nelle sequenze puoi scegliere la posizione di un esercizio toccando i puntini. Durante la sessione i pallini scorrono su una riga e i turni saltati restano da completare.",
     "Tabella delle parole in Progressi più ordinata: cerca una parola, filtra per stato, categoria o attività e ordina cliccando le intestazioni (in Giocoso e sul telefono con «Ordina per»). All’apertura vedi prima le parole da rinforzare, 15 alla volta; le colonne delle attività senza prove non compaiono.",

@@ -1,5 +1,8 @@
-const CACHE_NAME = "lettura-globale-v97";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png"];
+const CACHE_NAME = "lettura-globale-v98";
+const APP_SHELL = [
+  "/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png",
+  "/images/quantity/candy.webp", "/images/quantity/ladybug.webp", "/images/quantity/stone.webp",
+];
 
 async function fetchWithTimeout(request, timeoutMs = 5000) {
   const controller = new AbortController();

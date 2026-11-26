@@ -1,5 +1,6 @@
 import { Bug, Candy, Check, ChevronRight, Circle, CircleHelp, Volume2, X } from "lucide-react";
-import { useCallback, useContext, useEffect, useRef } from "react";
+import Image from "next/image";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useUpdateState } from "../../../components/app-update";
 import { quantityAnswerId, type QuantityAnswerMethod, quantityIdleDecision, type QuantityObject, quantityObjectLabel, quantitySelectionDecision } from "../../../domain/quantity-exercise";
 import { SessionTools, SessionProgress } from "../session-chrome";
@@ -8,16 +9,18 @@ import { playFeedbackTone, playQuantityTick, speakWord } from "../../../shared/a
 import { RewardActiveContext, useLocalFallbackAdvance, useRemoteComponentCommand } from "../../../shared/hooks";
 import { type Exercise, type Mode } from "../../../shared/types";
 
-function QuantityObjectIcon({ object }: { object: QuantityObject }) {
-  if (object === "candy") return <Candy />;
-  if (object === "ladybug") return <Bug />;
-  return <Circle fill="currentColor" />;
-}
+const quantityArtwork = {
+  candy: { width: 256, height: 155, Fallback: Candy },
+  ladybug: { width: 255, height: 256, Fallback: Bug },
+  stone: { width: 256, height: 186, Fallback: Circle },
+} satisfies Record<QuantityObject, { width: number; height: number; Fallback: typeof Candy }>;
 
 export function NumberQuantitySession({ previewLabel, exercise, mode, manualAdvance = false, currentIndex, total, onAttempt, onComplete, onHelp, onExit, soundEffects, onToggleSound, canPrevious, canForward, onPrevious, onForward }: { previewLabel?: "Anteprima" | "Prova"; exercise: Exercise; mode: Mode; manualAdvance?: boolean; currentIndex: number; total: number; onAttempt: (itemId: string, answer: string, correct: boolean) => void; onComplete: () => void; onHelp: (label: string, wordId?: string) => void; onExit: () => void; soundEffects: boolean; onToggleSound: () => void } & SessionNavigationProps) {
   const rewardActive = useContext(RewardActiveContext);
   const target = exercise.quantityTarget ?? exercise.quantityMin ?? 1;
   const object = exercise.quantityObject ?? (exercise.quantityObjectSet === "mixed" || !exercise.quantityObjectSet ? "candy" : exercise.quantityObjectSet);
+  const { width, height, Fallback } = quantityArtwork[object];
+  const [unavailableArtwork, setUnavailableArtwork] = useState<QuantityObject | null>(null);
   const itemId = `quantity:${exercise.id}:${target}`;
   const prompt = `Tocca ${target} ${quantityObjectLabel(object, target)}`;
   const errorless = exercise.quantityErrorless === true;
@@ -95,6 +98,36 @@ export function NumberQuantitySession({ previewLabel, exercise, mode, manualAdva
   };
   return <div className="session-screen quantity-session">
     <div className="session-header"><div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Numero quantità</span>{errorless && <span className="mode-tag">Apprendimento senza errori</span>}<strong>{exercise.title}</strong></div><SessionProgress currentIndex={currentIndex} total={total} /><SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} /></div>
-    <div className="quantity-body"><div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><div className="quantity-count" aria-live="polite"><span>Obiettivo</span><strong>{target}</strong><small>{selected.size} selezionati</small></div></div><div className={`quantity-field ${judgement ?? ""}`}>{Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} disabled={Boolean(judgement)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}${selected.has(index) ? ", selezionata" : ""}`} style={{ "--quantity-offset": `${((index * 17) % 11) - 5}px`, "--quantity-rotate": `${((index * 29) % 18) - 9}deg` } as React.CSSProperties}><QuantityObjectIcon object={object} />{selected.has(index) && <i><Check /></i>}</button>)}{judgement && <i className={`quantity-result-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`} role="status" aria-label={judgement === "correct" ? "Numero corretto" : "Numero errato"}>{judgement === "correct" ? <Check /> : <X />}</i>}</div>{quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3, errorless) && !judgement && <div className="quantity-time" aria-label={`Tempo di inattività: ${exercise.quantityIdleSeconds ?? 3} secondi`}><div className="quantity-time-track" aria-hidden="true"><span ref={progressFill} /></div></div>}<div className="quantity-controls">{judgement && (teachingFlow || errorless) ? <>{judgement === "wrong" && <button type="button" className="ghost-button" onClick={retry}>Riprova</button>}<button type="button" className="primary-button quantity-continue" onClick={onComplete}><ChevronRight />Continua</button></> : <><button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button>{errorless ? <span className="data-note">Apprendimento senza errori: raggiungi la quantità richiesta, poi premi Continua.</span> : <><button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button><button type="button" className="naming-correct" onClick={() => completeRound(selected.size === target, "adult")} disabled={Boolean(judgement)}><Check />Numero corretto</button></>}</>}</div>
-  </div></div>;
+    <div className="quantity-body">
+      <div className="quantity-prompt"><button type="button" className="listen-button" onClick={speakPrompt}><Volume2 /><span><strong>{prompt}</strong><small>Tocca per riascoltare</small></span></button><div className="quantity-count" aria-live="polite"><span>Obiettivo</span><strong>{target}</strong><small>{selected.size} selezionati</small></div></div>
+      <div className={`quantity-field ${judgement ?? ""}`}>
+        {Array.from({ length: 10 }, (_, index) => <button type="button" key={index} className={selected.has(index) ? "selected" : ""} onClick={() => toggle(index)} disabled={Boolean(judgement)} aria-pressed={selected.has(index)} aria-label={`${quantityObjectLabel(object, 1)} ${index + 1}`}>
+          {unavailableArtwork === object ? <Fallback className="quantity-art-fallback" aria-hidden="true" />
+            : <Image className="quantity-art" src={`/images/quantity/${object}.webp`} width={width} height={height} alt="" draggable={false} loading="eager" unoptimized onError={() => setUnavailableArtwork(object)} />}
+          {selected.has(index) && <i aria-hidden="true"><Check /></i>}
+        </button>)}
+        {judgement && <i
+          className={`quantity-result-mark ${judgement === "correct" ? "correct-mark" : "wrong-mark"}`}
+          role="status"
+          aria-label={judgement === "correct" ? "Numero corretto" : "Numero errato"}
+        >{judgement === "correct" ? <Check /> : <X />}</i>}
+      </div>
+      {!judgement && quantityIdleDecision(mode, selected.size, target, exercise.quantityAutoComplete ?? true, previewLabel === "Anteprima", exercise.quantityIdleSeconds ?? 3, errorless) &&
+        <div className="quantity-time" aria-label={`Tempo di inattività: ${exercise.quantityIdleSeconds ?? 3} secondi`}>
+          <div className="quantity-time-track" aria-hidden="true"><span ref={progressFill} /></div>
+        </div>}
+      <div className="quantity-controls">
+        {judgement && (teachingFlow || errorless) ? <>
+          {judgement === "wrong" && <button type="button" className="ghost-button" onClick={retry}>Riprova</button>}
+          <button type="button" className="primary-button quantity-continue" onClick={onComplete}><ChevronRight />Continua</button>
+        </> : <>
+          <button type="button" className="ghost-button" onClick={() => onHelp("Indicazione verbale", itemId)} disabled={Boolean(judgement)}><CircleHelp />Aiuto</button>
+          {errorless ? <span className="data-note">Apprendimento senza errori: raggiungi la quantità richiesta, poi premi Continua.</span> : <>
+            <button type="button" className="naming-wrong" onClick={() => completeRound(false, "adult")} disabled={Boolean(judgement)}><X />Numero errato</button>
+            <button type="button" className="naming-correct" onClick={() => completeRound(selected.size === target, "adult")} disabled={Boolean(judgement)}><Check />Numero corretto</button>
+          </>}
+        </>}
+      </div>
+    </div>
+  </div>;
 }

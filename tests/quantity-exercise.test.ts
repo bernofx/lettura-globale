@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { createQuantityRounds, quantityAnswerId, quantityAnswerLabel, quantityIdleDecision, quantityObjectLabel, quantitySelectionDecision } from "../app/domain/quantity-exercise.ts";
 
 test("genera quantità entro l'intervallo e risolve gli oggetti misti", () => {
@@ -73,4 +74,17 @@ test("senza errori non usa timer, nemmeno in anteprima o valutazione", () => {
     assert.equal(quantityIdleDecision(mode, 3, 3, true, preview, 1, true), null);
   }
   assert.match(quantityAnswerLabel(quantityAnswerId(3, 3, "selection", "test-123"))!, /apprendimento senza errori/);
+});
+
+test("le tre illustrazioni WebP sono distribuite nella cache offline", () => {
+  const worker = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+  const appShell = worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1];
+  assert.ok(appShell);
+  for (const object of ["candy", "ladybug", "stone"]) {
+    const path = `/images/quantity/${object}.webp`;
+    assert.ok(appShell.includes(JSON.stringify(path)), path);
+    const file = readFileSync(new URL(`../public${path}`, import.meta.url));
+    assert.equal(file.toString("ascii", 0, 4), "RIFF");
+    assert.equal(file.toString("ascii", 8, 12), "WEBP");
+  }
 });
