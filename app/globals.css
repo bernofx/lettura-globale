@@ -500,3 +500,5 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 
 .sequence-order-fieldset { border: 0; min-inline-size: 0; padding: 0; margin: 0; }
 .sequence-order-fieldset:disabled button, .sequence-actions button:disabled { opacity: .55; cursor: not-allowed; }
+/* Menu items animate colours only: animating the inherited visibility delayed focus when the phone menu opens. */
+.nav-item{transition-property:background-color,color,border-color,box-shadow}
