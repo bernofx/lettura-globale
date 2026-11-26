@@ -23,3 +23,7 @@ Una riga per account riduce il numero di query D1 e rende atomico il salvataggio
 ## Limiti
 
 Il modello usa l’ultima scrittura valida quando lo stesso account modifica contemporaneamente i dati da più dispositivi. La colonna `revision` permette una futura gestione dei conflitti senza cambiare il formato dei dati salvati.
+
+### Rifiuto di un salvataggio per permessi
+
+Il journal conserva il codice tecnico del rifiuto e la revisione effettivamente inviata. La modifica resta in attesa sul dispositivo. Un salvataggio identico rifiutato con `state_change_forbidden` può essere ritentato dal journal. I tentativi automatici continuano per gli errori transitori. L’interfaccia usa i permessi già applicati dal server per le modifiche alle sequenze.

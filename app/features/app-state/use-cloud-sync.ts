@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recoverPendingRemoteUploads } from "../../domain/library-deduplication";
 import { retryOperation } from "../../domain/retry";
-import { buildStateChange, rebaseStateChange } from "../../domain/state-changes";
+import { buildStateChange, rebaseStateChange, type StateChangeRequest } from "../../domain/state-changes";
 import { THERAPIST_SESSION_STORAGE_KEY } from "../../domain/therapist-session";
 import { appendSaveJournal } from "../../domain/save-journal";
 import { hydrateSoundPreferences } from "../../domain/sound-preferences";
@@ -12,6 +12,10 @@ import { readLibraryImage, uploadRemoteImage } from "../../shared/media-storage"
 import { backendStateForStorage, discardUnauthorizedNewSequences, normalizeBackendState } from "../../shared/state-hydration";
 import { type BackendState, type BackendStatus, type LibraryItem } from "../../shared/types";
 import { type AppData } from "./use-app-data";
+
+function writeContent(change: StateChangeRequest) {
+  return JSON.stringify([change.collections, change.values]);
+}
 
 type CloudSyncOptions = {
   data: AppData;
@@ -50,6 +54,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const granularWritesUnavailable = useRef(false);
   const localMediaRepairing = useRef(false);
   const lastBackendSaveError = useRef("");
+  const rejectedWrite = useRef<{ profileId: string | null; content: string; error: unknown } | null>(null);
   const lastResumeCheck = useRef(0);
 
   const fallBackToLocal = useCallback(() => {
@@ -236,21 +241,32 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     const dirty = Boolean(buildStateChange(baseline, current, crypto.randomUUID(), backendRevision.current));
     if (!cloudSaveCanSettle(backendPendingWrites.current, backendSaveTimer.current !== null, dirty)) return;
     clearPendingCloudSave();
-    setBackendStatus((status) => status === "syncing" ? "ready" : status);
+    rejectedWrite.current = null;
+    lastBackendSaveError.current = "";
+    setBackendStatus((status) => status === "syncing" || status === "error" ? "ready" : status);
   }, [loggedInTherapistId, logoutState, localBootstrapSnapshot]);
 
   const enqueueBackendSave = useCallback((snapshot: BackendState) => {
     backendPendingWrites.current += 1;
     const requestedSnapshot = snapshot;
     let attemptedOperationId = "";
+    let attemptedRevision = backendRevision.current;
+    let skippedRejectedWrite = false;
     const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
         const previous = lastSyncedBackendState.current;
         if (!previous) throw new Error("missing_sync_baseline");
         snapshot = discardUnauthorizedNewSequences(previous, snapshot, loggedInTherapistId);
         const operationId = crypto.randomUUID();
-        attemptedOperationId = operationId;
+        attemptedRevision = backendRevision.current;
         const change = buildStateChange(previous, snapshot, operationId, backendRevision.current);
         if (!change) return;
+        const content = writeContent(change);
+        const rejected = rejectedWrite.current;
+        if (rejected?.profileId === loggedInTherapistId && rejected.content === content) {
+          skippedRejectedWrite = true;
+          throw rejected.error;
+        }
+        attemptedOperationId = operationId;
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_started", operationId, revision: backendRevision.current, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: snapshot.sequences.length });
         setBackendStatus("syncing");
         let response: Response;
@@ -275,6 +291,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
           const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
           if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
           const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
+          attemptedRevision = latest.revision;
           appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_rebased", operationId, revision: latest.revision, changedSequences: change.collections.sequences?.upserts.length ?? 0 });
           syncedSnapshot = rebased.state as BackendState;
           response = await retryOperation(async () => {
@@ -283,7 +300,14 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
             return result;
           }, { attempts: 2, delayMs: 400 });
         }
-        if (!response.ok) throw await backendResponseError(response, "backend_save_failed");
+        if (!response.ok) {
+          const error = await backendResponseError(response, "backend_save_failed");
+          if (error.status === 403 && error.code === "state_change_forbidden") {
+            rejectedWrite.current = { profileId: loggedInTherapistId, content, error };
+          }
+          throw error;
+        }
+        rejectedWrite.current = null;
         const result = await response.json() as { revision: number };
         lastBackendSaveError.current = "";
         backendRevision.current = result.revision;
@@ -304,7 +328,8 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
           setBackendStatus("ready");
         }
       }).catch((error) => {
-        appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_failed", operationId: attemptedOperationId, ...saveErrorDetails(error) });
+        lastBackendSaveError.current = error instanceof Error ? error.message : "errore sconosciuto";
+        if (!skippedRejectedWrite) appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_failed", operationId: attemptedOperationId, revision: attemptedRevision, ...saveErrorDetails(error) });
         throw error;
       }).finally(() => {
         backendPendingWrites.current -= 1;
@@ -331,6 +356,8 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       return () => window.clearTimeout(idleTimer);
     }
     storePendingCloudSave(pendingChange);
+    const rejected = rejectedWrite.current;
+    if (rejected?.profileId === loggedInTherapistId && rejected.content === writeContent(pendingChange)) return;
     const statusTimer = window.setTimeout(() => setBackendStatus("syncing"), 0);
     if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = window.setTimeout(() => {
@@ -392,6 +419,10 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   }, []);
   const lastSaveError = useCallback(() => lastBackendSaveError.current, []);
   const retryLoad = useCallback(() => setBackendRetryKey((current) => current + 1), []);
+  const retrySave = useCallback(() => {
+    rejectedWrite.current = null;
+    setBackendSaveRetryKey((current) => current + 1);
+  }, []);
   /** Saves a library change right away (uploads/edits) and reports where it landed. */
   const persistLibraryNow = async (nextLibrary: LibraryItem[]) => {
     setLibrary(nextLibrary);
@@ -409,6 +440,6 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   return {
     backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave,
     cancelScheduledSave, currentSnapshot, pendingChange, hasBaseline, isSynced, saveNow, saveQueue, revision,
-    resetReadScope, retryLoad, fallBackToLocal, persistLibraryNow, lastSaveError,
+    resetReadScope, retryLoad, retrySave, fallBackToLocal, persistLibraryNow, lastSaveError,
   };
 }

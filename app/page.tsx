@@ -26,7 +26,7 @@ import { useCaaStories } from "./use-caa-stories";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents } from "./domain/session-events";
 import { buildSessionHistoryItems, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
-import { canAccessSequence, canViewAllSequences } from "./domain/sequence-access";
+import { canAccessSequence, canEditSequence, canViewAllSequences, removeExerciseFromOwnedSequences } from "./domain/sequence-access";
 import { hydrateSyllables, matchesSyllableFilter } from "./domain/syllabification";
 import { hasArtwork } from "./domain/library-availability";
 import { completesSequenceExercise, type SessionActivity } from "./domain/session-compilation";
@@ -432,6 +432,7 @@ function HomePageContent() {
   const visibleExerciseById = useMemo(() => new Map(visibleExercises.map((exercise) => [exercise.id, exercise])), [visibleExercises]);
   const visibleSequences = useMemo(() => sequences.filter((sequence) => !sequence.deleted && canAccessSequence(sequence.therapistId, therapist?.id, therapist?.role)), [sequences, therapist]);
   const activeSequence = useMemo(() => visibleSequences.find((sequence) => sequence.id === activeSequenceId) ?? visibleSequences[0], [activeSequenceId, visibleSequences]);
+  const canEditActiveSequence = Boolean(activeSequence && canEditSequence(activeSequence.therapistId, therapist?.id, therapist?.role));
   const sequenceExercises = useMemo(() => activeSequence?.exerciseIds.map((id) => visibleExerciseById.get(id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [], [activeSequence, visibleExerciseById]);
   const sessionExercises = sessionPlan;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
@@ -668,7 +669,7 @@ function HomePageContent() {
     if (!sequence) return;
     const selected = sequence.exerciseIds.map((id) => visibleExercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is Exercise => Boolean(exercise));
     setActiveSequenceId(sequence.id);
-    setSequences((current) => current.map((item) => item.id === sequence.id ? { ...item, lastUsedAt: new Date().toISOString() } : item));
+    if (canEditSequence(sequence.therapistId, therapist?.id, therapist?.role)) setSequences((current) => current.map((item) => item.id === sequence.id ? { ...item, lastUsedAt: new Date().toISOString() } : item));
     beginSession(selected, undefined, { ready, title: sequence.title, source: "sequence" });
   };
   const createQuickExercise = (config: QuickStartConfig) => {
@@ -936,32 +937,33 @@ function HomePageContent() {
     if (error) { notify(error); return; }
     const exists = exercises.some((item) => item.id === exercise.id);
     setExercises((current) => exists ? current.map((item) => item.id === exercise.id ? exercise : item) : [exercise, ...current]);
-    if (!exists && activeSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, exercise.id], updatedAt: new Date().toISOString() } : sequence));
+    if (!exists && activeSequence && canEditActiveSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, exercise.id], updatedAt: new Date().toISOString() } : sequence));
     setShowBuilder(false);
     setEditingExercise(null);
-    notify(exists ? "Esercizio aggiornato" : activeSequence ? "Esercizio creato e aggiunto alla sequenza" : "Esercizio creato");
+    notify(exists ? "Esercizio aggiornato" : canEditActiveSequence ? "Esercizio creato e aggiunto alla sequenza" : "Esercizio creato");
   };
   const duplicateExercise = (exercise: Exercise) => {
     const duplicate = { ...exercise, id: crypto.randomUUID(), title: `${exercise.title} (copia)`, updatedAt: new Date().toISOString(), deleted: false };
     setExercises((current) => [duplicate, ...current]);
-    if (activeSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, duplicate.id], updatedAt: new Date().toISOString() } : sequence));
-    notify(activeSequence ? "Esercizio duplicato nella sequenza" : "Esercizio duplicato");
+    if (activeSequence && canEditActiveSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, duplicate.id], updatedAt: new Date().toISOString() } : sequence));
+    notify(canEditActiveSequence ? "Esercizio duplicato nella sequenza" : "Esercizio duplicato");
   };
   const deleteExercise = () => {
     if (!pendingExerciseDelete) return;
     const id = pendingExerciseDelete.id;
     setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, deleted: true, updatedAt: new Date().toISOString() } : exercise));
-    setSequences((current) => current.map((sequence) => ({ ...sequence, exerciseIds: sequence.exerciseIds.filter((exerciseId) => exerciseId !== id), updatedAt: new Date().toISOString() })));
+    const updatedAt = new Date().toISOString();
+    setSequences((current) => removeExerciseFromOwnedSequences(current, id, therapist?.id, therapist?.role, updatedAt));
     setSessionPlan((current) => current.filter((exercise) => exercise.id !== id && exercise.sourceExerciseId !== id));
     setPendingExerciseDelete(null);
     notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
   };
   const toggleExerciseInSequence = (exerciseId: string) => {
-    if (!activeSequence) return;
+    if (!activeSequence || !canEditActiveSequence) return;
     setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: sequence.exerciseIds.includes(exerciseId) ? sequence.exerciseIds.filter((id) => id !== exerciseId) : [...sequence.exerciseIds, exerciseId], updatedAt: new Date().toISOString() } : sequence));
   };
   const moveSequenceExercise = (exerciseId: string, toIndex: number) => {
-    if (!activeSequence) return;
+    if (!activeSequence || !canEditActiveSequence) return;
     setSequences((current) => current.map((sequence) => {
       if (sequence.id !== activeSequence.id) return sequence;
       // toIndex is a position in the list the adult sees; hidden exercises keep their place.
@@ -972,7 +974,9 @@ function HomePageContent() {
     }));
   };
   const saveSequence = (sequence: Sequence) => {
-    const exists = sequences.some((item) => item.id === sequence.id);
+    const existing = sequences.find((item) => item.id === sequence.id);
+    if (existing && !canEditSequence(existing.therapistId, therapist?.id, therapist?.role)) return;
+    const exists = Boolean(existing);
     const ownedSequence = { ...sequence, therapistId: sequence.therapistId || therapist?.id || initialAdministrator.id };
     setSequences((current) => exists ? current.map((item) => item.id === ownedSequence.id ? ownedSequence : item) : [...current, ownedSequence]);
     appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "sequence_changed", revision: cloud.revision(), changedSequences: 1, sequenceCount: exists ? sequences.length : sequences.length + 1 });
@@ -991,7 +995,7 @@ function HomePageContent() {
     notify("Avvio rapido salvato come sequenza");
   };
   const deleteSequence = () => {
-    if (!pendingSequenceDelete) return;
+    if (!pendingSequenceDelete || !canEditSequence(pendingSequenceDelete.therapistId, therapist?.id, therapist?.role)) return;
     const id = pendingSequenceDelete.id;
     const next = visibleSequences.find((sequence) => sequence.id !== id);
     setSequences((current) => current.map((sequence) => sequence.id === id ? { ...sequence, deleted: true, updatedAt: new Date().toISOString() } : sequence));
@@ -1113,7 +1117,7 @@ function HomePageContent() {
           setLibrary((current) => [{ id, word: category, category, categorySymbolOnly: true, image, imageKey, remoteImageId: remote?.id, privateUpload: true, source: "Upload privato", license: "Diritti confermati dall’adulto", author: "Utente" }, ...current]);
           setCategorySymbols((current) => ({ ...current, [category]: id }));
         }} items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
-        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
+        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} canEditActiveSequence={canEditActiveSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => canEditActiveSequence && activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => canEditActiveSequence && activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
         {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={(sessionActive || sessionReady) && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionPlanContext.Provider value={{ plan: sessionExercises, completed: completedSessionIndices }}><SessionView categorySymbols={categorySymbols} key={sessionWizardKey} onStartPrepared={startPreparedSession} onCancelPrepared={cancelPreparedSession} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} /></SessionPlanContext.Provider>}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {(view === "appearance" || view === "profiles") && <SettingsTabs view={view} onNavigate={navigate} />}
@@ -1129,8 +1133,8 @@ function HomePageContent() {
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
       {showBuilder && <ExerciseBuilder categorySymbols={categorySymbols} kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
-      {saveJournalOpen && <SaveJournalDialog onClose={() => setSaveJournalOpen(false)} />}
-      {pendingExerciseDelete && <ContentDeleteDialog title={`Eliminare “${pendingExerciseDelete.title}”?`} detail="L’esercizio sarà rimosso dalle sequenze. I risultati già registrati resteranno nello storico." onCancel={() => setPendingExerciseDelete(null)} onConfirm={deleteExercise} />}
+      {saveJournalOpen && <SaveJournalDialog onClose={() => setSaveJournalOpen(false)} onRetry={backendStatus === "error" ? cloud.retrySave : undefined} />}
+      {pendingExerciseDelete && <ContentDeleteDialog title={`Eliminare “${pendingExerciseDelete.title}”?`} detail="L’esercizio non sarà più disponibile nelle sessioni. I risultati già registrati resteranno nello storico." onCancel={() => setPendingExerciseDelete(null)} onConfirm={deleteExercise} />}
       {pendingSequenceDelete && <ContentDeleteDialog title={`Eliminare la sequenza “${pendingSequenceDelete.title}”?`} detail="Gli esercizi e i risultati già registrati resteranno disponibili." onCancel={() => setPendingSequenceDelete(null)} onConfirm={deleteSequence} />}
       {pendingDelete && <DeleteDialog item={pendingDelete} onCancel={() => setPendingDelete(null)} onConfirm={confirmDelete} />}
       {pendingHistoryDelete && <ContentDeleteDialog title={`Eliminare ${pendingHistoryDelete.label}?`} detail="Lo storico verrà nascosto agli utenti. Le immagini archiviate resteranno nello storage per non alterare altre sessioni." onCancel={() => setPendingHistoryDelete(null)} onConfirm={() => { const deletedAt = new Date().toISOString(); setSessionHistory((current) => current.map((record) => (!pendingHistoryDelete.id || record.id === pendingHistoryDelete.id) && record.childId === activeChild.id ? { ...record, deletedAt } : record)); setPendingHistoryDelete(null); notify("Storico eliminato"); }} />}

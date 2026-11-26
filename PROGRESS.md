@@ -138,6 +138,7 @@
 - [x] Analisi tecnica della nuova tipologia `Numero quantità`, inclusi comportamento del timer, modello dei risultati, persistenza e piano di implementazione.
 - [x] Riparazione dello shadow relazionale incompleto: controllo delle identità di tutte le tabelle prima delle scritture granulari, fallback atomico allo snapshot per non perdere sequenze e reintegro non distruttivo a batch limitati al successivo caricamento. Migrazione `0008` per circoscrivere l'unicità email dei profili adulti all'account, con test D1 di due account sovrapposti.
 - [x] Journal locale e copiabile dei salvataggi cloud, privo di contenuti personali, con codice di errore e revisione; l'API segnala esplicitamente la migrazione `state_operations` mancante e associa agli errori inattesi una fase tecnica e un identificatore diagnostico.
+- [x] I salvataggi rifiutati con 403 indicano la regola tecnica e la revisione nel journal. Una modifica identica resta in attesa sul dispositivo e si può ritentare dal journal. L’interfaccia rispetta i permessi di scrittura delle sequenze anche durante l’avvio e l’eliminazione di un esercizio.
 
 - [x] Repository GitLab privato, piano operativo, ADR iniziali e pipeline di verifica.
 - [x] Landing pubblica separata dal pannello adulto autenticato.
