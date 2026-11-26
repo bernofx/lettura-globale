@@ -388,3 +388,61 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .exercise-actions button.delete{border-color:#f0d8d4;background:#fff7f5}.exercise-actions button.delete:hover{border-color:#a63e32}
 .exercise-actions button:not(.delete):hover{border-color:var(--violet);color:var(--violet)}
 .sequence-toggle:hover{border-color:var(--violet)}.sequence-toggle.included:hover{border-color:#8fd0b3}
+/* Progressi: word thumbnail and overall status exist in the shared markup; the Giocoso style shows them as cards. */
+.matrix-word-art,.word-status{display:none}
+.score-key b{margin-right:3px;font-weight:900}
+/* The chart legend wraps instead of widening the page on a phone. */
+.chart-legend{flex-wrap:wrap}
+/* Progressi: compare checkbox in the word cell, chart button next to the help count. */
+.progress-matrix .matrix-row{grid-template-columns:minmax(150px,1.3fr) repeat(4,minmax(112px,1fr)) 116px;min-width:780px;column-gap:10px}
+.matrix-word{display:flex;align-items:center;gap:8px;min-width:0}
+.matrix-compare{width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;margin-left:-8px;border-radius:10px;cursor:pointer}
+.matrix-compare:hover{background:var(--lavender)}
+.matrix-compare input{width:20px;height:20px;margin:0;accent-color:var(--violet);cursor:pointer}
+.matrix-compare input:disabled{cursor:not-allowed;opacity:.4}
+.help-total{justify-content:space-between;gap:8px}.help-total-count{display:inline-flex;align-items:center;gap:6px}
+.matrix-chart-button{width:40px;height:40px;flex:0 0 auto;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--violet);display:grid;place-items:center;cursor:pointer}
+.matrix-chart-button:hover{border-color:var(--violet);background:var(--lavender)}.matrix-chart-button svg{width:19px;height:19px}
+@media(pointer:coarse){.matrix-compare{width:44px;height:44px}.matrix-chart-button{width:44px;height:44px}}
+.compare-bar{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin:0 0 12px}
+.compare-bar>span{margin-right:auto;color:var(--muted);font-size:13px;font-weight:700}
+.compare-bar .primary-button{min-height:44px;margin:0;box-shadow:none}.compare-bar .primary-button:disabled{opacity:.45;cursor:not-allowed}
+.compare-bar svg{width:18px;height:18px}
+/* Chart dialog. */
+.modal.progress-chart-modal{width:min(1040px,100%);padding:26px 28px}
+.progress-chart-layout{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:20px;align-items:start;margin-top:12px}
+.progress-chart-main{min-width:0}
+.progress-chart-filter{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:12px;font-weight:800;color:var(--muted)}
+.progress-chart-filter select{width:auto;min-width:200px;height:44px;border:1px solid var(--line);border-radius:12px;padding-left:12px;background-color:#fff;color:var(--ink);font-weight:700}
+.progress-chart-modal .chart-legend{justify-content:flex-start;flex-wrap:wrap}
+.progress-chart-modal .chart-legend svg{flex:0 0 auto}
+.progress-chart-helps{padding:14px;border:1px solid var(--line);border-radius:16px;background:#faf9fc}
+.progress-chart-helps .eyebrow{display:flex;align-items:center;gap:6px}.progress-chart-helps .eyebrow svg{width:15px;height:15px}
+.progress-chart-helps ul{display:grid;gap:6px;margin:10px 0 0;padding:0;list-style:none}
+.progress-chart-helps li{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border-radius:10px;background:#fff;font-size:13px;font-weight:700}
+.progress-chart-helps p{margin:10px 0 0;color:var(--muted);font-size:12px}
+.progress-chart-note{margin:14px 0 0;color:var(--muted);font-size:12px}
+@media(max-width:760px){.progress-chart-layout{grid-template-columns:minmax(0,1fr)}}
+/* Portrait phone: the dialog is drawn already rotated to landscape, filling the screen. */
+/* Small landscape screens (and the rotated portrait phone below) use a compact chart dialog. */
+@media(max-height:500px),(orientation:portrait) and (max-width:600px){
+  .modal-layer:has(.progress-chart-modal){padding:0;overflow:hidden}
+  .modal.progress-chart-modal{width:100%;height:100dvh;max-width:none;max-height:none;padding:12px 18px;border-radius:0;overflow:auto;--chart-room:100dvh}
+  .progress-chart-modal .eyebrow{font-size:11px}.progress-chart-modal h2{margin:2px 48px 0 0;font-size:19px}
+  .progress-chart-modal .modal-close{top:8px;right:10px}
+  .progress-chart-modal .progress-chart-layout{grid-template-columns:minmax(0,1fr) 170px;gap:14px;margin-top:4px}
+  .progress-chart-modal .progress-chart-filter{margin-bottom:4px}.progress-chart-modal .progress-chart-filter select{height:36px}
+  .progress-chart-modal .chart-legend{margin-bottom:2px;gap:4px 14px}
+  .progress-chart-modal .learning-chart{min-height:0}
+  .progress-chart-modal .trend-chart-svg{display:block;width:100%;max-height:calc(var(--chart-room) - 150px)}
+  .progress-chart-modal .chart-guidance{margin:2px 0 0}
+  .progress-chart-modal .progress-chart-helps{padding:10px}.progress-chart-modal .progress-chart-helps li{min-height:30px}
+  .progress-chart-modal .progress-chart-note{margin-top:4px;font-size:11px}
+}
+/* Portrait phone: the same compact dialog, drawn already rotated to landscape. */
+@media(orientation:portrait) and (max-width:600px){
+  .modal.progress-chart-modal{position:fixed;top:50%;left:50%;width:100dvh;height:100dvw;transform:translate(-50%,-50%) rotate(90deg);--chart-room:100dvw}
+}
+.learning-chart .chart-legend svg{width:30px;height:16px;flex:0 0 30px}
+.learning-chart .chart-legend span{white-space:nowrap}
+.progress-matrix{position:relative}
