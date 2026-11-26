@@ -1065,8 +1065,10 @@ try {
   for (const [name, style] of [["Studio", "studio"], ["Giocoso", "playful"], ["Classico", "classic"]]) {
     await evaluate(`[...document.querySelectorAll('.interface-style-grid button')].find(button => button.querySelector('strong').textContent === ${JSON.stringify(name)}).click()`);
     await wait(`document.documentElement.dataset.style === ${JSON.stringify(style)}`);
-    const shortcuts = await evaluate("[...document.querySelectorAll('.sidebar:not(.open) .nav-item')].filter(button => button.checkVisibility({ visibilityProperty: true })).map(button => button.dataset.area)");
-    assert.equal(shortcuts.length, style === "classic" ? 0 : 5, "only the main areas are visible in the mobile shortcut bar");
+    const visibleShortcuts = `[...document.querySelectorAll('.sidebar:not(.open) .nav-item')].filter(button => (
+      getComputedStyle(button).visibility === 'visible' && button.getClientRects().length > 0
+    )).length`;
+    await wait(`${visibleShortcuts} === ${style === "classic" ? 0 : 5}`);
     await evaluate("document.querySelector('.menu-button').click()");
     await wait("document.activeElement?.matches('.sidebar.open .nav-item')");
     assert.equal(await evaluate("document.querySelector('main.main-content').inert"), true, "the page cannot receive focus through the open menu");
