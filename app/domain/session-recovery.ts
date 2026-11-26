@@ -17,6 +17,7 @@ export type RecoverableSession = {
   presentation: "images" | "words";
   currentIndex: number;
   furthestIndex: number;
+  completedIndices?: number[];
   isTrial: boolean;
   returnView: "session" | "exercises";
 };
@@ -31,6 +32,10 @@ export function parseRecoverableSession(raw: string | null, now = Date.now()): R
     if (!value.runId || !value.therapistId || !value.childId || !value.startedAt || !value.descriptor?.title) return null;
     const currentIndex = Math.min(Math.max(0, Number(value.currentIndex) || 0), value.plan.length - 1);
     const furthestIndex = Math.min(Math.max(currentIndex, Number(value.furthestIndex) || 0), value.plan.length - 1);
+    const turnCount = value.plan.length;
+    const completedIndices = Array.isArray(value.completedIndices)
+      ? [...new Set(value.completedIndices.filter((index) => Number.isInteger(index) && index >= 0 && index < turnCount))]
+      : undefined;
     return {
       schemaVersion: 1,
       savedAt: value.savedAt!,
@@ -44,6 +49,7 @@ export function parseRecoverableSession(raw: string | null, now = Date.now()): R
       presentation: value.presentation === "words" ? "words" : "images",
       currentIndex,
       furthestIndex,
+      ...(completedIndices && { completedIndices }),
       isTrial: Boolean(value.isTrial),
       returnView: value.returnView === "exercises" ? "exercises" : "session",
     };

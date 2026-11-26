@@ -1,59 +1,82 @@
 import { GripVertical, X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { dropIndex } from "../../domain/reorder";
+import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
 type OrderItem = { id: string; title: string };
-type Drag = { id: string; from: number; pointerId: number; startY: number; offset: number; to: number; midpoints: number[]; step: number };
+type Drag = {
+  ids: string[];
+  from: number;
+  pointerId: number;
+  startY: number;
+  startListTop: number;
+  midpoints: number[];
+  tops: number[];
+};
+type DragPreview = { from: number; offset: number; to: number; tops: number[] };
 
-/**
- * Sequence order with a drag handle on the left of each row. The handle also works from the
- * keyboard (Up/Down arrows) and announces every move, so dragging is never the only way.
- */
 export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderItem[]; onMove: (id: string, toIndex: number) => void; onRemove: (id: string) => void }) {
   const list = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<Drag | null>(null);
+  const activeDrag = useRef<Drag | null>(null);
+  const suppressPointerClick = useRef(false);
+  const [preview, setPreview] = useState<DragPreview | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [positionDialog, setPositionDialog] = useState<{ itemId: string; to: number } | null>(null);
+  const titleId = useId();
   const focusAfterMove = useRef<string | null>(null);
-
   useEffect(() => {
     const id = focusAfterMove.current;
     if (!id) return;
     focusAfterMove.current = null;
-    list.current?.querySelector<HTMLButtonElement>(`[data-handle-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: false });
+    list.current?.querySelector<HTMLButtonElement>(`[data-handle-id="${CSS.escape(id)}"]`)?.focus();
   }, [items]);
-
-  const announce = (item: OrderItem, to: number) => setAnnouncement(`${item.title} spostato in posizione ${to + 1} di ${items.length}`);
+  const selectedIndex = positionDialog ? items.findIndex((item) => item.id === positionDialog.itemId) : -1;
 
   const move = (item: OrderItem, from: number, to: number) => {
     if (to === from || to < 0 || to >= items.length) return;
     focusAfterMove.current = item.id;
     onMove(item.id, to);
-    announce(item, to);
+    setAnnouncement(`${item.title} spostato in posizione ${to + 1} di ${items.length}`);
   };
 
-  const startDrag = (event: PointerEvent<HTMLButtonElement>, item: OrderItem, index: number) => {
-    if (event.button !== 0 || !list.current) return;
+  const startDrag = (event: PointerEvent<HTMLButtonElement>, index: number) => {
+    if (!event.isPrimary || event.button !== 0 || !list.current || activeDrag.current) return;
     const rows = [...list.current.querySelectorAll<HTMLElement>(":scope > article")];
+    if (rows.length !== items.length) return;
     const rects = rows.map((row) => row.getBoundingClientRect());
-    if (rects.length !== items.length) return;
-    event.preventDefault();
+    const startListTop = list.current.getBoundingClientRect().top;
+    suppressPointerClick.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
-    const step = rects.length > 1 ? rects[1].top - rects[0].top : rects[0].height;
-    setDrag({ id: item.id, from: index, pointerId: event.pointerId, startY: event.clientY, offset: 0, to: index, midpoints: rects.map((rect) => rect.top + rect.height / 2), step });
+    activeDrag.current = { ids: items.map((item) => item.id), from: index, pointerId: event.pointerId, startY: event.clientY, startListTop,
+      midpoints: rects.map((rect) => rect.top - startListTop + rect.height / 2),
+      tops: rects.map((rect) => rect.top - startListTop) };
+  };
+
+  const dragPosition = (event: PointerEvent<HTMLButtonElement>, drag: Drag) => {
+    const listTop = list.current?.getBoundingClientRect().top ?? drag.startListTop;
+    const offset = event.clientY - drag.startY + drag.startListTop - listTop;
+    return { from: drag.from, offset, to: dropIndex(drag.midpoints[drag.from] + offset, drag.midpoints, drag.from), tops: drag.tops };
   };
 
   const continueDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = activeDrag.current;
     if (!drag || event.pointerId !== drag.pointerId) return;
-    const offset = event.clientY - drag.startY;
-    const to = dropIndex(drag.midpoints[drag.from] + offset, drag.midpoints, drag.from);
-    setDrag({ ...drag, offset, to });
+    const next = dragPosition(event, drag);
+    if (Math.abs(next.offset) > 4) suppressPointerClick.current = true;
+    if (suppressPointerClick.current) setPreview(next);
   };
 
-  const endDrag = (event: PointerEvent<HTMLButtonElement>, item: OrderItem, cancelled = false) => {
+  const endDrag = (event: PointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const drag = activeDrag.current;
     if (!drag || event.pointerId !== drag.pointerId) return;
+    activeDrag.current = null;
+    setPreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    setDrag(null);
-    if (!cancelled) move(item, drag.from, drag.to);
+    if (cancelled) return;
+    const { offset, to } = dragPosition(event, drag);
+    const orderUnchanged = drag.ids.length === items.length && drag.ids.every((id, index) => items[index].id === id);
+    if (Math.abs(offset) > 4) suppressPointerClick.current = true;
+    if (suppressPointerClick.current && orderUnchanged) move(items[drag.from], drag.from, to);
   };
 
   const onHandleKey = (event: KeyboardEvent<HTMLButtonElement>, item: OrderItem, index: number) => {
@@ -64,25 +87,45 @@ export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderIte
   };
 
   const shiftFor = (index: number) => {
-    if (!drag) return 0;
-    if (index === drag.from) return drag.offset;
-    if (drag.from < drag.to && index > drag.from && index <= drag.to) return -drag.step;
-    if (drag.from > drag.to && index < drag.from && index >= drag.to) return drag.step;
-    return 0;
+    if (!preview) return 0;
+    if (index === preview.from) return preview.offset;
+    const direction = preview.from < preview.to && index > preview.from && index <= preview.to ? -1
+      : preview.from > preview.to && index < preview.from && index >= preview.to ? 1 : 0;
+    return direction ? (preview.tops[index + direction] ?? preview.tops[index]) - preview.tops[index] : 0;
   };
 
   return <>
-    <div ref={list} className={`sequence-order-list ${drag ? "is-dragging" : ""}`}>
-      {items.map((item, index) => <article key={item.id} className={drag?.id === item.id ? "dragging" : undefined} style={drag ? { transform: `translateY(${shiftFor(index)}px)` } : undefined}>
-        <button type="button" className="sequence-drag-handle" data-handle-id={item.id} aria-label={`Sposta ${item.title}, posizione ${index + 1} di ${items.length}. Trascina oppure usa le frecce su e giù`} title="Trascina per spostare"
-          onPointerDown={(event) => startDrag(event, item, index)} onPointerMove={continueDrag} onPointerUp={(event) => endDrag(event, item)} onPointerCancel={(event) => endDrag(event, item, true)} onKeyDown={(event) => onHandleKey(event, item, index)}>
+    <div ref={list} className={`sequence-order-list ${preview ? "is-dragging" : ""}`}>
+      {items.map((item, index) => <article key={item.id} className={preview?.from === index ? "dragging" : undefined} style={preview ? { transform: `translateY(${shiftFor(index)}px)` } : undefined}>
+        <button type="button" className="sequence-drag-handle" data-handle-id={item.id} aria-haspopup="dialog" disabled={items.length < 2}
+          aria-label={`Sposta ${item.title}, posizione ${index + 1} di ${items.length}`} title="Trascina o scegli la posizione"
+          onPointerDown={(event) => startDrag(event, index)} onPointerMove={continueDrag} onPointerUp={(event) => endDrag(event)}
+          onPointerCancel={(event) => endDrag(event, true)} onLostPointerCapture={(event) => endDrag(event, true)}
+          onKeyDown={(event) => onHandleKey(event, item, index)}
+          onClick={(event) => {
+            if (event.detail && suppressPointerClick.current) return;
+            setPositionDialog({ itemId: item.id, to: index });
+          }}>
           <GripVertical aria-hidden="true" />
         </button>
         <span>{String(index + 1).padStart(2, "0")}</span>
         <strong>{item.title}</strong>
-        <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X /></button>
+        <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X aria-hidden="true" /></button>
       </article>)}
     </div>
-    <p className="visually-hidden" role="status" aria-live="polite">{announcement}</p>
+    <p className="visually-hidden" role="status">{announcement}</p>
+    {positionDialog && selectedIndex >= 0 && <Modal labelledBy={titleId} onClose={() => setPositionDialog(null)} trapFocus onSubmit={(event) => {
+      event.preventDefault();
+      move(items[selectedIndex], selectedIndex, positionDialog.to);
+      setPositionDialog(null);
+    }}>
+      <ModalTitle id={titleId}>Sposta {items[selectedIndex].title}</ModalTitle>
+      <label className="sequence-position-field">Nuova posizione
+        <select value={positionDialog.to} onChange={(event) => setPositionDialog({ ...positionDialog, to: Number(event.target.value) })}>
+          {items.map((item, index) => <option key={item.id} value={index}>{index + 1} · {item.title}</option>)}
+        </select>
+      </label>
+      <ModalActions onCancel={() => setPositionDialog(null)}><button className="primary-button" disabled={positionDialog.to === selectedIndex || positionDialog.to >= items.length}>Sposta</button></ModalActions>
+    </Modal>}
   </>;
 }

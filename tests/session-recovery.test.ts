@@ -32,3 +32,8 @@ test("rifiuta snapshot scaduti o malformati", () => {
   assert.equal(parseRecoverableSession("{", now.getTime()), null);
 });
 
+test("ripristina soltanto gli indici validi dei turni completati", () => {
+  const value = { ...session, completedIndices: [0, 0, -1, 0.5, 1] };
+  const recovered = parseRecoverableSession(serializeRecoverableSession(value, now), now.getTime());
+  assert.deepEqual(recovered?.completedIndices, [0]);
+});

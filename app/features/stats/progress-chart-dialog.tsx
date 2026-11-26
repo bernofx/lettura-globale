@@ -7,10 +7,8 @@ import { Modal, ModalTitle } from "../../shared/ui/modal";
 export type ChartWord = { wordId: string; label: string };
 type HelpCount = { label: string; count: number };
 
-const monthLabel = (month: string) => {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat("it-IT", { month: "short", year: "2-digit" }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
-};
+const monthFormatter = new Intl.DateTimeFormat("it-IT", { month: "short", year: "2-digit", timeZone: "UTC" });
+const monthLabel = (month: string) => monthFormatter.format(new Date(`${month}-01T00:00:00.000Z`));
 
 /**
  * Monthly trend of one word (one line per activity) or of up to four words (one line per word,
@@ -33,7 +31,7 @@ export function ProgressChartDialog({ words, records, modeLabel, helpsFor, onClo
   });
   const title = comparing ? `Confronto: ${words.map((word) => word.label.toLocaleUpperCase("it-IT")).join(", ")}` : words[0].label.toLocaleUpperCase("it-IT");
   const singleHelps = comparing ? [] : helpsFor(wordIds[0]);
-  return <Modal labelledBy={titleId} className="wide progress-chart-modal" onClose={onClose} closeButton>
+  return <Modal labelledBy={titleId} className="wide progress-chart-modal" onClose={onClose} closeButton trapFocus>
     <ModalTitle id={titleId} eyebrow={`ANDAMENTO MENSILE · ${modeLabel.toLocaleUpperCase("it-IT")}`}>{title}</ModalTitle>
     <div className="progress-chart-layout">
       <div className="progress-chart-main">
@@ -47,6 +45,6 @@ export function ProgressChartDialog({ words, records, modeLabel, helpsFor, onClo
           : singleHelps.length ? <ul>{singleHelps.map((help) => <li key={help.label}><span>{help.label}</span><strong>{help.count}</strong></li>)}</ul> : <p>Nessun aiuto registrato in questa modalità.</p>}
       </aside>
     </div>
-    <p className="progress-chart-note">Percentuale di risposte corrette al primo tentativo, mese per mese. Una sola rilevazione non definisce una tendenza.</p>
+    <p className="progress-chart-note">Percentuale di risposte corrette al primo tentativo, mese per mese. I mesi senza prove interrompono la linea.</p>
   </Modal>;
 }

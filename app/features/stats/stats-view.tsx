@@ -1,65 +1,44 @@
 import { BarChart3, BookOpenCheck, Check, ChevronRight, CircleHelp, FolderHeart, LineChart, Save, Sparkles, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { type HistoryImageSnapshot, historyItemUsesArtwork, type SessionHistoryRecord } from "../../domain/session-history";
-import { type ProgressCell, type ProgressKind } from "../../components/progress-visuals";
-import { MAX_COMPARED_WORDS, type TrendRecord } from "../../domain/progress-trend";
+import { MAX_COMPARED_WORDS } from "../../domain/progress-trend";
 import { type ChartWord, ProgressChartDialog } from "./progress-chart-dialog";
-import { ProgressWordTable, type WordTableRow } from "./progress-word-table";
+import { ProgressWordTable } from "./progress-word-table";
 import { downloadProgressCsv } from "./progress-export";
 import { Artwork } from "../../shared/artwork";
-import { exerciseKind, helpTypes } from "../../shared/constants";
+
 import { type Attempt, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Mode, type Therapist } from "../../shared/types";
 import { PageHeader, PanelHeading } from "../../shared/ui/headings";
-import { wordProgressStatus } from "../../domain/progress-status";
+import { buildWordProgress } from "../../domain/progress-data";
 
 export function StatsView({ dataFirst = false, child, therapist, therapists, attempts, helps, histories, exercises, library, onSaveHistoryComment, onDeleteHistory, onDeleteAllHistory, onReset }: { dataFirst?: boolean; child: ChildProfile; therapist: Therapist; therapists: Therapist[]; attempts: Attempt[]; helps: HelpEvent[]; histories: SessionHistoryRecord[]; exercises: Exercise[]; library: LibraryItem[]; onSaveHistoryComment: (id: string, comment: string) => void; onDeleteHistory: (id: string, label: string) => void; onDeleteAllHistory: () => void; onReset: () => void }) {
   const [selectedMode, setSelectedMode] = useState<Mode>("test");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [chartWords, setChartWords] = useState<ChartWord[] | null>(null);
-  const exerciseMap = new Map(exercises.map((exercise) => [exercise.id, exercise]));
-  const itemMap = new Map(library.map((item) => [item.id, item]));
-  const attemptWordId = (attempt: Attempt) => attempt.wordId?.startsWith("quantity:") ? undefined : attempt.wordId ?? (attempt.exerciseId.startsWith("article-") ? attempt.exerciseId.slice(8) : exerciseMap.get(attempt.exerciseId)?.promptId);
-  const attemptKind = (attempt: Attempt): ProgressKind => exerciseKind(exerciseMap.get(attempt.exerciseId) ?? { id: attempt.exerciseId, title: "", kind: attempt.exerciseId.startsWith("article-") ? "articles" : "recognition", optionIds: [], updatedAt: "" });
-  const helpWordId = (help: HelpEvent) => help.wordId?.startsWith("quantity:") ? undefined : help.wordId ?? exerciseMap.get(help.exerciseId)?.promptId;
-  const allWordIds = new Set<string>();
-  attempts.forEach((attempt) => { const wordId = attemptWordId(attempt); if (wordId) allWordIds.add(wordId); });
-  helps.forEach((help) => { const wordId = helpWordId(help); if (wordId) allWordIds.add(wordId); });
+  const itemMap = useMemo(() => new Map(library.map((item) => [item.id, item])), [library]);
+  const { rows, trendRecords, helpsByWord } = useMemo(() => buildWordProgress({ attempts, helps, histories, exercises, library, mode: selectedMode }), [attempts, helps, histories, exercises, library, selectedMode]);
   const errorlessAttempts = attempts.filter((attempt) => attempt.firstAttempt && attempt.mode === selectedMode && attempt.quantityErrorless);
   const modeAttempts = attempts.filter((attempt) => attempt.firstAttempt && attempt.mode === selectedMode && !attempt.quantityErrorless);
   const modeHelps = helps.filter((help) => !help.mode || help.mode === selectedMode);
-  const scoreFor = (wordId: string, kind: ProgressKind): ProgressCell => {
-    const matching = modeAttempts.filter((attempt) => attemptWordId(attempt) === wordId && attemptKind(attempt) === kind);
-    const correct = matching.filter((attempt) => attempt.correct).length;
-    return { total: matching.length, correct, percent: matching.length ? Math.round((correct / matching.length) * 100) : null };
-  };
-  const overallFor = (wordId: string) => {
-    const matching = modeAttempts.filter((attempt) => attemptWordId(attempt) === wordId);
-    const correct = matching.filter((attempt) => attempt.correct).length;
-    return { correct, total: matching.length, status: wordProgressStatus(correct, matching.length) };
-  };
-  const rows: WordTableRow[] = [...allWordIds].map((wordId) => ({
-    wordId,
-    label: itemMap.get(wordId)?.word ?? wordId,
-    category: itemMap.get(wordId)?.category ?? "",
-    scores: { recognition: scoreFor(wordId, "recognition"), articles: scoreFor(wordId, "articles"), "word-categories": scoreFor(wordId, "word-categories"), naming: scoreFor(wordId, "naming"), "sentence-matching": scoreFor(wordId, "sentence-matching") },
-    helpCount: modeHelps.filter((help) => helpWordId(help) === wordId).length,
-    ...overallFor(wordId),
-  }));
-  const trendRecords: TrendRecord<ProgressKind>[] = modeAttempts.flatMap((attempt) => { const wordId = attemptWordId(attempt); return wordId ? [{ wordId, kind: attemptKind(attempt), month: attempt.createdAt.slice(0, 7), correct: attempt.correct }] : []; });
-  const helpsFor = (wordId: string) => {
-    const wordHelps = modeHelps.filter((help) => helpWordId(help) === wordId);
-    return [...helpTypes, "Risposta aiutata"].map((label) => ({ label, count: wordHelps.filter((help) => help.label === label).length })).filter((help) => help.count > 0);
-  };
+  const helpsFor = (wordId: string) => [...(helpsByWord.get(wordId) ?? [])].map(([label, count]) => ({ label, count }));
   const selectedForCompare = compareIds.filter((id) => rows.some((row) => row.wordId === id));
-  const toggleCompare = (wordId: string) => setCompareIds((current) => current.includes(wordId) ? current.filter((id) => id !== wordId) : current.length >= MAX_COMPARED_WORDS ? current : [...current, wordId]);
+  const toggleCompare = (wordId: string) => setCompareIds((current) => {
+    const available = current.filter((id) => rows.some((row) => row.wordId === id));
+    return available.includes(wordId) ? available.filter((id) => id !== wordId) : [...available, wordId].slice(0, MAX_COMPARED_WORDS);
+  });
+  const changeMode = (mode: Mode) => {
+    if (mode === selectedMode) return;
+    setSelectedMode(mode);
+    setCompareIds([]);
+  };
   const openChart = (wordIds: string[]) => setChartWords(wordIds.map((wordId) => ({ wordId, label: rows.find((row) => row.wordId === wordId)?.label ?? wordId })));
   const firstCorrect = modeAttempts.filter((attempt) => attempt.correct).length;
   const accuracy = modeAttempts.length ? Math.round(firstCorrect / modeAttempts.length * 100) : 0;
   const sortedHistories = [...histories].sort((a, b) => b.completedAt.localeCompare(a.completedAt));
   const modeCopy = selectedMode === "test" ? "Mostra il primo tentativo prima delle correzioni: è la vista principale per osservare acquisizione e mantenimento." : "Mostra la pratica guidata. Risultati e aiuti descrivono il supporto necessario durante l’insegnamento e restano separati dalla valutazione.";
-  const downloadCsv = (exportAttempts: Attempt[]) => downloadProgressCsv(exportAttempts, exercises, library);
+  const downloadCsv = (exportAttempts: Attempt[]) => downloadProgressCsv(exportAttempts, exercises, library, histories);
   const historySection = <section className="panel session-history-panel"><PanelHeading level={3} eyebrow="STORICO SESSIONI" title="Risultati a colpo d’occhio" description="Verde indica una risposta corretta al primo tentativo; rosso evidenzia gli errori iniziali."><div className="history-heading-actions"><span>{sortedHistories.length} sessioni</span>{therapist.role === "Amministratore" && <button className="danger-button subtle" disabled={!sortedHistories.length} onClick={onDeleteAllHistory}><Trash2 />Cancella storico</button>}</div></PanelHeading>{sortedHistories.length ? <div className="session-history-list">{sortedHistories.map((record) => <SessionHistoryCard key={record.id} record={record} therapistName={therapists.find((item) => item.id === record.therapistId)} canEditComment={therapist.role === "Amministratore" || therapist.id === record.therapistId} canDelete={therapist.role === "Amministratore"} onSaveComment={onSaveHistoryComment} onDelete={onDeleteHistory} />)}</div> : <div className="empty-mini"><FolderHeart /><p>Nessuna sessione archiviata.</p><small>Le nuove sessioni completate compariranno qui con risposte, immagini e valutazione.</small></div>}</section>;
-  return <div className="page stats-page"><PageHeader eyebrow="RISULTATI" title={`Progressi di ${child.firstName}`} description="Consulta le sessioni svolte, confronta le parole e apri l’andamento mensile."><div className="stats-actions"><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button><button className="danger-button subtle" disabled={!attempts.length && !helps.length} onClick={onReset}><Trash2 />Azzera statistiche</button></div></PageHeader>{!dataFirst && historySection}<section className="stats-mode-card"><div className="stats-mode-picker"><button className={selectedMode === "test" ? "selected" : ""} onClick={() => setSelectedMode("test")}><BookOpenCheck /><span><strong>Valutazione</strong><small>Padronanza al primo tentativo</small></span></button><button className={selectedMode === "teaching" ? "selected" : ""} onClick={() => setSelectedMode("teaching")}><Sparkles /><span><strong>Insegnamento</strong><small>Pratica guidata e supporti</small></span></button></div><p>{modeCopy}</p>{errorlessAttempts.length > 0 && <p className="data-note">Numero quantità · Apprendimento senza errori: {errorlessAttempts.length} prove, {errorlessAttempts.filter((attempt) => attempt.correct).length} corrette. Queste prove guidate sono registrate separatamente e non entrano nell’accuratezza autonoma.</p>}</section><section className="stats-strip"><div><small>Accuratezza</small><strong>{modeAttempts.length ? `${accuracy}%` : "—"}</strong><span>{modeAttempts.length ? "primi tentativi" : "nessuna prova ancora"}</span></div><div><small>Prove osservate</small><strong>{modeAttempts.length}</strong><span>nella modalità scelta</span></div><div><small>Parole osservate</small><strong>{rows.length}</strong><span>con dati registrati</span></div><div><small>Aiuti registrati</small><strong>{modeHelps.length}</strong><span>nella modalità scelta</span></div></section><section className="panel progress-matrix-panel"><PanelHeading level={3} eyebrow="COLPO D’OCCHIO" title="Parole × tipologia di attività" description="Apri il grafico di una parola dall’icona a destra, oppure selezionane più di una per confrontarle."><div className="score-key"><span className="strong"><b>Sicura</b> ≥ 80%</span><span className="developing"><b>In crescita</b> 50–79%</span><span className="attention"><b>Da rinforzare</b> &lt; 50%</span></div></PanelHeading>{rows.length > 1 && <div className="compare-bar" role="group" aria-label="Confronto tra parole"><span>{selectedForCompare.length ? `${selectedForCompare.length} di ${MAX_COMPARED_WORDS} parole selezionate` : `Seleziona fino a ${MAX_COMPARED_WORDS} parole per confrontarle`}</span>{selectedForCompare.length > 0 && <button type="button" className="ghost-button" onClick={() => setCompareIds([])}>Deseleziona</button>}<button type="button" className="primary-button" disabled={selectedForCompare.length < 2} onClick={() => openChart(selectedForCompare)}><LineChart aria-hidden="true" />Confronta{selectedForCompare.length > 1 ? ` (${selectedForCompare.length})` : ""}</button></div>}{rows.length ? <ProgressWordTable rows={rows} itemFor={(wordId) => itemMap.get(wordId)} compareIds={selectedForCompare} maxCompare={MAX_COMPARED_WORDS} onToggleCompare={toggleCompare} onOpenChart={openChart} /> : <div className="empty-mini"><BarChart3 /><p>Nessun dato registrato.</p><small>I risultati compariranno dopo la prima attività.</small></div>}</section>{chartWords && <ProgressChartDialog words={chartWords} records={trendRecords} modeLabel={selectedMode === "test" ? "Valutazione" : "Insegnamento"} helpsFor={helpsFor} onClose={() => setChartWords(null)} />}{dataFirst && historySection}<div className="data-note"><CircleHelp /><p><strong>Come leggere i dati</strong><br />La valutazione misura la risposta iniziale e va usata per la tendenza di apprendimento. L’insegnamento mostra invece quanto supporto serve durante la pratica. Una sola rilevazione non definisce una tendenza.</p></div></div>;
+  return <div className="page stats-page"><PageHeader eyebrow="RISULTATI" title={`Progressi di ${child.firstName}`} description="Consulta le sessioni svolte, confronta le parole e apri l’andamento mensile."><div className="stats-actions"><button className="ghost-button" onClick={() => downloadCsv(attempts)}>Esporta CSV</button><button className="danger-button subtle" disabled={!attempts.length && !helps.length} onClick={onReset}><Trash2 />Azzera statistiche</button></div></PageHeader>{!dataFirst && historySection}<section className="stats-mode-card"><div className="stats-mode-picker"><button className={selectedMode === "test" ? "selected" : ""} aria-pressed={selectedMode === "test"} onClick={() => changeMode("test")}><BookOpenCheck /><span><strong>Valutazione</strong><small>Padronanza al primo tentativo</small></span></button><button className={selectedMode === "teaching" ? "selected" : ""} aria-pressed={selectedMode === "teaching"} onClick={() => changeMode("teaching")}><Sparkles /><span><strong>Insegnamento</strong><small>Pratica guidata e supporti</small></span></button></div><p>{modeCopy}</p>{errorlessAttempts.length > 0 && <p className="data-note">Numero quantità · Apprendimento senza errori: {errorlessAttempts.length} prove, {errorlessAttempts.filter((attempt) => attempt.correct).length} corrette. Queste prove guidate sono registrate separatamente e non entrano nell’accuratezza autonoma.</p>}</section><section className="stats-strip"><div><small>Accuratezza</small><strong>{modeAttempts.length ? `${accuracy}%` : "—"}</strong><span>{modeAttempts.length ? "primi tentativi" : "nessuna prova ancora"}</span></div><div><small>Prove osservate</small><strong>{modeAttempts.length}</strong><span>nella modalità scelta</span></div><div><small>Parole osservate</small><strong>{rows.length}</strong><span>con dati registrati</span></div><div><small>Aiuti registrati</small><strong>{modeHelps.length}</strong><span>nella modalità scelta</span></div></section><section className="panel progress-matrix-panel"><PanelHeading level={3} eyebrow="COLPO D’OCCHIO" title="Parole × tipologia di attività" description="Apri il grafico di una parola dall’icona a destra, oppure selezionane più di una per confrontarle."><div className="score-key"><span className="strong"><b>Sicura</b> ≥ 80%</span><span className="developing"><b>In crescita</b> 50–79%</span><span className="attention"><b>Da rinforzare</b> &lt; 50%</span></div></PanelHeading>{rows.length > 1 && <div className="compare-bar" role="group" aria-label="Confronto tra parole"><span>{selectedForCompare.length ? `${selectedForCompare.length} di ${MAX_COMPARED_WORDS} parole selezionate` : `Seleziona fino a ${MAX_COMPARED_WORDS} parole per confrontarle`}</span>{selectedForCompare.length > 0 && <button type="button" className="ghost-button" onClick={() => setCompareIds([])}>Deseleziona</button>}<button type="button" className="primary-button" disabled={selectedForCompare.length < 2} onClick={() => openChart(selectedForCompare)}><LineChart aria-hidden="true" />Confronta{selectedForCompare.length > 1 ? ` (${selectedForCompare.length})` : ""}</button></div>}{rows.length ? <ProgressWordTable rows={rows} itemFor={(wordId) => itemMap.get(wordId)} compareIds={selectedForCompare} maxCompare={MAX_COMPARED_WORDS} onToggleCompare={toggleCompare} onOpenChart={openChart} /> : <div className="empty-mini"><BarChart3 /><p>Nessun dato registrato.</p><small>I risultati compariranno dopo la prima attività.</small></div>}</section>{chartWords && <ProgressChartDialog words={chartWords} records={trendRecords} modeLabel={selectedMode === "test" ? "Valutazione" : "Insegnamento"} helpsFor={helpsFor} onClose={() => setChartWords(null)} />}{dataFirst && historySection}<div className="data-note"><CircleHelp /><p><strong>Come leggere i dati</strong><br />La valutazione misura la risposta iniziale e va usata per la tendenza di apprendimento. L’insegnamento mostra invece quanto supporto serve durante la pratica. Una sola rilevazione non definisce una tendenza.</p></div></div>;
 }
 
 function historyArtworkItem(snapshot: HistoryImageSnapshot): LibraryItem {

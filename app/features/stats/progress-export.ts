@@ -1,9 +1,10 @@
 import { androidBridge } from "../../domain/android-bridge";
+import type { SessionHistoryRecord } from "../../domain/session-history";
 import { buildExcelProgressCsv } from "../../domain/progress-csv";
 import { type Attempt, type Exercise, type LibraryItem } from "../../shared/types";
 
-export function downloadProgressCsv(attempts: Attempt[], exercises: Exercise[], library: LibraryItem[]) {
-  const blob = new Blob([buildExcelProgressCsv(attempts, { exercises, library })], { type: "text/csv;charset=utf-16le" });
+export function downloadProgressCsv(attempts: Attempt[], exercises: Exercise[], library: LibraryItem[], histories: SessionHistoryRecord[]) {
+  const blob = new Blob([buildExcelProgressCsv(attempts, { exercises, library, histories })], { type: "text/csv;charset=utf-16le" });
   const native = androidBridge();
   if (native) {
     if (blob.size > 5_900_000) { window.alert("Esportazione troppo grande per l’app: usa il browser sul PC."); return; }

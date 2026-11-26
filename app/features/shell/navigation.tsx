@@ -1,5 +1,5 @@
 import { BarChart3, BookOpenCheck, ChevronRight, Gamepad2, Home, Library, LogOut, Menu, MessageSquareText, Palette, Play, Settings, UserCog, UserRound } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { type InterfaceStyle } from "../../domain/appearance";
 import { AppVersionBadge } from "../../components/app-update";
 import { backendStatusInfo } from "../../shared/cloud-client";
@@ -37,6 +37,15 @@ const studioNavigation = [
 ] as const satisfies ReadonlyArray<{ heading: string | null; items: readonly View[] }>;
 
 export function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus, interfaceStyle }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus; interfaceStyle: InterfaceStyle }) {
+  const sidebar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.querySelector<HTMLButtonElement>(".topbar .menu-button");
+    const nav = sidebar.current;
+    const initial = nav?.querySelector<HTMLButtonElement>(".nav-item.active") ?? nav?.querySelector<HTMLButtonElement>(".nav-item");
+    initial?.focus({ preventScroll: true });
+    return () => opener?.focus({ preventScroll: true });
+  }, [open]);
   const initials = `${therapist.firstName[0] ?? ""}${therapist.lastName[0] ?? ""}`;
   const status = backendStatusInfo(backendStatus);
   const renderItem = ({ id, label, icon: Icon, group }: (typeof navItems)[number]) => {
@@ -48,8 +57,13 @@ export function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, 
   };
 
   return <>
-    {open && <button type="button" className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}
-    <aside className={`sidebar ${open ? "open" : ""}`}>
+    {open && <button type="button" className="sidebar-backdrop" onClick={onClose} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} aria-label="Chiudi menu" />}
+    <aside ref={sidebar} id="main-navigation" className={`sidebar ${open ? "open" : ""}`} onKeyDown={(event) => {
+      if (open && event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    }}>
       <div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div>
       <nav aria-label="Navigazione principale">
         {interfaceStyle === "studio" ? studioNavigation.map(({ heading, items }) => <Fragment key={items[0]}>
@@ -67,7 +81,7 @@ export function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, 
   </>;
 }
 
-export function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus, onOpenSaveJournal }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus; onOpenSaveJournal: () => void }) {
+export function Topbar({ menuOpen, onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus, onOpenSaveJournal }: { menuOpen: boolean; onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus; onOpenSaveJournal: () => void }) {
   const status = backendStatusInfo(backendStatus);
-  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><AppVersionBadge /><button type="button" className={`cloud-indicator cloud-status-${status.tone}`} onClick={onOpenSaveJournal} aria-label={`${status.label}. Apri diagnosi salvataggi`} title={`${status.label} — Apri diagnosi salvataggi`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></button><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
+  return <header className="topbar"><button className="icon-button menu-button" onClick={onMenu} aria-expanded={menuOpen} aria-controls="main-navigation" aria-label="Apri menu"><Menu /></button><label className="child-pill"><span className="child-avatar" style={{ background: child.avatarColor }}>{child.firstName[0]}</span><span><small>Profilo attivo</small><strong>{child.firstName}</strong></span><select value={child.id} onChange={(event) => onSelectChild(event.target.value)} aria-label="Cambia bambino">{childProfiles.map((item) => <option key={item.id} value={item.id}>{item.firstName} {item.lastName}</option>)}</select><ChevronRight size={16} /></label><div className="topbar-right"><AppVersionBadge /><button type="button" className={`cloud-indicator cloud-status-${status.tone}`} onClick={onOpenSaveJournal} aria-label={`${status.label}. Apri diagnosi salvataggi`} title={`${status.label} — Apri diagnosi salvataggi`}><i className="status-dot" aria-hidden="true" /><span>{status.label}</span></button><button className="icon-button" onClick={onOpenProfiles} aria-label={`Profilo di ${therapist.firstName}`}><UserRound /></button></div></header>;
 }

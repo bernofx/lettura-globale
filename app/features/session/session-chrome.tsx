@@ -13,20 +13,35 @@ export function SessionTools({ onExit, protectedExit = true, canPrevious, canFor
 }
 
 /** The compiled session plan, so every activity shows the same per-exercise progress dots. */
-export const SessionPlanContext = createContext<readonly SessionProgressTurn[] | null>(null);
+export const SessionPlanContext = createContext<{ plan: readonly SessionProgressTurn[]; completed: readonly number[] } | null>(null);
 
 /** One dot per exercise: its ring fills turn by turn and becomes a green check when the exercise is finished. */
 export function SessionProgress({ currentIndex, total }: { currentIndex: number; total: number }) {
-  const contextPlan = useContext(SessionPlanContext);
+  const progress = useContext(SessionPlanContext);
+  const dots = useRef<HTMLOListElement>(null);
   const steps = useMemo(() => {
-    const plan = contextPlan?.length === total ? contextPlan : Array.from({ length: total }, (_, index) => ({ id: String(index), title: `Passaggio ${index + 1}` }));
-    return sessionProgressSteps(plan, currentIndex);
-  }, [contextPlan, currentIndex, total]);
+    const plan = progress?.plan.length === total ? progress.plan : Array.from({ length: total }, (_, index) => ({ id: String(index), title: `Passaggio ${index + 1}` }));
+    return sessionProgressSteps(plan, currentIndex, progress?.completed ?? []);
+  }, [progress, currentIndex, total]);
   const currentPosition = steps.findIndex((step) => step.status === "current");
   const current = steps[currentPosition];
+  useEffect(() => {
+    const strip = dots.current;
+    const dot = strip?.children.item(currentPosition) as HTMLElement | null | undefined;
+    if (!strip || !dot) return;
+    const placeCurrent = () => {
+      const distance = dot.getBoundingClientRect().left - strip.getBoundingClientRect().left;
+      strip.scrollLeft += distance - (strip.clientWidth - dot.offsetWidth) / 2;
+    };
+    placeCurrent();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(placeCurrent);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [currentPosition, steps.length]);
   return <div className="session-progress" role="group" aria-label={sessionProgressLabel(steps)}>
-    <ol className="progress-dots" aria-hidden="true">{steps.map((step, index) => <li key={step.key} className={`progress-dot ${step.status}`} title={step.title} style={{ "--progress": `${step.completedTurns / step.turns}` } as React.CSSProperties}><span>{step.status === "done" ? <Check /> : index + 1}</span></li>)}</ol>
-    {current && <span className="progress-caption" aria-hidden="true">{current.turns > 1 ? `${current.completedTurns + 1} di ${current.turns}` : steps.length > 1 ? `${currentPosition + 1} di ${steps.length}` : "1 di 1"}</span>}
+    <ol ref={dots} className="progress-dots" aria-hidden="true">{steps.map((step, index) => <li key={step.key} className={`progress-dot ${step.status}`} title={step.title} style={{ "--progress": `${step.completedTurns / step.turns}` } as React.CSSProperties}><span>{step.status === "done" ? <Check /> : index + 1}</span></li>)}</ol>
+    {current && <span className="progress-caption" aria-hidden="true">{current.turns > 1 ? `${current.currentTurn} di ${current.turns}` : steps.length > 1 ? `${currentPosition + 1} di ${steps.length}` : "1 di 1"}</span>}
   </div>;
 }
 
