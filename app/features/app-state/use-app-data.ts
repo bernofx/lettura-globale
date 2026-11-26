@@ -5,7 +5,7 @@ import { OFFICIAL_CATALOG_URL, type OfficialCatalogEntry } from "../../domain/sc
 import { fetchWithTimeout } from "../../shared/cloud-client";
 import { deduplicateLibraryPlaceholders } from "../../domain/library-deduplication";
 import { type SessionHistoryRecord } from "../../domain/session-history";
-import { type AppearanceSettings, defaultAppearance, hydrateAppearance } from "../../domain/appearance";
+import { type AppearanceSettings, defaultAppearance, hydrateAppearance, defaultInterfaceStyle, hydrateInterfaceStyle, type InterfaceStyle } from "../../domain/appearance";
 import { defaultSoundPreferences, hydrateSoundPreferences, type SoundPreferences } from "../../domain/sound-preferences";
 import { useStoredState } from "../../shared/hooks";
 import { readLibraryImage, storeLibraryImage } from "../../shared/media-storage";
@@ -45,6 +45,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   const [categorySymbols, setCategorySymbols, categorySymbolsLoaded] = useStoredState<CategorySymbols>("lg-category-symbols", seedDefaultCategorySymbols({}, []));
   const [soundPreferences, setSoundPreferences, soundPreferencesLoaded] = useStoredState<SoundPreferences>("lg-sound-preferences", defaultSoundPreferences, hydrateSoundPreferences);
   const [tracingOrderRequired, setTracingOrderRequired, tracingOrderLoaded] = useStoredState<boolean>("lg-tracing-order-required", false, saved => saved === true);
+  const [interfaceStyle, setInterfaceStyle, interfaceStyleLoaded] = useStoredState<InterfaceStyle>("lg-interface-style", defaultInterfaceStyle, hydrateInterfaceStyle);
   const [localLoadSlow, setLocalLoadSlow] = useState(false);
 
   const officialCatalog = useRef<{ entries: OfficialCatalogEntry[]; snapshot: string }>({ entries: [], snapshot: "[]" });
@@ -98,12 +99,12 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     return () => { cancelled = true; };
   }, [library, notify, setLibrary]);
 
-  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded && tracingOrderLoaded;
-  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired });
+  const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded && tracingOrderLoaded && interfaceStyleLoaded;
+  const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle });
 
   useEffect(() => {
-    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired };
-  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired]);
+    localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle };
+  }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle]);
 
   useEffect(() => {
     if (allLocalDataLoaded) return;
@@ -133,15 +134,16 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     setSessionHistory(state.sessionHistory ?? []);
     setAppearance(hydrateAppearance(state.appearance));
     setTracingOrderRequired(state.tracingOrderRequired === true);
+    setInterfaceStyle(hydrateInterfaceStyle(state.interfaceStyle));
     setCategorySymbols(seedDefaultCategorySymbols(state.categorySymbols ?? {}, state.library ?? []));
     if (options.soundPreferences !== null) setSoundPreferences(options.soundPreferences ?? hydrateSoundPreferences(state.soundPreferences));
-  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setCategorySymbols, setSoundPreferences, setTracingOrderRequired]);
+  }, [setTherapists, setChildren, setActiveChildId, setLibrary, setExercises, setSequences, setActiveSequenceId, setAttempts, setHelps, setSessionHistory, setAppearance, setCategorySymbols, setSoundPreferences, setTracingOrderRequired, setInterfaceStyle]);
 
   return {
     therapists, setTherapists, children, setChildren, activeChildId, setActiveChildId,
     library, setLibrary, exercises, setExercises, sequences, setSequences, activeSequenceId, setActiveSequenceId,
     attempts, setAttempts, helps, setHelps, sessionHistory, setSessionHistory, appearance, setAppearance,
-    categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, tracingOrderRequired, setTracingOrderRequired,
+    categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, tracingOrderRequired, setTracingOrderRequired, interfaceStyle, setInterfaceStyle,
     allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, applyBackendState, refreshOfficialCatalog,
   };
 }

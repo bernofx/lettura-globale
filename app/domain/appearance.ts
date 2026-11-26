@@ -34,3 +34,21 @@ export function appearancePresetId(settings: AppearanceSettings) {
   return appearancePresets.find((preset) => preset.settings.palette === settings.palette && preset.settings.shape === settings.shape)?.id;
 }
 
+
+/** Layout and visual language of the whole app, independent from palette and control shape. */
+export type InterfaceStyle = "classic" | "studio" | "playful";
+export const defaultInterfaceStyle: InterfaceStyle = "classic";
+export const interfaceStyles: Array<{ id: InterfaceStyle; name: string; description: string }> = [
+  { id: "classic", name: "Classico", description: "Menu laterale chiaro e colori del tema scelto" },
+  { id: "studio", name: "Studio", description: "Strumento professionale: menu scuro raggruppato, pagine dense e ordinate" },
+  { id: "playful", name: "Giocoso", description: "Aree a colori, forme morbide e caratteri grandi" },
+];
+const styleIds = new Set<string>(interfaceStyles.map((style) => style.id));
+
+export function isInterfaceStyle(value: unknown): value is InterfaceStyle {
+  return typeof value === "string" && styleIds.has(value);
+}
+
+export function hydrateInterfaceStyle(value: unknown): InterfaceStyle {
+  return isInterfaceStyle(value) ? value : defaultInterfaceStyle;
+}

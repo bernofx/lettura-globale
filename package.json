@@ -24,6 +24,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@fontsource/inter": "5.2.5",
+    "@fontsource/nunito": "5.2.5",
+    "@fontsource/space-grotesk": "5.2.6",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
     "class-variance-authority": "0.7.1",

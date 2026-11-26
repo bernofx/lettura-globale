@@ -99,3 +99,17 @@ test("rebasing keeps local removals and concurrent remote entities", () => {
   const rebased = rebaseStateChange(remote, staleChange, "abcdefab-1234-1234-1234-123456789abc", 3);
   assert.deepEqual((rebased.state.library as Array<{ id: string }>).map((item) => item.id), ["b", "c"]);
 });
+
+test("lo stile dell’interfaccia si salva, le vecchie impostazioni valgono come Classico e i valori ignoti sono rifiutati", () => {
+  const legacy = { schemaVersion: 1 };
+  const operation = "12345678-1234-1234-1234-123456789abc";
+  assert.equal(buildStateChange(legacy, { ...legacy, interfaceStyle: "classic" }, operation, 3), null, "a missing style already means classic");
+  const studio = buildStateChange(legacy, { ...legacy, interfaceStyle: "studio" }, operation, 3);
+  assert.ok(studio);
+  assert.deepEqual(studio.values, { interfaceStyle: "studio" });
+  assert.deepEqual(applyStateChange(legacy, studio), { ...legacy, interfaceStyle: "studio" });
+  const playful = buildStateChange({ ...legacy, interfaceStyle: "studio" }, { ...legacy, interfaceStyle: "playful" }, operation, 4);
+  assert.deepEqual(playful?.values, { interfaceStyle: "playful" });
+  assert.deepEqual(parseStateChangeRequest(studio).values, { interfaceStyle: "studio" });
+  assert.throws(() => parseStateChangeRequest({ ...studio, values: { interfaceStyle: "neon" } }), /invalid_interface_style/);
+});

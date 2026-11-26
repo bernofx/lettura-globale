@@ -1040,7 +1040,16 @@ try {
   console.log("PASS Puzzle gallery: previews and direct launch of 16, 20 and 25 pieces, device image, stacking, completion, rotation and protected exit.");
   console.log("PASS Puzzle library: multiple files, automatic retry, gallery visibility, playback and confirmed removal.");
   console.log("PASS game navigation: Back and Escape leave Colorare and the balloons open, and the X restores navigation.");
-  console.log("PASS App shell: nine views fit six mobile and tablet widths.");
+  // The three interface styles are chosen in Aspetto and applied to the whole app.
+  await viewport(1280, 800);
+  await button("Impostazioni");
+  await button("Aspetto");
+  for (const [name, style] of [["Studio", "studio"], ["Giocoso", "playful"], ["Classico", "classic"]]) {
+    await evaluate(`[...document.querySelectorAll('.interface-style-grid button')].find(button => button.querySelector('strong').textContent === ${JSON.stringify(name)}).click()`);
+    await wait(`document.documentElement.dataset.style === ${JSON.stringify(style)} && document.querySelector('.interface-style-grid [aria-pressed=true] strong').textContent === ${JSON.stringify(name)}`);
+    assert.equal(await evaluate(documentFitsWidth), true, `${name} fits the tablet width`);
+  }
+  console.log("PASS App shell: nine views fit six mobile and tablet widths; Classico, Studio and Giocoso styles apply.");
 } finally {
   socket.close();
 }

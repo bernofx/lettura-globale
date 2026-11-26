@@ -1,3 +1,4 @@
+import { hydrateInterfaceStyle, isInterfaceStyle } from "../../domain/appearance";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
           if (state && typeof state === "object" && "categorySymbols" in state && !rebuilt.categorySymbols) rebuilt.categorySymbols = {};
           // Standalone game preference lives in the cloud snapshot alongside the relational data.
           rebuilt.tracingOrderRequired = Boolean(state && typeof state === "object" && "tracingOrderRequired" in state && state.tracingOrderRequired === true);
+          rebuilt.interfaceStyle = hydrateInterfaceStyle(state && typeof state === "object" && "interfaceStyle" in state ? state.interfaceStyle : undefined);
           responseState = rebuilt;
           dataSource = "relational";
         }
@@ -94,6 +96,7 @@ export async function PUT(request: Request) {
   try { state = JSON.parse(raw); } catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
   if (!state || typeof state !== "object" || (state as { schemaVersion?: unknown }).schemaVersion !== 1) return Response.json({ error: "invalid_state" }, { status: 400 });
   if ("tracingOrderRequired" in state && typeof state.tracingOrderRequired !== "boolean") return Response.json({ error: "invalid_tracing_order" }, { status: 400 });
+  if ("interfaceStyle" in state && !isInterfaceStyle(state.interfaceStyle)) return Response.json({ error: "invalid_interface_style" }, { status: 400 });
 
   const now = Date.now();
   const db = getDb();
@@ -119,8 +122,13 @@ export async function PUT(request: Request) {
   if (currentRevision > 0 && !user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
   if (existing[0]?.payload && user.adultProfileId) {
     const currentState = JSON.parse(existing[0].payload);
-    if (!("tracingOrderRequired" in state) && typeof currentState.tracingOrderRequired === "boolean") {
-      state = { ...state, tracingOrderRequired: currentState.tracingOrderRequired };
+    // Standalone preferences kept by the cloud snapshot survive a full replacement that omits them.
+    const incoming = state as Record<string, unknown>;
+    const carried: Record<string, unknown> = {};
+    if (!("interfaceStyle" in incoming) && isInterfaceStyle(currentState.interfaceStyle)) carried.interfaceStyle = currentState.interfaceStyle;
+    if (!("tracingOrderRequired" in incoming) && typeof currentState.tracingOrderRequired === "boolean") carried.tracingOrderRequired = currentState.tracingOrderRequired;
+    if (Object.keys(carried).length) {
+      state = { ...incoming, ...carried };
       raw = JSON.stringify(state);
       if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
     }

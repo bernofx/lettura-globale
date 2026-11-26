@@ -178,6 +178,15 @@ try {
   };
   await saveTracingOrder(true);
   await saveTracingOrder(false);
+  // The interface style follows the same path and is read back on the relational projection.
+  for (const style of ["studio", "playful", "classic"]) {
+    const current = await (await read(secondCookie)).json();
+    const change = buildStateChange(current.state, { ...current.state, interfaceStyle: style }, crypto.randomUUID(), current.revision);
+    const response = await request("/api/state/changes", { method: "PATCH", headers: { cookie: secondCookie, "content-type": "application/json" }, body: JSON.stringify(change) });
+    assert.equal(response.status, 200);
+    const loaded = await (await read(adminCookie)).json();
+    assert.equal(loaded.state.interfaceStyle, style);
+  }
   const soundtrackPath = "/api/game-soundtrack";
   const mp3 = readFileSync("public/audio/coloring-calypso.mp3");
   const uploadHeaders = { "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3"), "x-soundtrack-source": encodeURIComponent("Autore di prova"), "x-soundtrack-license": "CC0", "x-soundtrack-rights": "confirmed" };

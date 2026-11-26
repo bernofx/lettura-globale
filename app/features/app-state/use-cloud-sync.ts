@@ -31,7 +31,7 @@ type CloudSyncOptions = {
 export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify }: CloudSyncOptions) {
   const {
     therapists, children, activeChildId, activeSequenceId, library, setLibrary, exercises, sequences, attempts, helps,
-    sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, applyBackendState,
+    sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, applyBackendState,
   } = data;
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [backendRetryKey, setBackendRetryKey] = useState(0);
@@ -316,7 +316,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
-    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired });
+    const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle });
     if (!backendInitialized) {
       if (!localFallbackBaseline.current) return;
       const localChange = buildStateChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
@@ -338,7 +338,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       void enqueueBackendSave(snapshot).catch(() => setBackendStatus("error"));
     }, 500);
     return () => { window.clearTimeout(statusTimer); if (backendSaveTimer.current) window.clearTimeout(backendSaveTimer.current); backendSaveTimer.current = null; };
-  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, enqueueBackendSave, settleBackendSaveStatus]);
+  }, [backendInitialized, backendSaveRetryKey, loggedInTherapistId, logoutState, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, enqueueBackendSave, settleBackendSaveStatus]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || backendStatus !== "ready" || localMediaRepairing.current) return;

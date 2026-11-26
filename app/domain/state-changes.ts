@@ -1,7 +1,8 @@
+import { hydrateInterfaceStyle, isInterfaceStyle } from "./appearance.ts";
 export const STATE_COLLECTIONS = [
   "therapists", "children", "library", "exercises", "sequences", "attempts", "helps", "sessionHistory",
 ] as const;
-const STATE_VALUES = ["activeChildId", "activeSequenceId", "appearance", "soundPreferences", "categorySymbols", "tracingOrderRequired"] as const;
+const STATE_VALUES = ["activeChildId", "activeSequenceId", "appearance", "soundPreferences", "categorySymbols", "tracingOrderRequired", "interfaceStyle"] as const;
 type StateValueName = (typeof STATE_VALUES)[number];
 
 export type StateCollectionName = typeof STATE_COLLECTIONS[number];
@@ -85,6 +86,10 @@ export function buildStateChange(previousValue: unknown, nextValue: unknown, ope
       if ((previous[key] === true) !== (next[key] === true)) values[key] = next[key] === true;
       continue;
     }
+    if (key === "interfaceStyle") {
+      if (hydrateInterfaceStyle(previous[key]) !== hydrateInterfaceStyle(next[key])) values[key] = hydrateInterfaceStyle(next[key]);
+      continue;
+    }
     if (!sameValue(previous[key], next[key])) values[key] = next[key] ?? null;
   }
   if (!Object.keys(collections).length && !Object.keys(values).length) return null;
@@ -112,6 +117,7 @@ export function parseStateChangeRequest(value: unknown): StateChangeRequest {
   if ("appearance" in rawValues && rawValues.appearance !== null && (!rawValues.appearance || typeof rawValues.appearance !== "object" || Array.isArray(rawValues.appearance))) throw new Error("invalid_appearance");
   if ("soundPreferences" in rawValues && rawValues.soundPreferences !== null && (!rawValues.soundPreferences || typeof rawValues.soundPreferences !== "object" || Array.isArray(rawValues.soundPreferences))) throw new Error("invalid_sound_preferences");
   if ("tracingOrderRequired" in rawValues && typeof rawValues.tracingOrderRequired !== "boolean") throw new Error("invalid_tracing_order");
+  if ("interfaceStyle" in rawValues && !isInterfaceStyle(rawValues.interfaceStyle)) throw new Error("invalid_interface_style");
   if ("categorySymbols" in rawValues && rawValues.categorySymbols !== null) {
     const symbols = document(rawValues.categorySymbols);
     if (Object.entries(symbols).some(([name, id]) => !name.trim() || name.length > 200 || typeof id !== "string" || !id || id.length > 200)) throw new Error("invalid_category_symbols");
