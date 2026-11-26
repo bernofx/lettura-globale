@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove immagini in Libreria",
   items: [
+    "Esercizi più ordinati: la tendina delle sequenze e tutti gli elenchi a discesa hanno lo stesso aspetto dell’app; Nuova, Rinomina, Condividi ed Elimina usano i pulsanti dell’interfaccia, e i comandi per spostare o togliere un esercizio dalla sequenza sono più grandi e riconoscibili.",
     "Avanzamento a pallini durante la sessione, in tutti gli stili: un pallino per ogni esercizio della sequenza; il bordo verde si riempie a ogni turno e, a esercizio finito, il pallino diventa verde con la spunta.",
     "Studio e Giocoso più completi: sul telefono le voci principali sono in una barra in basso; in Studio, su schermi larghi, la sequenza attiva resta in un pannello accanto al catalogo degli esercizi; in Giocoso la sequenza è un percorso di passi numerati.",
     "Nuovi stili dell’interfaccia in Impostazioni → Aspetto: oltre al Classico puoi scegliere Studio, ordinato e professionale, o Giocoso, colorato e morbido.",
