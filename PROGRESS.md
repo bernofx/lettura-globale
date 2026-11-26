@@ -244,8 +244,10 @@
 12. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 13. Completare gli stili dell’interfaccia Studio e Giocoso con le impaginazioni proposte nella tela di design (oggi cambiano colori, caratteri, forme, menu e pannelli sulle stesse pagine). Ogni pezzo è una variante della pagina che riusa logica e dati di quella attuale, con test dedicati:
     - Completato (solo CSS, markup condiviso): barra di navigazione in basso sul telefono per entrambi (Oggi, Sessione, Esercizi, Progressi, Libreria; le altre voci dal menu ☰); Studio con la sequenza in un pannello laterale scuro da 1400 px; Giocoso con la sequenza come percorso di cerchi numerati. Avanzamento della sessione a pallini in tutti gli stili (`SessionProgress`, `app/domain/session-progress.ts`): un pallino per esercizio, il bordo verde si compone turno dopo turno e diventa pieno con la spunta a esercizio finito; il verde indica «fatto», non «corretto».
-    - Studio: Progressi con tabella parole × attività e schede Valutazione/Insegnamento in alto; ultime sessioni del bambino in Oggi.
-    - Giocoso: Progressi a carte «Sicura», «In crescita», «Da rinforzare»; pagine interne aperte dai riquadri delle aree con pulsante di ritorno.
+    - Completato (Progressi, markup unico): Studio con schede Valutazione/Insegnamento in alto e tabella compatta; Giocoso con carte per parola e stato «Sicura» (≥ 80%), «In crescita» (50–79%), «Da rinforzare» (< 50%) o «Pochi dati» (< 3 prove, `app/domain/progress-status.ts`). In Studio e Giocoso i dati precedono lo storico sessioni (ordine del DOM, non solo visivo). Il grafico mensile è un popup aperto dall’icona accanto agli aiuti, con confronto fino a 4 parole e filtro per attività (`app/domain/progress-trend.ts`), punti di forma diversa e tabella equivalente per i lettori di schermo; sul telefono in verticale il popup è già ruotato in orizzontale.
+    - Completato: tabella delle parole con ricerca, filtri per stato (multipli, con conteggi), categoria e attività, ordinamento per ogni colonna (`aria-sort`; menu «Ordina per» in Giocoso e su telefono), vista iniziale per priorità con le prime 15 parole e «Mostra tutte», colonne delle attività senza prove nascoste, punteggi su una riga. Filtri e ordinamento restano sul dispositivo (`lg-progress-table`, la ricerca no); logica pura in `app/domain/progress-table.ts`.
+    - Studio: ultime sessioni del bambino in Oggi.
+    - Giocoso: pagine interne aperte dai riquadri delle aree con pulsante di ritorno.
 
 ## Verifiche della versione corrente
 

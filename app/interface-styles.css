@@ -226,3 +226,93 @@ html[data-style="playful"] .exercise-actions button:hover { transform: translate
 html[data-style="playful"] .sequence-toggle { border: 0; border-radius: 999px; font-weight: 900; background: #efedff; box-shadow: 0 3px 0 #d8d3f6; }
 html[data-style="playful"] .sequence-toggle.included { background: #d9f2e6; color: #1f7a52; box-shadow: 0 3px 0 #b4e0ca; }
 @media (prefers-reduced-motion: reduce) { html[data-style="playful"] .exercise-actions button:hover { transform: none; } }
+
+/* ------------------------------------------------- Progressi (shared markup) */
+/* Studio: Valutazione / Insegnamento as tabs above a dense table. */
+html[data-style="studio"] .stats-mode-card { padding: 6px; gap: 14px; border-radius: 12px; }
+html[data-style="studio"] .stats-mode-picker { gap: 4px; padding: 3px; border-radius: 10px; background: #eef0f5; }
+html[data-style="studio"] .stats-mode-picker button { min-width: 0; min-height: 44px; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 700; }
+html[data-style="studio"] .stats-mode-picker button.selected { background: #ffffff; color: var(--ink); box-shadow: 0 1px 3px rgba(21, 27, 43, 0.14); }
+html[data-style="studio"] .stats-mode-picker button > svg { width: 17px; }
+html[data-style="studio"] .stats-mode-picker small { display: none; }
+html[data-style="studio"] .stats-mode-card > p { padding-right: 10px; }
+html[data-style="studio"] .stats-strip { border-radius: 12px; }
+html[data-style="studio"] .stats-strip > div { padding: 16px 20px; }
+html[data-style="studio"] .stats-strip strong { font-size: 26px; font-variant-numeric: tabular-nums; }
+html[data-style="studio"] .progress-matrix { border-radius: 10px; }
+html[data-style="studio"] .matrix-row { min-height: 52px; padding: 6px 14px; }
+html[data-style="studio"] .matrix-header { min-height: 40px; background: #f6f7fa; }
+html[data-style="studio"] .matrix-header span { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+html[data-style="studio"] .matrix-row:not(.matrix-header):nth-child(odd) { background: #fbfbfd; }
+html[data-style="studio"] .matrix-row.selected { background: #eef2ff; box-shadow: inset 3px 0 var(--violet); }
+html[data-style="studio"] :is(.matrix-chart-button, .matrix-compare, .progress-chart-helps, .progress-chart-helps li, .progress-chart-filter select) { border-radius: 8px; }
+html[data-style="studio"] .score-cell { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+html[data-style="studio"] .score-key span { border-radius: 6px; }
+@media (max-width: 760px) {
+  html[data-style="studio"] .stats-mode-picker { flex-direction: row; }
+  html[data-style="studio"] .stats-mode-card > p { padding: 0 8px 6px; }
+}
+
+/* Giocoso: pill tabs, coloured metric cards and one card per word with its status. */
+html[data-style="playful"] .stats-mode-card { padding: 8px; border: 0; border-radius: 28px; box-shadow: 0 5px 0 var(--line); }
+html[data-style="playful"] .stats-mode-picker { gap: 6px; }
+html[data-style="playful"] .stats-mode-picker button { min-height: 52px; border: 0; border-radius: 999px; background: transparent; font-weight: 900; }
+html[data-style="playful"] .stats-mode-picker button.selected { background: var(--violet); color: #ffffff; box-shadow: 0 4px 0 var(--violet-dark); }
+html[data-style="playful"] .stats-mode-picker button.selected small { color: rgba(255, 255, 255, 0.85); }
+html[data-style="playful"] .stats-strip { gap: 14px; border: 0; background: transparent; }
+html[data-style="playful"] .stats-strip > div { padding: 20px; border: 0 !important; border-radius: 28px; }
+html[data-style="playful"] .stats-strip > div:nth-child(1) { background: #d9f2e6; }
+html[data-style="playful"] .stats-strip > div:nth-child(2) { background: #e3e9ff; }
+html[data-style="playful"] .stats-strip > div:nth-child(3) { background: #fff0b8; }
+html[data-style="playful"] .stats-strip > div:nth-child(4) { background: #ffe1d6; }
+html[data-style="playful"] .stats-strip :is(small, span) { color: var(--ink); font-weight: 800; }
+html[data-style="playful"] .stats-strip strong { font-size: 40px; font-weight: 900; }
+html[data-style="playful"] .score-key { display: flex; }
+html[data-style="playful"] .score-key span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; }
+html[data-style="playful"] .progress-matrix { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; overflow: visible; border: 0; }
+html[data-style="playful"] .progress-matrix .matrix-row.matrix-header { display: none; }
+html[data-style="playful"] .progress-matrix .matrix-row { min-width: 0; min-height: 0; padding: 10px; border: 0; border-radius: 22px; background: #ffffff; box-shadow: 0 4px 0 var(--line); display: grid; column-gap: 10px; row-gap: 2px; text-align: left; }
+html[data-style="playful"] .progress-matrix .matrix-row > :is([role="cell"]:not(strong, .word-status, .help-total)) { display: none; }
+html[data-style="playful"] .progress-matrix .matrix-row { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "art word chart" "art status chart"; }
+html[data-style="playful"] .progress-matrix .help-total { grid-area: chart; align-self: center; }
+html[data-style="playful"] .progress-matrix .help-total-count { display: none; }
+html[data-style="playful"] .matrix-chart-button { border: 0; border-radius: 50%; background: #ffffff; box-shadow: 0 3px 0 var(--line); }
+html[data-style="playful"] .matrix-compare { margin-left: -6px; }
+html[data-style="playful"] .compare-bar .primary-button { box-shadow: 0 4px 0 var(--violet-dark); }
+html[data-style="playful"] .matrix-word-art { grid-area: art; display: block; width: 56px; height: 56px; overflow: hidden; border-radius: 14px; background: #f7f5ef; }
+html[data-style="playful"] .matrix-word-art :is(img, .artwork-image) { width: 100%; height: 100%; object-fit: cover; }
+html[data-style="playful"] .matrix-word-art .artwork-emoji { display: grid; place-items: center; width: 100%; height: 100%; font-size: 30px; }
+html[data-style="playful"] .progress-matrix .matrix-row > strong { grid-area: word; align-self: end; font-size: 18px; font-weight: 900; letter-spacing: 0.02em; }
+html[data-style="playful"] .word-status { grid-area: status; align-self: start; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; color: var(--muted); }
+html[data-style="playful"] .word-status i { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #c9c3d8; }
+html[data-style="playful"] .progress-matrix .matrix-row:has(.word-status.secure) { background: #f2fbf6; }
+html[data-style="playful"] .progress-matrix .matrix-row:has(.word-status.growing) { background: #fff8e0; }
+html[data-style="playful"] .progress-matrix .matrix-row:has(.word-status.reinforce) { background: #fdf0ef; }
+html[data-style="playful"] .word-status.secure i { background: #2fae74; }
+html[data-style="playful"] .word-status.growing i { background: #e0a800; }
+html[data-style="playful"] .word-status.reinforce i { background: #d9534f; }
+html[data-style="playful"] .progress-matrix .matrix-row.selected { box-shadow: 0 0 0 3px var(--violet), 0 4px 0 var(--line); }
+html[data-style="playful"] .progress-matrix .matrix-row:not(.matrix-header):hover { transform: translateY(-2px); }
+@media (prefers-reduced-motion: reduce) { html[data-style="playful"] .progress-matrix .matrix-row:hover { transform: none; } }
+@media (max-width: 760px) {
+  html[data-style="playful"] .stats-strip { grid-template-columns: 1fr 1fr; }
+  html[data-style="playful"] .stats-strip strong { font-size: 32px; }
+  html[data-style="playful"] .stats-mode-picker { flex-direction: row; }
+  html[data-style="playful"] .stats-mode-picker button { justify-content: center; }
+  html[data-style="playful"] .stats-mode-picker small { display: none; }
+}
+html[data-style="playful"] .progress-chart-helps { border: 0; border-radius: 22px; background: #fff8ef; }
+html[data-style="playful"] .progress-chart-helps li { border-radius: 999px; box-shadow: 0 2px 0 var(--line); }
+html[data-style="playful"] .progress-chart-filter select { border: 0; border-radius: 18px; box-shadow: 0 3px 0 var(--line); }
+html[data-style="playful"] .score-key span { white-space: nowrap; }
+@media (max-width: 760px) { html[data-style="playful"] .progress-matrix-panel .panel-heading { flex-wrap: wrap; } }
+
+/* Progressi filters in each style. */
+html[data-style="studio"] :is(.status-chip, .progress-select select) { border-radius: 8px; }
+html[data-style="studio"] .status-chip > span { border-radius: 6px; }
+html[data-style="playful"] .progress-sort { display: flex; }
+html[data-style="playful"] .status-chip { border: 0; box-shadow: 0 3px 0 var(--line); font-weight: 900; }
+html[data-style="playful"] .status-chip[aria-pressed="true"] { background: var(--violet); color: #ffffff; box-shadow: 0 3px 0 var(--violet-dark); }
+html[data-style="playful"] .status-chip[aria-pressed="true"] > span { color: var(--ink); }
+html[data-style="playful"] .progress-select select { border: 0; border-radius: 18px; box-shadow: 0 3px 0 var(--line); }
+html[data-style="playful"] .progress-matrix .word-status { color: var(--muted); font-size: 14px; }
