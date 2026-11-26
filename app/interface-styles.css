@@ -179,10 +179,10 @@ html[data-style="playful"] .library-copy .syllables.needs-review { color: #67440
 /* Giocoso · Esercizi: the sequence reads as a path of numbered stops. */
 html[data-style="playful"] .sequence-editor { border: 0; border-radius: 32px; background: #ffe1d6; box-shadow: none; }
 html[data-style="playful"] .sequence-order-list { gap: 16px; }
-html[data-style="playful"] .sequence-order-list article { position: relative; min-height: 60px; padding: 8px 10px 8px 8px; border: 0; border-radius: 22px; background: #ffffff; box-shadow: 0 4px 0 #f3c4b1; grid-template-columns: 48px 1fr auto; }
+html[data-style="playful"] .sequence-order-list article { position: relative; min-height: 60px; padding: 8px 10px 8px 8px; border: 0; border-radius: 22px; background: #ffffff; box-shadow: 0 4px 0 #f3c4b1; grid-template-columns: 44px 48px minmax(0, 1fr) auto; }
 html[data-style="playful"] .sequence-order-list article > span { width: 44px; height: 44px; border-radius: 50%; background: #ff8a5c; color: var(--ink); display: grid; place-items: center; font-size: 17px; font-weight: 900; }
 html[data-style="playful"] .sequence-order-list article > strong { font-size: 16px; }
-html[data-style="playful"] .sequence-order-list article:not(:last-child)::after { content: ""; position: absolute; left: 28px; top: calc(100% + 4px); width: 4px; height: 12px; border-radius: 2px; background: #e8a68a; }
+html[data-style="playful"] .sequence-order-list article:not(:last-child)::after { content: ""; position: absolute; left: 80px; top: calc(100% + 4px); width: 4px; height: 12px; border-radius: 2px; background: #e8a68a; }
 html[data-style="playful"] .sequence-order-list button { border: 0; border-radius: 50%; background: #fff3ec; box-shadow: 0 3px 0 #f3d6c6; }
 html[data-style="playful"] .sequence-order-list button:disabled { box-shadow: none; }
 html[data-style="playful"] .sequence-order-list .sequence-remove { background: #ffe4df; box-shadow: 0 3px 0 #f2c3ba; }
@@ -214,7 +214,6 @@ html[data-style="playful"] .danger-button { border: 0; border-radius: 999px; bac
 html[data-style="playful"] .sequence-actions .primary-button { box-shadow: 0 4px 0 var(--violet-dark); }
 html[data-style="playful"] .sequence-actions .ghost-button { box-shadow: 0 3px 0 var(--line); }
 html[data-style="playful"] .sequence-actions .danger-button { box-shadow: 0 3px 0 #f2c3ba; }
-@media (max-width: 760px) {
-  html[data-style="playful"] .sequence-order-list article { grid-template-columns: 48px 1fr; row-gap: 8px; }
-  html[data-style="playful"] .sequence-order-list article > div { grid-column: 2; justify-content: flex-end; }
-}
+html[data-style="playful"] .sequence-order-list .sequence-drag-handle { border-radius: 14px; box-shadow: none; background: transparent; }
+html[data-style="playful"] .sequence-order-list article.dragging { box-shadow: 0 10px 0 #f3c4b1, 0 18px 30px rgba(44, 36, 89, 0.16); }
+html[data-style="playful"] .sequence-order-list.is-dragging article:not(.dragging)::after { opacity: 0; }

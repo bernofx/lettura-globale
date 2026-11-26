@@ -39,6 +39,7 @@ import { remoteCommandDisposition, type RemoteControllerEvent, type RemoteSessio
 import { useRemoteSessionHost } from "./use-remote-session-host";
 import { isSimpleSentenceScene, sentenceMatchingAvailability } from "./domain/sentence-matching";
 import { logoutFromCloud } from "./domain/cloud-auth-client";
+import { moveItem, reorderVisible } from "./domain/reorder";
 import { useAppData } from "./features/app-state/use-app-data";
 import { useCloudSync } from "./features/app-state/use-cloud-sync";
 import { ExerciseBuilder } from "./features/exercises/exercise-builder";
@@ -953,16 +954,15 @@ function HomePageContent() {
     if (!activeSequence) return;
     setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: sequence.exerciseIds.includes(exerciseId) ? sequence.exerciseIds.filter((id) => id !== exerciseId) : [...sequence.exerciseIds, exerciseId], updatedAt: new Date().toISOString() } : sequence));
   };
-  const moveSequenceExercise = (exerciseId: string, direction: -1 | 1) => {
+  const moveSequenceExercise = (exerciseId: string, toIndex: number) => {
     if (!activeSequence) return;
     setSequences((current) => current.map((sequence) => {
       if (sequence.id !== activeSequence.id) return sequence;
-      const from = sequence.exerciseIds.indexOf(exerciseId);
-      const to = from + direction;
-      if (from < 0 || to < 0 || to >= sequence.exerciseIds.length) return sequence;
-      const exerciseIds = [...sequence.exerciseIds];
-      [exerciseIds[from], exerciseIds[to]] = [exerciseIds[to], exerciseIds[from]];
-      return { ...sequence, exerciseIds, updatedAt: new Date().toISOString() };
+      // toIndex is a position in the list the adult sees; hidden exercises keep their place.
+      const shown = sequence.exerciseIds.filter((id) => visibleExerciseById.has(id));
+      const from = shown.indexOf(exerciseId);
+      if (from < 0 || from === toIndex) return sequence;
+      return { ...sequence, exerciseIds: reorderVisible(sequence.exerciseIds, moveItem(shown, from, toIndex)), updatedAt: new Date().toISOString() };
     }));
   };
   const saveSequence = (sequence: Sequence) => {
