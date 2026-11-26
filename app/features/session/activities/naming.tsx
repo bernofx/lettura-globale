@@ -2,7 +2,7 @@ import { Check, CircleHelp, X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useAppUpdating, useUpdateState } from "../../../components/app-update";
 import { hasArtwork } from "../../../domain/library-availability";
-import { SessionTools } from "../session-chrome";
+import { SessionTools, SessionProgress } from "../session-chrome";
 import { type SessionNavigationProps } from "../session-view";
 import { Artwork } from "../../../shared/artwork";
 import { playFeedbackTone } from "../../../shared/audio";
@@ -68,7 +68,7 @@ export function NamingSession({ previewLabel, exercise, library, mode, manualAdv
   return <div className="session-screen naming-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Mix and vary</span><strong>{exercise.title}</strong></div>
-      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
+      <SessionProgress currentIndex={currentIndex} total={total} />
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body naming-body">

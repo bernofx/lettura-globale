@@ -4,7 +4,7 @@ import { useUpdateState } from "../../../components/app-update";
 import { articleFor } from "../../../domain/article-classification";
 import { correctMatchSpeech } from "../../../domain/correct-match-feedback";
 import { usePointerDrop } from "../../../use-pointer-drop";
-import { HelpDock, SessionTools } from "../session-chrome";
+import { HelpDock, SessionTools, SessionProgress } from "../session-chrome";
 import { type SessionNavigationProps } from "../session-view";
 import { useCorrectMatchFeedback } from "../use-correct-match-feedback";
 import { Artwork } from "../../../shared/artwork";
@@ -74,7 +74,7 @@ export function ArticleSortSession({ previewLabel, exercise, library, mode, manu
   return <div className="session-screen article-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">Categorie</span><strong>{exercise.title}</strong></div>
-      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
+      <SessionProgress currentIndex={currentIndex} total={total} />
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className="article-body">

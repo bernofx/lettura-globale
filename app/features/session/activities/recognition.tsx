@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import { useContext, useEffect, useRef } from "react";
 import { useUpdateState } from "../../../components/app-update";
 import { usePointerDrop } from "../../../use-pointer-drop";
-import { AnswerFeedback, AnswerLabel, HelpDock, SessionTools } from "../session-chrome";
+import { AnswerFeedback, AnswerLabel, HelpDock, SessionTools, SessionProgress } from "../session-chrome";
 import { type SessionNavigationProps } from "../session-view";
 import { Artwork } from "../../../shared/artwork";
 import { speakWord } from "../../../shared/audio";
@@ -43,7 +43,7 @@ export function RecognitionSession({ previewLabel, mode, manualAdvance = false, 
   return <div className="session-screen recognition-session">
     <div className="session-header">
       <div><span className="mode-tag">{previewLabel ?? (mode === "test" ? "Valutazione" : "Insegnamento")}</span><span className="mode-tag presentation-tag">{presentation === "images" ? "Foto + parole" : "Solo parole"}</span><strong>{exercise.title}</strong></div>
-      <div className="session-progress"><span>{currentIndex + 1} di {total}</span><div><i style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div></div>
+      <SessionProgress currentIndex={currentIndex} total={total} />
       <SessionTools soundEffects={soundEffects} onToggleSound={onToggleSound} onExit={onExit} protectedExit={!previewLabel} canPrevious={canPrevious} canForward={canForward} onPrevious={onPrevious} onForward={onForward} />
     </div>
     <div className={`session-body ${presentation === "words" ? "words-session" : ""}`}>

@@ -351,3 +351,17 @@ body.lg-session-active .session-screen{height:100dvh}
   .help-dock > :is(.help-dock-heading, .help-actions) { display: none; }
   .help-dock-trigger.ghost-button { display: inline-flex; }
 }
+
+/* Session progress: one dot per exercise; the ring fills turn by turn and turns into a green check. */
+.session-progress{--progress-fill:#3f9d74;--progress-track:#e4e1ec;--progress-current:var(--violet);--progress-halo:#e4e0fb;display:flex;align-items:center;justify-content:center;gap:10px;justify-self:center}
+.session-progress .progress-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0;padding:0;list-style:none}
+.session-progress .progress-dot{width:28px;height:28px;flex:0 0 auto;padding:4px;border-radius:50%;background:conic-gradient(var(--progress-fill) calc(var(--progress,0) * 1turn),var(--progress-track) 0);transition:background .3s ease}
+.session-screen .session-progress .progress-dot>span{width:100%;height:100%;margin:0;border-radius:50%;background:#fff;color:var(--muted);display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1}
+.session-progress .progress-dot.current{box-shadow:0 0 0 3px var(--progress-halo)}
+.session-screen .session-progress .progress-dot.current>span{color:var(--progress-current)}
+.session-progress .progress-dot.done{background:var(--progress-fill)}
+.session-screen .session-progress .progress-dot.done>span{background:transparent;color:#fff}
+.session-progress .progress-dot svg{width:15px;height:15px;stroke-width:3}
+.session-screen .session-progress .progress-caption{display:block;margin:0;color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
+@media(prefers-reduced-motion:reduce){.session-progress .progress-dot{transition:none}}
+@media(max-width:760px){.session-screen .session-progress .progress-dots{gap:4px}.session-screen .session-progress .progress-dot{width:24px;height:24px}.session-screen .session-progress .progress-dot>span{font-size:12px}.session-progress .progress-dot svg{width:13px;height:13px}}
