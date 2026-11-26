@@ -1048,7 +1048,20 @@ try {
     await evaluate(`[...document.querySelectorAll('.interface-style-grid button')].find(button => button.querySelector('strong').textContent === ${JSON.stringify(name)}).click()`);
     await wait(`document.documentElement.dataset.style === ${JSON.stringify(style)} && document.querySelector('.interface-style-grid [aria-pressed=true] strong').textContent === ${JSON.stringify(name)}`);
     assert.equal(await evaluate(documentFitsWidth), true, `${name} fits the tablet width`);
+    if (style === "studio") {
+      assert.deepEqual(await evaluate("[...document.querySelectorAll('.sidebar .nav-item')].map(item => item.dataset.area)"),
+        ["home", "session", "exercises", "stats", "library", "caa", "games", "profiles"]);
+    }
   }
+  await viewport(320, 800);
+  const pickers = await evaluate(`[...document.querySelectorAll('.interface-style-grid button')].map(button => {
+    const { top, left, right, height } = button.getBoundingClientRect();
+    return { top, left, right, height };
+  })`);
+  assert.equal(pickers.length, 3);
+  assert.equal(new Set(pickers.map(picker => picker.top)).size, 1, "all styles are visible in the same row");
+  assert.ok(pickers.every(picker => picker.left >= 0 && picker.right <= 320 && picker.height >= 44));
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.sidebar')).visibility"), "hidden", "the closed menu leaves the focus order");
   console.log("PASS App shell: nine views fit six mobile and tablet widths; Classico, Studio and Giocoso styles apply.");
 } finally {
   socket.close();

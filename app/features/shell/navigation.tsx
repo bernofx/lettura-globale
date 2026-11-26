@@ -1,4 +1,6 @@
 import { BarChart3, BookOpenCheck, ChevronRight, Gamepad2, Home, Library, LogOut, Menu, MessageSquareText, Palette, Play, Settings, UserCog, UserRound } from "lucide-react";
+import { Fragment } from "react";
+import { type InterfaceStyle } from "../../domain/appearance";
 import { AppVersionBadge } from "../../components/app-update";
 import { backendStatusInfo } from "../../shared/cloud-client";
 import { type BackendStatus, type ChildProfile, type Therapist, type View } from "../../shared/types";
@@ -11,10 +13,7 @@ export const settingsViews: { id: View; label: string; icon: typeof Home }[] = [
   { id: "appearance", label: "Aspetto", icon: Palette },
 ];
 
-/** Sections shown as headings by the Studio style, which also reorders the menu by them. */
-export const navSections = [{ id: "work", label: "Lavoro" }, { id: "content", label: "Contenuti" }] as const;
-
-export const navItems: { id: View; label: string; icon: typeof Home; group?: View[] }[] = [
+const navItems: { id: View; label: string; icon: typeof Home; group?: View[] }[] = [
   { id: "home", label: "Oggi", icon: Home },
   { id: "library", label: "Libreria", icon: Library },
   { id: "exercises", label: "Esercizi", icon: BookOpenCheck },
@@ -31,10 +30,41 @@ export function SettingsTabs({ view, onNavigate }: { view: View; onNavigate: (vi
   </nav></div>;
 }
 
-export function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus }) {
+const studioNavigation = [
+  { heading: "Lavoro", items: ["home", "session", "exercises", "stats"] },
+  { heading: "Contenuti", items: ["library", "caa", "games"] },
+  { heading: null, items: ["profiles"] },
+] as const satisfies ReadonlyArray<{ heading: string | null; items: readonly View[] }>;
+
+export function Sidebar({ view, onNavigate, open, onClose, therapist, onLogout, backendStatus, interfaceStyle }: { view: View; onNavigate: (view: View) => void; open: boolean; onClose: () => void; therapist: Therapist; onLogout: () => void; backendStatus: BackendStatus; interfaceStyle: InterfaceStyle }) {
   const initials = `${therapist.firstName[0] ?? ""}${therapist.lastName[0] ?? ""}`;
   const status = backendStatusInfo(backendStatus);
-  return <>{open && <button className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}<aside className={`sidebar ${open ? "open" : ""}`}><div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div><nav aria-label="Navigazione principale">{navSections.map(section => <p key={section.id} className={`nav-section nav-section-${section.id}`} aria-hidden="true">{section.label}</p>)}{navItems.map(({ id, label, icon: Icon, group }) => <button key={id} data-area={id} className={view === id || group?.includes(view) ? "nav-item active" : "nav-item"} aria-current={view === id || group?.includes(view) ? "page" : undefined} onClick={() => onNavigate(id)}><Icon size={20} strokeWidth={2} /><span>{label}</span></button>)}</nav>{/* The top bar always shows the status; the menu adds the explanation only when something needs attention. */}{status.tone !== "ready" && <div className={`sidebar-note cloud-status-${status.tone}`}><span className="status-dot" /><div><strong>{status.label}</strong><small>{status.detail}</small></div></div>}<div className="profile-card"><button onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div></aside></>;
+  const renderItem = ({ id, label, icon: Icon, group }: (typeof navItems)[number]) => {
+    const active = view === id || group?.includes(view);
+    return <button key={id} type="button" data-area={id} className={active ? "nav-item active" : "nav-item"}
+      aria-current={active ? "page" : undefined} onClick={() => onNavigate(id)}>
+      <Icon size={20} strokeWidth={2} aria-hidden="true" /><span>{label}</span>
+    </button>;
+  };
+
+  return <>
+    {open && <button type="button" className="sidebar-backdrop" onClick={onClose} aria-label="Chiudi menu" />}
+    <aside className={`sidebar ${open ? "open" : ""}`}>
+      <div className="brand"><span className="brand-mark brand-logo" aria-hidden="true" /><span>Lettura<br /><strong>Globale</strong></span></div>
+      <nav aria-label="Navigazione principale">
+        {interfaceStyle === "studio" ? studioNavigation.map(({ heading, items }) => <Fragment key={items[0]}>
+          {heading && <p className="nav-section">{heading}</p>}
+          {items.map((id) => {
+            const item = navItems.find((entry) => entry.id === id);
+            return item && renderItem(item);
+          })}
+        </Fragment>) : navItems.map(renderItem)}
+      </nav>
+      {/* The top bar always shows the status; the menu adds the explanation only when something needs attention. */}
+      {status.tone !== "ready" && <div className={`sidebar-note cloud-status-${status.tone}`}><span className="status-dot" /><div><strong>{status.label}</strong><small>{status.detail}</small></div></div>}
+      <div className="profile-card"><button type="button" onClick={() => onNavigate("profiles")}><span className="avatar">{initials}</span><span><strong>{therapist.firstName}</strong><small>{therapist.role}</small></span><Settings size={17} /></button><button type="button" className="logout-button" onClick={onLogout} aria-label="Esci"><LogOut size={16} /></button></div>
+    </aside>
+  </>;
 }
 
 export function Topbar({ onMenu, therapist, child, childProfiles, onSelectChild, onOpenProfiles, backendStatus, onOpenSaveJournal }: { onMenu: () => void; therapist: Therapist; child: ChildProfile; childProfiles: ChildProfile[]; onSelectChild: (id: string) => void; onOpenProfiles: () => void; backendStatus: BackendStatus; onOpenSaveJournal: () => void }) {

@@ -1076,7 +1076,7 @@ function HomePageContent() {
   if (controllerToken) return <RemoteControllerConsole token={controllerToken} realtimeSessionId={realtimeControllerSessionId} therapist={therapist} onLogout={logout} onExit={exitController} onJoined={controllerJoined} />;
   if (!activeChild && (view === "caa" || view === "games")) return (
     <div className="app-shell">
-      <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
+      <Sidebar interfaceStyle={interfaceStyle} view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content">
         <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Apri menu"><Menu /></button>
@@ -1094,7 +1094,7 @@ function HomePageContent() {
   return (
     <RewardActiveContext.Provider value={rewardActive || appUpdating}>
     <div className="app-shell">
-      <Sidebar view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
+      <Sidebar interfaceStyle={interfaceStyle} view={view} onNavigate={navigate} open={menuOpen} onClose={() => setMenuOpen(false)} therapist={therapist} onLogout={logout} backendStatus={backendStatus} />
       <main className="main-content" inert={rewardActive} aria-hidden={rewardActive || undefined}>
         <Topbar onMenu={() => setMenuOpen(true)} therapist={therapist} child={activeChild} childProfiles={sessionActive || sessionReady ? [activeChild] : associatedChildren} onSelectChild={setActiveChildId} onOpenProfiles={() => navigate("profiles")} backendStatus={backendStatus} onOpenSaveJournal={() => setSaveJournalOpen(true)} />
         {view === "home" && <Dashboard therapist={therapist} child={activeChild} libraryCount={visibleLibrary.filter((item) => !item.categorySymbolOnly && item.contentKind !== "sentence").length} illustratedCount={visibleLibrary.filter((item) => !item.categorySymbolOnly && item.contentKind !== "sentence" && hasArtwork(item)).length} syllableReviewCount={visibleLibrary.filter((item) => !item.categorySymbolOnly && item.contentKind !== "sentence" && item.syllableStatus === "needs-review").length} exerciseCount={visibleExercises.length} sequenceTotal={visibleSequences.length} activeSequence={activeSequence ? { title: activeSequence.title, exerciseTitles: sequenceExercises.map((exercise) => exercise.title) } : undefined} accuracy={accuracy} attemptCount={firstAttempts.length} onStart={() => navigate("session")} onNavigate={navigate} />}
