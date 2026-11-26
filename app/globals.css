@@ -384,3 +384,7 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .sequence-order-list article{position:relative;transition:transform .18s ease,box-shadow .18s ease}
 .sequence-order-list article.dragging{z-index:2;transition:box-shadow .18s ease;background:#fff;box-shadow:0 12px 28px rgba(38,34,72,.18)}
 @media(prefers-reduced-motion:reduce){.sequence-order-list article{transition:none}}
+/* Catalog card actions: same family as the sequence commands; delete is always tinted red. */
+.exercise-actions button.delete{border-color:#f0d8d4;background:#fff7f5}.exercise-actions button.delete:hover{border-color:#a63e32}
+.exercise-actions button:not(.delete):hover{border-color:var(--violet);color:var(--violet)}
+.sequence-toggle:hover{border-color:var(--violet)}.sequence-toggle.included:hover{border-color:#8fd0b3}

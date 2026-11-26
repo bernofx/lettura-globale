@@ -217,3 +217,12 @@ html[data-style="playful"] .sequence-actions .danger-button { box-shadow: 0 3px 
 html[data-style="playful"] .sequence-order-list .sequence-drag-handle { border-radius: 14px; box-shadow: none; background: transparent; }
 html[data-style="playful"] .sequence-order-list article.dragging { box-shadow: 0 10px 0 #f3c4b1, 0 18px 30px rgba(44, 36, 89, 0.16); }
 html[data-style="playful"] .sequence-order-list.is-dragging article:not(.dragging)::after { opacity: 0; }
+
+/* Catalog card actions in each style (shared markup). */
+html[data-style="studio"] :is(.exercise-actions button, .sequence-toggle) { border-radius: 8px; }
+html[data-style="playful"] .exercise-actions button { border: 0; border-radius: 999px; background: #fff8ef; box-shadow: 0 3px 0 var(--line); font-weight: 900; }
+html[data-style="playful"] .exercise-actions button.delete { background: #ffe4df; box-shadow: 0 3px 0 #f2c3ba; }
+html[data-style="playful"] .exercise-actions button:hover { transform: translateY(-1px); }
+html[data-style="playful"] .sequence-toggle { border: 0; border-radius: 999px; font-weight: 900; background: #efedff; box-shadow: 0 3px 0 #d8d3f6; }
+html[data-style="playful"] .sequence-toggle.included { background: #d9f2e6; color: #1f7a52; box-shadow: 0 3px 0 #b4e0ca; }
+@media (prefers-reduced-motion: reduce) { html[data-style="playful"] .exercise-actions button:hover { transform: none; } }
