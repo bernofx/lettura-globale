@@ -1,3 +1,4 @@
+import { hydrateInterfaceStyle } from "../domain/appearance";
 import { normalizeLearningCategory } from "../domain/activity-generation";
 import { type CategorySymbols } from "../domain/category-images";
 import { articleFor } from "../domain/article-classification";
@@ -93,5 +94,6 @@ export function normalizeBackendState(saved: BackendState): BackendState {
     activeSequenceId: saved.activeSequenceId, library: saved.library ?? [], exercises: saved.exercises ?? [], sequences: saved.sequences ?? [],
     attempts: saved.attempts ?? [], helps: saved.helps ?? [], sessionHistory: saved.sessionHistory ?? [], appearance: saved.appearance, soundPreferences: saved.soundPreferences, categorySymbols: saved.categorySymbols,
     tracingOrderRequired: saved.tracingOrderRequired === true,
+    interfaceStyle: hydrateInterfaceStyle(saved.interfaceStyle),
   };
 }

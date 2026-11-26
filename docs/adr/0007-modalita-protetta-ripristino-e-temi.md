@@ -27,3 +27,9 @@ L'aspetto dell'app era fisso e non offriva una configurazione semplice e persist
 La sessione può essere recuperata dopo refresh, sospensione o chiusura, ma le interazioni avvenute fra l'ultimo salvataggio e l'interruzione possono dover essere ripetute. `localStorage` può essere cancellato dal browser o non essere disponibile, quindi il recupero è una funzione di continuità e non un backup.
 
 La preferenza visiva è condivisa a livello di account cloud; l'ultima modifica sincronizzata prevale come per il resto dello snapshot. L'avvio non resta più bloccato indefinitamente per un errore cloud: il pannello locale rimane utilizzabile e segnala lo stato di sincronizzazione.
+
+## Aggiornamento: stili dell’interfaccia
+
+Oltre a palette e forma dei controlli, Aspetto offre tre stili dell’interfaccia: **Classico** (l’aspetto di sempre, predefinito), **Studio** (menu laterale scuro raggruppato in Lavoro e Contenuti, pagine dense, riquadro «Da sistemare» in Oggi e, durante l’esercizio su tablet, aiuti dell’adulto in un pannello laterale scuro) e **Giocoso** (aree a colori, forme morbide, carattere Nunito, riquadri delle aree in Oggi e carte colorate nell’esercizio). Lo stile si applica come `data-style` sull’elemento radice e i fogli di stile lo sovrascrivono senza cambiare i componenti; palette e forma continuano a valere sopra ogni stile.
+
+La preferenza `interfaceStyle` (`classic` | `studio` | `playful`) è sincronizzata con l’account nello snapshot cloud, con copia locale, come `tracingOrderRequired`: nessuna colonna o migrazione D1, gli snapshot precedenti valgono come Classico, i valori ignoti sono rifiutati dal server e un salvataggio completo che la omette la conserva. I caratteri Inter, Space Grotesk e Nunito sono inclusi nell’app (`@fontsource`, licenza SIL OFL 1.1) e non comportano richieste a servizi esterni.

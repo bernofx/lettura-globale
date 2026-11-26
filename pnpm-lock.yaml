@@ -11,6 +11,15 @@ importers:
       '@base-ui/react':
         specifier: ^1.7.0
         version: 1.9.0(@date-fns/tz@1.5.0)(@types/react@19.2.14)(date-fns@4.4.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@fontsource/inter':
+        specifier: 5.2.5
+        version: 5.2.5
+      '@fontsource/nunito':
+        specifier: 5.2.5
+        version: 5.2.5
+      '@fontsource/space-grotesk':
+        specifier: 5.2.6
+        version: 5.2.6
       '@hookform/resolvers':
         specifier: ^5.7.1
         version: 5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.90.0(@types/react@19.2.14)(react@19.2.6))(zod@3.25.76)
@@ -991,6 +1000,15 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource/inter@5.2.5':
+    resolution: {integrity: sha512-kbsPKj0S4p44JdYRFiW78Td8Ge2sBVxi/PIBwmih+RpSXUdvS9nbs1HIiuUSPtRMi14CqLEZ/fbk7dj7vni1Sg==}
+
+  '@fontsource/nunito@5.2.5':
+    resolution: {integrity: sha512-KeB3US1uHB3GpVo0FewYRtHpG+UZJiRqu4xzvCRkZ8ceJPTx7lf0ZsKKWpvXCMALUJSeaD/ol/BSvLaqli5ZRQ==}
+
+  '@fontsource/space-grotesk@5.2.6':
+    resolution: {integrity: sha512-Ejf50hUdoWYFkVdqckXxXuIY3tPgQZ/095EHa21uLBOuk7CQAlxqSdkPu5y47Xv+xa8A4TSrdAJlS9YdF5DqGg==}
 
   '@hookform/resolvers@5.9.1':
     resolution: {integrity: sha512-7b7vsbraJxKgjVSA1Nur9tLwj539WGJUBLA7QNvXnFoT2pM5Z7G+6rlukk4B2/QrTZy6huRtH6wKeESPKuIr6w==}
@@ -3668,6 +3686,7 @@ packages:
   image-size@2.0.2:
     resolution: {integrity: sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w==}
     engines: {node: '>=16.x'}
+    deprecated: Use latest 2.x please
     hasBin: true
 
   immer@11.1.21:
@@ -5649,6 +5668,12 @@ snapshots:
       react-dom: 19.2.6(react@19.2.6)
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource/inter@5.2.5': {}
+
+  '@fontsource/nunito@5.2.5': {}
+
+  '@fontsource/space-grotesk@5.2.6': {}
 
   '@hookform/resolvers@5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.90.0(@types/react@19.2.14)(react@19.2.6))(zod@3.25.76)':
     dependencies:

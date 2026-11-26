@@ -1,4 +1,4 @@
-import { BarChart3, BookOpenCheck, ChevronRight, CircleHelp, FolderHeart, ImagePlus, MousePointer2, Play } from "lucide-react";
+import { AlertTriangle, BarChart3, BookOpenCheck, ChevronRight, CircleHelp, FolderHeart, Gamepad2, ImagePlus, Library, MessageSquareText, MousePointer2, Play } from "lucide-react";
 import { WhatsNew } from "../../components/whats-new";
 import { type ChildProfile, type Therapist, type View } from "../../shared/types";
 import { PanelHeading } from "../../shared/ui/headings";
@@ -10,6 +10,7 @@ type DashboardProps = {
   child: ChildProfile;
   libraryCount: number;
   illustratedCount: number;
+  syllableReviewCount: number;
   exerciseCount: number;
   sequenceTotal: number;
   activeSequence?: ActiveSequenceSummary;
@@ -19,7 +20,7 @@ type DashboardProps = {
   onNavigate: (view: View) => void;
 };
 
-export function Dashboard({ therapist, child, libraryCount, illustratedCount, exerciseCount, sequenceTotal, activeSequence, accuracy, attemptCount, onStart, onNavigate }: DashboardProps) {
+export function Dashboard({ therapist, child, libraryCount, illustratedCount, syllableReviewCount, exerciseCount, sequenceTotal, activeSequence, accuracy, attemptCount, onStart, onNavigate }: DashboardProps) {
   const sequenceLength = activeSequence?.exerciseTitles.length ?? 0;
   const minutes = Math.max(5, Math.round(sequenceLength * 1.5));
   const hasSequence = Boolean(activeSequence && sequenceLength);
@@ -43,6 +44,20 @@ export function Dashboard({ therapist, child, libraryCount, illustratedCount, ex
         {activeSequence!.exerciseTitles.slice(0, 4).map((title, index) => <li key={`${title}-${index}`}><span>{index + 1}</span>{title}</li>)}
         {sequenceLength > 4 && <li className="hero-sequence-more">+ altri {sequenceLength - 4}</li>}
       </ol>}
+    </section>
+    {/* Shown by the Giocoso style: one coloured tile per area, as on the home of a children's app. */}
+    <nav className="area-tiles" aria-label="Aree">
+      <button type="button" className="area-tile area-exercises" onClick={() => onNavigate("exercises")}><span className="area-tile-icon"><BookOpenCheck /></span><strong>Esercizi</strong><small>{exerciseCount} pronti</small></button>
+      <button type="button" className="area-tile area-library" onClick={() => onNavigate("library")}><span className="area-tile-icon"><Library /></span><strong>Libreria</strong><small>{illustratedCount} con immagine</small></button>
+      <button type="button" className="area-tile area-games" onClick={() => onNavigate("games")}><span className="area-tile-icon"><Gamepad2 /></span><strong>Giochi</strong><small>Colora, scoppia, ripassa</small></button>
+      <button type="button" className="area-tile area-caa" onClick={() => onNavigate("caa")}><span className="area-tile-icon"><MessageSquareText /></span><strong>Storie in CAA</strong><small>Leggi e stampa</small></button>
+    </nav>
+    {/* Shown by the Studio style: what needs the adult's attention in the content. */}
+    <section className="panel attention-panel" aria-labelledby="attention-title">
+      <h2 id="attention-title"><AlertTriangle aria-hidden="true" />Da sistemare</h2>
+      <button type="button" onClick={() => onNavigate("library")}><span>Sillabazione da verificare</span><strong>{syllableReviewCount}</strong></button>
+      <button type="button" onClick={() => onNavigate("library")}><span>Parole senza immagine</span><strong>{libraryCount - illustratedCount}</strong></button>
+      <button type="button" onClick={() => onNavigate("exercises")}><span>Sequenze salvate</span><strong>{sequenceTotal}</strong></button>
     </section>
     <section className="metric-grid">
       <Metric icon={<MousePointer2 />} label="Primi tentativi" value={String(attemptCount)} detail={`registrati per ${child.firstName}`} tone="lilac" />

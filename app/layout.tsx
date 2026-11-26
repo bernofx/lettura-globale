@@ -2,6 +2,16 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./sounds-and-celebration.css";
 import "./caa-stories.css";
+import "./interface-styles.css";
+// Fonts of the Studio and Giocoso styles, served by the app itself (no external requests).
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/space-grotesk/600.css";
+import "@fontsource/space-grotesk/700.css";
+import "@fontsource/nunito/600.css";
+import "@fontsource/nunito/800.css";
+import "@fontsource/nunito/900.css";
 
 export const metadata: Metadata = {
   title: "Lettura Globale",
