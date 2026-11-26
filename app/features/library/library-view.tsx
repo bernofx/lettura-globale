@@ -24,8 +24,16 @@ const librarySections = [
   ["puzzle-library-title", "Puzzle"], ["library-exercise-sounds", "Suoni"], ["library-game-soundtrack", "Colonna sonora"],
 ] as const;
 
+const wordFilters = [
+  { id: "missing-image", label: "Senza immagine", matches: (item: LibraryItem) => !hasArtwork(item) },
+  { id: "syllables", label: "Sillabazione da verificare", matches: (item: LibraryItem) => item.syllableStatus === "needs-review" },
+  { id: "private-image", label: "Foto private", matches: (item: LibraryItem) => Boolean(item.privateUpload && hasArtwork(item)) },
+] as const;
+
+type WordFilter = typeof wordFilters[number]["id"];
+
 export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUpload, items, search, setSearch, onUpload, onEdit, onDelete, sounds, onSoundsChange, puzzles, soundtrackUploadOpen, onSoundtrackUploadClose, scheduledImagesProfile, onCatalogPublished }: { puzzles: PuzzleLibrary; soundtrackUploadOpen: boolean; onSoundtrackUploadClose: () => void; scheduledImagesProfile?: string; onCatalogPublished: () => Promise<void>; categorySymbols: CategorySymbols; onCategorySymbol: (category: string, id: string) => void; onCategoryUpload: (category: string, image: string) => Promise<void>; items: LibraryItem[]; search: string; setSearch: (value: string) => void; onUpload: (kind: "word" | "sentence" | "puzzle" | "soundtrack") => void; onEdit: (item: LibraryItem) => void; onDelete: (item: LibraryItem) => void; sounds: SoundPreferences; onSoundsChange: (sounds: SoundPreferences) => void }) {
-  const [reviewOnly, setReviewOnly] = useState(false);
+  const [wordFilter, setWordFilter] = useState<WordFilter | null>(null);
   const [wordsExpanded, setWordsExpanded] = useState(false);
   const [sentencesExpanded, setSentencesExpanded] = useState(false);
   const [catalogTool, setCatalogTool] = useState<{ profile: string; tool: "search" | "generate" }>();
@@ -63,16 +71,36 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
 
   const words = items.filter((item) => !item.categorySymbolOnly && item.contentKind !== "sentence");
   const sentences = items.filter((item) => item.contentKind === "sentence");
-  const reviewCount = words.filter((item) => item.syllableStatus === "needs-review").length;
   const normalizedSearch = search.toLocaleLowerCase("it-IT");
   const matches = (item: LibraryItem) => `${item.word} ${item.category} ${item.syllabification ?? ""} ${item.subject ?? ""} ${item.verb ?? ""}`.toLocaleLowerCase("it-IT").includes(normalizedSearch);
-  const filteredWords = words.filter((item) => (!reviewOnly || item.syllableStatus === "needs-review") && matches(item));
+  const searchedWords = words.filter(matches);
+  const activeFilter = wordFilters.find(({ id }) => id === wordFilter);
+  const filteredWords = activeFilter ? searchedWords.filter(activeFilter.matches) : searchedWords;
   const filteredSentences = sentences.filter(matches);
   const searching = Boolean(normalizedSearch.trim());
-  const visibleWords = wordsExpanded || searching || reviewOnly ? filteredWords : filteredWords.slice(0, 4);
+  const visibleWords = wordsExpanded || searching || activeFilter ? filteredWords : filteredWords.slice(0, 4);
   const visibleSentences = sentencesExpanded || searching ? filteredSentences : filteredSentences.slice(0, 4);
-  const expansion = (label: string, entries: LibraryItem[], visible: LibraryItem[], expanded: boolean, setExpanded: (value: boolean) => void) => entries.length > 4 && !searching && !(label === "immagini" && reviewOnly) ? <div className="library-expansion"><span>Mostrati {visible.length} di {entries.length}</span><button type="button" className="ghost-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}{expanded ? "Riduci" : `Mostra tutte le ${label}`}</button></div> : null;
-  const cards = (entries: LibraryItem[], sentence = false) => <div className="library-grid">{entries.map((item) => <article className="library-card" key={item.id}><div className="library-art"><Artwork item={item} />{item.privateUpload && <span className="private-badge">Privata</span>}{!hasArtwork(item) && <span className="word-only-badge">Solo parola</span>}<div className="card-actions"><button onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button><button className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button></div></div><div className="library-copy"><span className="category">{sentence ? `${item.subject} · ${item.verb}` : `${item.category}${articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}`}</span><h3>{item.word.toLocaleUpperCase("it-IT")}</h3>{sentence ? <p className="syllables">SOGGETTO + VERBO</p> : <p className={item.syllableStatus === "needs-review" ? "syllables needs-review" : "syllables"}>{item.syllabification?.toLocaleUpperCase("it-IT")} · {item.syllableCount} sillabe{item.syllableStatus === "needs-review" ? " · Da verificare" : ""}</p>}<p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p><small>Autore: {item.author}</small></div></article>)}</div>;
+  const expansion = (label: string, entries: LibraryItem[], visible: LibraryItem[], expanded: boolean, setExpanded: (value: boolean) => void) => entries.length > 4 && !searching && !(label === "immagini" && activeFilter) ? <div className="library-expansion"><span>Mostrati {visible.length} di {entries.length}</span><button type="button" className="ghost-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}{expanded ? "Riduci" : `Mostra tutte le ${label}`}</button></div> : null;
+  const cards = (entries: LibraryItem[], sentence = false) => <div className={sentence ? "library-grid" : "library-grid library-word-grid"}>
+    {entries.map((item) => <article className="library-card" key={item.id}>
+      <div className="library-art"><Artwork item={item} /></div>
+      <div className="library-copy">
+        <span className="category">{sentence ? `${item.subject} · ${item.verb}` : `${item.category}${articleFor(item) ? ` · ${articleFor(item)}` : " · NON USATA IN IL/LA"}`}</span>
+        <h3>{item.word.toLocaleUpperCase("it-IT")}</h3>
+        {sentence ? <p className="syllables">SOGGETTO + VERBO</p> : <p className={item.syllableStatus === "needs-review" ? "syllables needs-review" : "syllables"}>{item.syllabification?.toLocaleUpperCase("it-IT")} · {item.syllableCount} sillabe{item.syllableStatus === "needs-review" ? " · Da verificare" : ""}</p>}
+        <p>{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.source}</a> : item.source} · {item.licenseUrl ? <a href={item.licenseUrl} target="_blank" rel="noreferrer">{item.license}</a> : item.license}</p>
+        <small>Autore: {item.author}</small>
+        {(item.privateUpload || !hasArtwork(item)) && <div className="library-card-badges">
+          {item.privateUpload && <span className="private-badge">Privata</span>}
+          {!hasArtwork(item) && <span className="word-only-badge">Solo parola</span>}
+        </div>}
+      </div>
+      <div className="card-actions">
+        <button type="button" onClick={() => onEdit(item)} aria-label={`Modifica ${item.word}`} title="Modifica"><Pencil /></button>
+        <button type="button" className="delete" onClick={() => onDelete(item)} aria-label={`Elimina ${item.word}`} title="Elimina"><Trash2 /></button>
+      </div>
+    </article>)}
+  </div>;
   return <div className="page library-sections">
     <PageHeader eyebrow="CONTENUTI" title="Libreria" description="Gestisci immagini singole, frasi d’azione, puzzle e suoni.">
       {scheduledImagesProfile && <div className="library-catalog-actions">
@@ -97,9 +125,14 @@ export function LibraryView({ categorySymbols, onCategorySymbol, onCategoryUploa
       <SectionHeading id="library-words" title="Parole e immagini" description="Inserisci una parola e, se vuoi, carica una foto dal dispositivo anche in seguito.">
         <button type="button" className="primary-button" onClick={() => onUpload("word")}><Plus size={18} aria-hidden="true" />Aggiungi parola o foto</button>
       </SectionHeading>
-      <button type="button" className={`filter-chip ${reviewOnly ? "selected" : ""}`} onClick={() => setReviewOnly((value) => !value)} aria-pressed={reviewOnly}>Sillabazione da verificare <span>{reviewCount}</span></button>
+      <div className="filter-chips library-word-filters" role="group" aria-label="Filtra parole e immagini">
+        {wordFilters.map(({ id, label, matches: matchesFilter }) => <button key={id} type="button" className={`filter-chip ${wordFilter === id ? "selected" : ""}`}
+          onClick={() => setWordFilter((current) => current === id ? null : id)} aria-pressed={wordFilter === id}>
+          {label} <span>{searchedWords.filter(matchesFilter).length}</span>
+        </button>)}
+      </div>
       {cards(visibleWords)}
-      {!filteredWords.length && <div className="empty-state compact"><Search /><h3>Nessuna immagine singola</h3></div>}
+      {!filteredWords.length && <div className="empty-state compact"><Search /><h3>{activeFilter ? "Nessuna parola corrisponde al filtro" : "Nessuna parola o immagine"}</h3></div>}
       {expansion("immagini", filteredWords, visibleWords, wordsExpanded, setWordsExpanded)}
     </section>
     <section className="panel library-area sentence-library-area" aria-labelledby="library-scenes">

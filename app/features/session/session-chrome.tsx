@@ -1,5 +1,5 @@
-import { ChevronLeft, ChevronRight, CircleHelp, Volume2, VolumeX } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, CircleHelp, Volume2, VolumeX, X } from "lucide-react";
+import { useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ImageCreditsButton } from "./session-image-credits";
 import { RemoteHostBadge } from "../remote/remote-host";
 import { type SessionNavigationProps } from "./session-view";
@@ -73,6 +73,39 @@ export function AnswerLabel({ word, wordOnly }: { word: string; wordOnly: boolea
   return <span ref={labelRef}>{word.toLocaleUpperCase("it-IT")}</span>;
 }
 
+export function AnswerFeedback({ state, children }: { state: "idle" | "wrong" | "correct"; children: ReactNode }) {
+  return <div className={`feedback answer-feedback ${state}`} role="status" aria-atomic="true">{children}</div>;
+}
+
 export function HelpDock({ onHelp }: { onHelp: (label: string) => void }) {
-  return <aside className="help-dock"><div><CircleHelp /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div><div className="help-actions">{helpTypes.map((help) => <button key={help} onClick={() => onHelp(help)}>{help}</button>)}</div></aside>;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const remoteConnected = useContext(RemoteHostContext)?.status === "connected";
+  useEffect(() => {
+    if (remoteConnected) dialog.current?.close();
+  }, [remoteConnected]);
+
+  return <aside className="help-dock" aria-label="Aiuti dell’adulto">
+    <div className="help-dock-heading"><CircleHelp aria-hidden="true" /><span><strong>Aiuti dell’adulto</strong><small>Scegli solo quando serve</small></span></div>
+    <HelpActions onSelect={onHelp} />
+    <button ref={trigger} className="help-dock-trigger ghost-button" type="button" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>
+      <CircleHelp size={18} aria-hidden="true" /> Aiuti dell’adulto
+    </button>
+    <dialog ref={dialog} className="help-dock-dialog" aria-labelledby={titleId} onClose={() => {
+      if (!remoteConnected) trigger.current?.focus({ preventScroll: true });
+    }}>
+      <header><h2 id={titleId}>Aiuti dell’adulto</h2><button type="button" className="icon-button" aria-label="Chiudi aiuti" onClick={() => dialog.current?.close()}><X aria-hidden="true" /></button></header>
+      <HelpActions onSelect={(help) => {
+        onHelp(help);
+        dialog.current?.close();
+      }} />
+    </dialog>
+  </aside>;
+}
+
+function HelpActions({ onSelect }: { onSelect: (help: string) => void }) {
+  return <div className="help-actions">
+    {helpTypes.map((help) => <button key={help} type="button" onClick={() => onSelect(help)}>{help}</button>)}
+  </div>;
 }

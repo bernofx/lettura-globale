@@ -27,3 +27,15 @@
 }
 
 .library-catalog-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+.library-word-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.library-grid .library-card { position: relative; }
+.library-card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.library-card-badges > span { position: static; border: 1px solid var(--line); }
+.library-card-badges .private-badge { color: #4a3a84; background: #f1ebff; }

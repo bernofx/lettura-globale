@@ -1,8 +1,8 @@
-import { Check, Volume2 } from "lucide-react";
+import { Check, Volume2, X } from "lucide-react";
 import { useContext, useEffect, useRef } from "react";
 import { useUpdateState } from "../../../components/app-update";
 import { usePointerDrop } from "../../../use-pointer-drop";
-import { HelpDock, SessionTools } from "../session-chrome";
+import { AnswerFeedback, HelpDock, SessionTools } from "../session-chrome";
 import { type SessionNavigationProps } from "../session-view";
 import { Artwork } from "../../../shared/artwork";
 import { speakWord } from "../../../shared/audio";
@@ -48,10 +48,12 @@ export function SentenceMatchingSession({ previewLabel, mode, manualAdvance = fa
         const item = library.find((candidate) => candidate.id === id);
         if (!item) return null;
         const status = answerState === "correct" && id === prompt.id ? "correct" : wrongAnswerId === id ? "wrong" : "";
-        return <button type="button" data-answer-id={id} aria-label={`Immagine: ${item.word}`} className={`answer-card sentence-answer-card ${status}`} disabled={answerState === "correct"} key={id} onClick={() => onChoose(id)}><span className="answer-art"><Artwork item={item} eager /></span>{status === "correct" && <i><Check /></i>}</button>;
+        return <button type="button" data-answer-id={id} aria-label={`Immagine: ${item.word}${status === "wrong" ? ", risposta errata" : ""}`} className={`answer-card sentence-answer-card ${status}`} disabled={answerState === "correct"} key={id} onClick={() => onChoose(id)}><span className="answer-art"><Artwork item={item} eager /></span>{status === "correct" && <i className="choice-mark correct-mark" aria-hidden="true"><Check /></i>}{status === "wrong" && <i className="choice-mark wrong-mark" aria-hidden="true"><X /></i>}</button>;
       })}</div>
-      {answerState === "wrong" && <div className="feedback wrong"><strong>Riprova</strong><small>Guarda bene chi compie l’azione e che cosa sta facendo.</small></div>}
-      {answerState === "correct" && <div className="feedback correct"><span>Ben fatto!</span>{manualAdvance && <small>Il terapista passa al prossimo turno dal telefono.</small>}</div>}
+      <AnswerFeedback state={answerState}>
+        {answerState === "wrong" && <><span>Riprova</span><small>Guarda bene chi compie l’azione e che cosa sta facendo.</small></>}
+        {answerState === "correct" && <><span>Ben fatto!</span>{manualAdvance && <small>Il terapista passa al prossimo turno dal telefono.</small>}</>}
+      </AnswerFeedback>
     </div>
     {!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}
   </div>;

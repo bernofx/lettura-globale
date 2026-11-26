@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import { useContext, useEffect, useRef } from "react";
 import { useUpdateState } from "../../../components/app-update";
 import { usePointerDrop } from "../../../use-pointer-drop";
-import { AnswerLabel, HelpDock, SessionTools } from "../session-chrome";
+import { AnswerFeedback, AnswerLabel, HelpDock, SessionTools } from "../session-chrome";
 import { type SessionNavigationProps } from "../session-view";
 import { Artwork } from "../../../shared/artwork";
 import { speakWord } from "../../../shared/audio";
@@ -69,8 +69,10 @@ export function RecognitionSession({ previewLabel, mode, manualAdvance = false, 
         const isWrong = wrongAnswerId === id;
         return <button key={id} data-answer-id={id} aria-label={`${item.word}${isWrong ? ", risposta errata" : ""}`} className={`${answerState === "correct" && isCorrect ? "answer-card correct" : "answer-card"} ${isWrong ? "wrong" : ""} ${presentation === "words" ? "word-only" : ""}`} onClick={() => onChoose(id)}>{presentation === "images" && <div className="answer-art"><Artwork item={item} /></div>}<AnswerLabel word={item.word} wordOnly={presentation === "words"} />{answerState === "correct" && isCorrect && <i className="choice-mark correct-mark"><Check /></i>}{isWrong && <i className="choice-mark wrong-mark"><X /></i>}</button>;
       })}</div>
-      {answerState === "wrong" && <div className="feedback wrong" role="status"><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></div>}
-      {answerState === "correct" && <div className="feedback correct auto-feedback" role="status"><span>{manualAdvance ? "Risposta registrata. Attendi l’adulto." : currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span></div>}
+      <AnswerFeedback state={answerState}>
+        {answerState === "wrong" && <><span>Riproviamo insieme.</span><small>{previewLabel ? "Questa prova non viene registrata." : "Il primo tentativo è stato registrato separatamente."}</small></>}
+        {answerState === "correct" && <span>{manualAdvance ? "Risposta registrata. Attendi l’adulto." : currentIndex === total - 1 ? (previewLabel ? "Attività completata" : "Sessione completata") : "Ottimo! Passiamo alla prossima parola…"}</span>}
+      </AnswerFeedback>
     </div>
     {!previewLabel && <HelpDock onHelp={(label) => onHelp(label, prompt.id)} />}
   </div>;
