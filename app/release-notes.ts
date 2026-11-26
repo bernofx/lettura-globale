@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove immagini in Libreria",
   items: [
+    "Studio e Giocoso più completi: sul telefono le voci principali sono in una barra in basso; in Studio, su schermi larghi, la sequenza attiva resta in un pannello accanto al catalogo degli esercizi; in Giocoso la sequenza è un percorso di passi numerati.",
     "Nuovi stili dell’interfaccia in Impostazioni → Aspetto: oltre al Classico puoi scegliere Studio, ordinato e professionale, o Giocoso, colorato e morbido.",
     "Avvio rapido più veloce: scegli Insegnamento o Valutazione nella stessa pagina e passi subito a «Pronti?». Il menu ha «Esercizi» e «Impostazioni» (Profili e Aspetto), la Libreria ha i collegamenti alle sezioni.",
     "Interfaccia rifinita: pulsanti più ordinati, Avvio rapido allineato, Progressi senza percentuali vuote, schermata dell’esercizio senza dati tecnici e Profili con campi uniformi.",

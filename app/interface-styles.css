@@ -161,3 +161,39 @@ html[data-style="studio"] .library-word-grid .card-actions button { width: 44px;
 }
 html[data-style="playful"] .library-copy .category { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #d9f2e6; color: #275a45; }
 html[data-style="playful"] .library-copy .syllables.needs-review { color: #67440c; }
+
+/* Studio · Esercizi: on wide screens the active sequence stays in a side panel next to the catalog. */
+@media (min-width: 1400px) {
+  html[data-style="studio"] .exercises-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); column-gap: 24px; row-gap: 0; grid-auto-flow: row dense; align-items: start; }
+  html[data-style="studio"] .exercises-page > * { grid-column: 1; min-width: 0; }
+  html[data-style="studio"] .exercises-page > .page-title-row { grid-column: 1 / -1; }
+  html[data-style="studio"] .exercises-page > .sequence-banner { grid-column: 2; grid-row: 2 / span 3; align-self: start; grid-template-columns: 1fr; gap: 14px; min-height: 0; margin-bottom: 16px; padding: 20px; background: #141b2d; border-color: #141b2d; color: #e6ebf5; }
+  html[data-style="studio"] .exercises-page > .sequence-banner :is(h2, p, .soft-label) { color: #e6ebf5; }
+  html[data-style="studio"] .exercises-page > .sequence-banner .sequence-symbol { display: none; }
+  html[data-style="studio"] .exercises-page > .sequence-banner select { width: 100%; background: #1c2539; color: #ffffff; border-color: #33415f; }
+  html[data-style="studio"] .exercises-page > .sequence-banner .sequence-actions button { background: #1c2539; color: #e6ebf5; border: 1px solid #33415f; box-shadow: none; }
+  html[data-style="studio"] .exercises-page > .sequence-banner .sequence-actions button:hover { border-color: #8fb4ff; color: #ffffff; }
+  html[data-style="studio"] .exercises-page > .sequence-editor { grid-column: 2; grid-row: 5 / span 40; position: sticky; top: 96px; max-height: calc(100dvh - 120px); overflow: auto; }
+}
+
+/* Giocoso · Esercizi: the sequence reads as a path of numbered stops. */
+html[data-style="playful"] .sequence-editor { border: 0; border-radius: 32px; background: #ffe1d6; box-shadow: none; }
+html[data-style="playful"] .sequence-order-list { gap: 16px; }
+html[data-style="playful"] .sequence-order-list article { position: relative; min-height: 60px; padding: 8px 10px 8px 8px; border: 0; border-radius: 22px; background: #ffffff; box-shadow: 0 4px 0 #f3c4b1; grid-template-columns: 48px 1fr auto; }
+html[data-style="playful"] .sequence-order-list article > span { width: 44px; height: 44px; border-radius: 50%; background: #ff8a5c; color: var(--ink); display: grid; place-items: center; font-size: 17px; font-weight: 900; }
+html[data-style="playful"] .sequence-order-list article > strong { font-size: 16px; }
+html[data-style="playful"] .sequence-order-list article:not(:last-child)::after { content: ""; position: absolute; left: 28px; top: calc(100% + 4px); width: 4px; height: 12px; border-radius: 2px; background: #e8a68a; }
+html[data-style="playful"] .sequence-order-list button { border: 0; border-radius: 14px; background: #fff3ec; }
+
+/* Studio and Giocoso on a phone: the five main areas sit in a bottom bar; the top menu button opens the rest. */
+@media (max-width: 760px) {
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) { inset: auto 0 0 0; width: auto; height: calc(70px + env(safe-area-inset-bottom, 0px)); padding: 4px 4px env(safe-area-inset-bottom, 0px); transform: none; transition: none; visibility: visible; flex-direction: row; border-right: 0; box-shadow: 0 -8px 24px rgba(20, 18, 40, 0.1); z-index: 25; }
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) > :not(nav) { display: none; }
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) nav { width: 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) nav > :is(.nav-section, .nav-item[data-area="games"], .nav-item[data-area="caa"], .nav-item[data-area="profiles"]) { display: none; }
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) .nav-item { min-height: 62px; margin: 0; padding: 4px 2px; flex-direction: column; justify-content: center; gap: 3px; border-radius: 14px; font-size: 11px; line-height: 1.15; text-align: center; box-shadow: none; }
+  html:is([data-style="studio"], [data-style="playful"]) .sidebar:not(.open) .nav-item > span { max-width: 100%; overflow-wrap: anywhere; }
+  html[data-style="playful"] .sidebar:not(.open) .nav-item svg { width: 30px; height: 30px; padding: 6px; }
+  html:is([data-style="studio"], [data-style="playful"]) body:not(.lg-session-active) .main-content { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+  html:is([data-style="studio"], [data-style="playful"]) body:not(.lg-session-active) .toast:not(.toast-in-session) { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
+}

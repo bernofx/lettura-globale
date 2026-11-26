@@ -243,9 +243,10 @@
 11. Verificare su tablet Android reale menu a cassetto, target touch e intestazione degli esercizi; sostituire le emoji del catalogo dimostrativo con immagini dotate di licenza.
 12. Valutare la generazione AI opzionale dopo ADR su provider, privacy, moderazione e budget.
 13. Completare gli stili dell’interfaccia Studio e Giocoso con le impaginazioni proposte nella tela di design (oggi cambiano colori, caratteri, forme, menu e pannelli sulle stesse pagine). Ogni pezzo è una variante della pagina che riusa logica e dati di quella attuale, con test dedicati:
-    - Studio: Progressi con tabella parole × attività e schede Valutazione/Insegnamento in alto; Esercizi con la sequenza in un pannello laterale; ultime sessioni del bambino in Oggi.
-    - Giocoso: sequenza come percorso di cerchi numerati; Progressi a carte «Sicura», «In crescita», «Da rinforzare»; pagine interne aperte dai riquadri delle aree con pulsante di ritorno.
-    - Entrambi: barra di navigazione in basso sul telefono (5 voci più «Altro»); avanzamento dell’esercizio a pallini (Giocoso) o barra con turno (Studio).
+    - Completato (solo CSS, markup condiviso): barra di navigazione in basso sul telefono per entrambi (Oggi, Sessione, Esercizi, Progressi, Libreria; le altre voci dal menu ☰); Studio con la sequenza in un pannello laterale scuro da 1400 px; Giocoso con la sequenza come percorso di cerchi numerati.
+    - Studio: Progressi con tabella parole × attività e schede Valutazione/Insegnamento in alto; ultime sessioni del bambino in Oggi.
+    - Giocoso: Progressi a carte «Sicura», «In crescita», «Da rinforzare»; pagine interne aperte dai riquadri delle aree con pulsante di ritorno.
+    - Entrambi: avanzamento dell’esercizio a pallini (Giocoso) o barra con turno (Studio).
 
 ## Verifiche della versione corrente
 

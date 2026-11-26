@@ -33,3 +33,4 @@
 - `app/features/<area>/`: componenti e hook per area (`app-state`, `shell`, `home`, `library`, `exercises`, `session`, `stats`, `profiles`, `settings`, `remote`).
 - `app/shared/`: tipi, costanti, dati iniziali, client cloud, audio, hook comuni e `shared/ui` (modali, intestazioni, controlli di form). Prima di creare markup ripetuto (modali, conferme, intestazioni, PIN, caselle con descrizione) usa questi componenti.
 - `app/domain/`: logica pura e testata, senza React.
+- Stili dell’interfaccia (Classico, Studio, Giocoso): il markup è unico e condiviso; le differenze stanno in `app/interface-styles.css` sotto `html[data-style="…"]`. Non duplicare componenti o pagine per stile: se uno stile richiede un elemento in più, aggiungilo al markup comune e nascondilo negli altri stili. Ogni modifica alla UI va verificata nei tre stili.
