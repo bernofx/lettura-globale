@@ -4,9 +4,9 @@ export type ProgressKind = "recognition" | "articles" | "word-categories" | "nam
 export type ProgressCell = { total: number; correct: number; percent: number | null };
 
 export function ProgressScore({ cell }: { cell: ProgressCell }) {
-  if (cell.percent === null) return <span className="score-cell empty">—<small>Nessuna prova</small></span>;
+  if (cell.percent === null) return <span className="score-cell empty">—<span className="visually-hidden"> nessuna prova</span></span>;
   const tone = cell.percent >= 80 ? "strong" : cell.percent >= 50 ? "developing" : "attention";
-  return <span className={`score-cell ${tone}`}><strong>{cell.percent}%</strong><small>{cell.correct}/{cell.total} corrette</small></span>;
+  return <span className={`score-cell ${tone}`}><strong>{cell.percent}%</strong><small>{cell.correct}/{cell.total}<span className="visually-hidden"> corrette</span></small></span>;
 }
 
 export type ChartSeries = { key: string; label: string; color: string; values: (number | undefined)[] };

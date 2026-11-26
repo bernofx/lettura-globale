@@ -306,3 +306,13 @@ html[data-style="playful"] .progress-chart-helps li { border-radius: 999px; box-
 html[data-style="playful"] .progress-chart-filter select { border: 0; border-radius: 18px; box-shadow: 0 3px 0 var(--line); }
 html[data-style="playful"] .score-key span { white-space: nowrap; }
 @media (max-width: 760px) { html[data-style="playful"] .progress-matrix-panel .panel-heading { flex-wrap: wrap; } }
+
+/* Progressi filters in each style. */
+html[data-style="studio"] :is(.status-chip, .progress-select select) { border-radius: 8px; }
+html[data-style="studio"] .status-chip > span { border-radius: 6px; }
+html[data-style="playful"] .progress-sort { display: flex; }
+html[data-style="playful"] .status-chip { border: 0; box-shadow: 0 3px 0 var(--line); font-weight: 900; }
+html[data-style="playful"] .status-chip[aria-pressed="true"] { background: var(--violet); color: #ffffff; box-shadow: 0 3px 0 var(--violet-dark); }
+html[data-style="playful"] .status-chip[aria-pressed="true"] > span { color: var(--ink); }
+html[data-style="playful"] .progress-select select { border: 0; border-radius: 18px; box-shadow: 0 3px 0 var(--line); }
+html[data-style="playful"] .progress-matrix .word-status { color: var(--muted); font-size: 14px; }
