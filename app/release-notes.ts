@@ -1,7 +1,9 @@
 // User-facing changes shipped together; the build supplies the exact version.
 export const RELEASE_NOTES = {
-  title: "Nuove immagini in Libreria",
+  title: "Correzioni a Progressi e alle sequenze",
   items: [
+    "Progressi mostra gli avvii rapidi nella loro attività quando lo storico è disponibile. Il grafico lascia uno spazio nei mesi senza prove.",
+    "Nelle sequenze puoi scegliere la posizione di un esercizio toccando i puntini. Durante la sessione i pallini scorrono su una riga e i turni saltati restano da completare.",
     "Tabella delle parole in Progressi più ordinata: cerca una parola, filtra per stato, categoria o attività e ordina cliccando le intestazioni (in Giocoso e sul telefono con «Ordina per»). All’apertura vedi prima le parole da rinforzare, 15 alla volta; le colonne delle attività senza prove non compaiono.",
     "Progressi rinnovati: in Studio le schede Valutazione/Insegnamento sono in alto sopra una tabella compatta; in Giocoso ogni parola è una carta con la foto e lo stato «Sicura», «In crescita» o «Da rinforzare» (con meno di tre prove: «Pochi dati»). Il grafico mensile si apre dall’icona accanto agli aiuti e puoi confrontare fino a quattro parole; sul telefono in verticale appare già ruotato in orizzontale.",
     "Esercizi più ordinati: la tendina delle sequenze e tutti gli elenchi a discesa hanno lo stesso aspetto dell’app; Nuova, Rinomina, Condividi ed Elimina e i pulsanti delle schede del catalogo usano lo stile dell’interfaccia, e l’ordine della sequenza si cambia trascinando l’esercizio dai puntini a sinistra (oppure, dalla tastiera, con le frecce su e giù).",

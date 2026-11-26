@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { trendByKind, trendByWord } from "../app/domain/progress-trend.ts";
+import { progressMonthOrdinal, trendByKind, trendByWord, trendSegments } from "../app/domain/progress-trend.ts";
 
 const r = (wordId: string, kind: string, month: string, correct: boolean) => ({ wordId, kind, month, correct });
 const records = [
@@ -25,4 +25,18 @@ test("confronto: una serie per parola, con filtro per attività", () => {
 test("il confronto si ferma a quattro parole", () => {
   const many = ["a", "b", "c", "d", "e"].map((word) => r(word, "recognition", "2026-10", true));
   assert.equal(trendByWord(many, ["a", "b", "c", "d", "e"], "all").series.length, 4);
+});
+
+test("ignora mesi non validi e attività escluse dall’asse", () => {
+  const trend = trendByKind([...records, r("mela", "recognition", "2026-13", true)], "mela", ["recognition"]);
+  assert.deepEqual(trend.months, ["2026-09"]);
+  assert.equal(progressMonthOrdinal("2027-01")! - progressMonthOrdinal("2026-12")!, 1);
+});
+
+test("le linee si interrompono nei mesi senza prove per la serie", () => {
+  assert.deepEqual(trendSegments(["2025-12", "2026-01", "2026-02", "2026-03", "2026-06"], [30, 50, undefined, 80, 100]), [
+    [{ index: 0, value: 30 }, { index: 1, value: 50 }],
+    [{ index: 3, value: 80 }],
+    [{ index: 4, value: 100 }],
+  ]);
 });

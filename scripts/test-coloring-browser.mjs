@@ -1062,6 +1062,20 @@ try {
   assert.equal(new Set(pickers.map(picker => picker.top)).size, 1, "all styles are visible in the same row");
   assert.ok(pickers.every(picker => picker.left >= 0 && picker.right <= 320 && picker.height >= 44));
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.sidebar')).visibility"), "hidden", "the closed menu leaves the focus order");
+  for (const [name, style] of [["Studio", "studio"], ["Giocoso", "playful"], ["Classico", "classic"]]) {
+    await evaluate(`[...document.querySelectorAll('.interface-style-grid button')].find(button => button.querySelector('strong').textContent === ${JSON.stringify(name)}).click()`);
+    await wait(`document.documentElement.dataset.style === ${JSON.stringify(style)}`);
+    const visibleShortcuts = `[...document.querySelectorAll('.sidebar:not(.open) .nav-item')].filter(button => (
+      getComputedStyle(button).visibility === 'visible' && button.getClientRects().length > 0
+    )).length`;
+    await wait(`${visibleShortcuts} === ${style === "classic" ? 0 : 5}`);
+    await evaluate("document.querySelector('.menu-button').click()");
+    await wait("document.activeElement?.matches('.sidebar.open .nav-item')");
+    assert.equal(await evaluate("document.querySelector('main.main-content').inert"), true, "the page cannot receive focus through the open menu");
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await wait("document.activeElement?.matches('.menu-button') && !document.querySelector('.sidebar.open')");
+  }
   console.log("PASS App shell: nine views fit six mobile and tablet widths; Classico, Studio and Giocoso styles apply.");
 } finally {
   socket.close();

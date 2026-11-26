@@ -1,4 +1,5 @@
 import { BarChart3 } from "lucide-react";
+import { progressMonthOrdinal, trendSegments } from "../domain/progress-trend";
 
 export type ProgressKind = "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
 export type ProgressCell = { total: number; correct: number; percent: number | null };
@@ -46,7 +47,21 @@ export function TrendChart({ title, months, series }: { title: string; months: {
   const bottom = 44;
   const innerWidth = width - left - right;
   const innerHeight = height - top - bottom;
-  const x = (index: number) => left + (months.length === 1 ? innerWidth / 2 : (index / Math.max(1, months.length - 1)) * innerWidth);
+  const ordinals = months.map(({ month }) => progressMonthOrdinal(month) ?? 0);
+  const first = ordinals[0] ?? 0;
+  const span = (ordinals.at(-1) ?? first) - first;
+  const x = (index: number) => left + (span ? ((ordinals[index] - first) / span) * innerWidth : innerWidth / 2);
+  const axisLabels = new Set<number>();
+  const labelGap = 64;
+  let lastLabelX = -Infinity;
+  months.forEach((_, index) => {
+    const position = x(index);
+    const last = index === months.length - 1;
+    if (last || (position - lastLabelX >= labelGap && x(months.length - 1) - position >= labelGap)) {
+      axisLabels.add(index);
+      lastLabelX = position;
+    }
+  });
   const y = (value: number) => top + ((100 - value) / 100) * innerHeight;
   const shapeOf = (index: number) => markerShapes[index % markerShapes.length];
   if (!months.length || !series.length) return <div className="learning-chart"><div className="empty-mini"><BarChart3 /><p>Nessuna rilevazione.</p><small>Il grafico apparirà dopo la prima prova.</small></div></div>;
@@ -54,13 +69,13 @@ export function TrendChart({ title, months, series }: { title: string; months: {
     <div className="chart-legend" aria-hidden="true">{series.map((item, index) => <span key={item.key}><svg viewBox="0 0 30 16" width="30" height="16"><line x1="1" x2="29" y1="8" y2="8" stroke={item.color} strokeWidth="3" strokeLinecap="round" /><Marker shape={shapeOf(index)} x={15} y={8} color={item.color}>{null}</Marker></svg>{item.label}</span>)}</div>
     <svg className="trend-chart-svg" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
       {[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1={left} x2={width - right} y1={y(value)} y2={y(value)} className="chart-grid" /><text x={left - 10} y={y(value) + 4} textAnchor="end" className="chart-axis-label">{value}%</text></g>)}
-      {months.map((month, index) => <text key={month.month} x={x(index)} y={height - 14} textAnchor="middle" className="chart-axis-label">{month.label}</text>)}
+      {months.map((month, index) => axisLabels.has(index) && <text key={month.month} x={x(index)} y={height - 14} textAnchor="middle" className="chart-axis-label">{month.label}</text>)}
       {series.map((item, seriesIndex) => {
-        const points = item.values.flatMap((value, index) => value === undefined ? [] : [`${x(index)},${y(value)}`]).join(" ");
-        return <g key={item.key}>{points.includes(" ") && <polyline points={points} fill="none" stroke={item.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}{item.values.map((value, index) => value === undefined ? null : <Marker key={months[index].month} shape={shapeOf(seriesIndex)} x={x(index)} y={y(value)} color={item.color}><title>{item.label}, {months[index].label}: {value}%</title></Marker>)}</g>;
+        const segments = trendSegments(months.map(({ month }) => month), item.values);
+        return <g key={item.key}>{segments.filter((segment) => segment.length > 1).map((segment) => <polyline key={segment[0].index} points={segment.map(({ index, value }) => `${x(index)},${y(value)}`).join(" ")} fill="none" stroke={item.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />)}{item.values.map((value, index) => value === undefined ? null : <Marker key={months[index].month} shape={shapeOf(seriesIndex)} x={x(index)} y={y(value)} color={item.color}><title>{item.label}, {months[index].label}: {value}%</title></Marker>)}</g>;
       })}
     </svg>
-    {months.length < 2 && <p className="chart-guidance">Servono rilevazioni in almeno due mesi per mostrare una tendenza.</p>}
+    {!series.some((item) => item.values.filter((value) => value !== undefined).length >= 2) && <p className="chart-guidance">Servono rilevazioni in almeno due mesi per ciascuna serie per mostrare una tendenza.</p>}
     <div className="visually-hidden"><table><caption>{title}: percentuale di risposte corrette al primo tentativo per mese</caption><thead><tr><th scope="col">Mese</th>{series.map((item) => <th scope="col" key={item.key}>{item.label}</th>)}</tr></thead><tbody>{months.map((month, index) => <tr key={month.month}><th scope="row">{month.label}</th>{series.map((item) => <td key={item.key}>{item.values[index] === undefined ? "nessuna prova" : `${item.values[index]}%`}</td>)}</tr>)}</tbody></table></div>
   </div>;
 }

@@ -6,7 +6,7 @@ export function backendStatusInfo(status: BackendStatus) {
   if (status === "loading") return { tone: "pending", label: "Connessione al cloud…", detail: "Caricamento dei dati" };
   if (status === "migrating") return { tone: "pending", label: "Trasferimento nel cloud…", detail: "Migrazione in corso" };
   if (status === "syncing") return { tone: "pending", label: "Salvataggio…", detail: "Modifiche in sincronizzazione" };
-  if (status === "error") return { tone: "error", label: "Non salvato nel cloud", detail: "La copia locale è al sicuro; riproverò automaticamente" };
+  if (status === "error") return { tone: "error", label: "Non salvato nel cloud", detail: "Apri la diagnostica per i dettagli" };
   if (status === "local") return { tone: "local", label: "Solo su questo dispositivo", detail: "Il cloud non è disponibile" };
   return { tone: "ready", label: "Salvato nel cloud", detail: "Dati sincronizzati e protetti" };
 }
@@ -39,19 +39,21 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
 export async function backendResponseError(response: Response, fallback: string) {
   let code = fallback;
   let diagnosticId = "";
+  let reason = "";
   try {
-    const body = await response.clone().json() as { error?: unknown; diagnosticId?: unknown };
+    const body = await response.clone().json() as { error?: unknown; diagnosticId?: unknown; reason?: unknown };
     if (typeof body.error === "string" && body.error) code = body.error;
     if (typeof body.diagnosticId === "string") diagnosticId = body.diagnosticId;
+    if (code === "state_change_forbidden" && typeof body.reason === "string" && /^[a-z0-9_]{1,64}$/.test(body.reason)) reason = body.reason;
   } catch { /* response senza JSON */ }
-  return Object.assign(new Error(`${code} (${response.status})`), { status: response.status, code, diagnosticId });
+  return Object.assign(new Error(`${code} (${response.status})`), { status: response.status, code, diagnosticId, reason });
 }
 
 export function saveErrorDetails(error: unknown) {
   if (error && typeof error === "object") {
-    const candidate = error as { status?: unknown; code?: unknown; name?: unknown; diagnosticId?: unknown };
+    const candidate = error as { status?: unknown; code?: unknown; name?: unknown; diagnosticId?: unknown; reason?: unknown };
     const message = error instanceof Error && /^[a-z0-9_]{1,64}$/.test(error.message) ? error.message : undefined;
-    return { httpStatus: typeof candidate.status === "number" ? candidate.status : undefined, errorCode: typeof candidate.code === "string" ? candidate.code : candidate.name === "AbortError" ? "timeout" : message ?? "network_error", diagnosticId: typeof candidate.diagnosticId === "string" ? candidate.diagnosticId : undefined };
+    return { httpStatus: typeof candidate.status === "number" ? candidate.status : undefined, errorCode: typeof candidate.code === "string" ? candidate.code : candidate.name === "AbortError" ? "timeout" : message ?? "network_error", diagnosticId: typeof candidate.diagnosticId === "string" ? candidate.diagnosticId : undefined, reason: typeof candidate.reason === "string" ? candidate.reason : undefined };
   }
   return { errorCode: "unknown_error" };
 }

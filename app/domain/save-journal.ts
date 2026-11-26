@@ -8,6 +8,7 @@ export type SaveJournalEntry = {
   revision?: number;
   httpStatus?: number;
   errorCode?: string;
+  reason?: string;
   changedSequences?: number;
   sequenceCount?: number;
 };
@@ -30,6 +31,7 @@ export function appendSaveJournal(storage: Pick<Storage, "getItem" | "setItem">,
   if (Number.isSafeInteger(entry.revision)) safe.revision = entry.revision;
   if (Number.isSafeInteger(entry.httpStatus)) safe.httpStatus = entry.httpStatus;
   if (entry.errorCode && SAFE_CODE.test(entry.errorCode)) safe.errorCode = entry.errorCode;
+  if (entry.errorCode === "state_change_forbidden" && entry.reason && SAFE_CODE.test(entry.reason)) safe.reason = entry.reason;
   if (Number.isSafeInteger(entry.changedSequences)) safe.changedSequences = entry.changedSequences;
   if (Number.isSafeInteger(entry.sequenceCount)) safe.sequenceCount = entry.sequenceCount;
   try { storage.setItem(SAVE_JOURNAL_KEY, JSON.stringify([...readSaveJournal(storage), safe].slice(-MAX_ENTRIES))); }

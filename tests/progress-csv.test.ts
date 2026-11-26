@@ -68,3 +68,15 @@ test("le prove senza errori sono distinte e non diventano padronanza autonoma", 
   assert.doesNotMatch(csv, /"Acquisita"/);
   assert.doesNotMatch(csv, /"Competenza";"Tutte";"Numero quantità"/);
 });
+
+test("usa la competenza e la parola dello storico per gli avvii rapidi nel CSV", () => {
+  const csv = buildProgressCsv([{
+    id: "attempt", sessionId: "session", sessionItemId: "round", createdAt: "2026-10-21T12:30:00.000Z",
+    exerciseId: "quick:1", wordId: "gatto", answerId: "IL", correct: true, firstAttempt: true, mode: "test",
+  }], { histories: [{ id: "session", items: [{
+    id: "round", exerciseId: "quick:1", exerciseTitle: "Rapido IL/LA", kind: "articles",
+    target: { itemId: "gatto", word: "Gatto", category: "Animali" }, options: [], responses: [], firstCorrect: true, helpLabels: [],
+  }] }] });
+  assert.match(csv, /"Parola";"Gatto";"Articolo IL \/ LA"/);
+  assert.match(csv, /"quick:1";"Rapido IL\/LA";"Articolo IL \/ LA";"Gatto";"IL"/);
+});

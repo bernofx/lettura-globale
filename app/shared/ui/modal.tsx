@@ -8,6 +8,8 @@ type ModalProps = {
   className?: string;
   /** Called on Escape and by the optional close button. */
   onClose?: () => void;
+  /** Keep keyboard focus inside self-contained panels without controls rendered in a portal. */
+  trapFocus?: boolean;
   /** Renders the top-right “Chiudi” button (requires `onClose`). */
   closeButton?: boolean;
   /** When set, the panel is a `<form>` and submits through this handler. */
@@ -20,7 +22,7 @@ type ModalProps = {
  * inside the panel and focus restoration on close. Visual styles stay in the
  * existing `.modal-layer` / `.modal` CSS.
  */
-export function Modal({ labelledBy, className, onClose, closeButton = false, onSubmit, children }: ModalProps) {
+export function Modal({ labelledBy, className, onClose, closeButton = false, trapFocus = false, onSubmit, children }: ModalProps) {
   const panel = useRef<HTMLDivElement & HTMLFormElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -41,9 +43,18 @@ export function Modal({ labelledBy, className, onClose, closeButton = false, onS
     aria-modal="true"
     aria-labelledby={labelledBy}
     onKeyDown={(event) => {
-      if (event.key !== "Escape" || !onCloseRef.current) return;
-      event.stopPropagation();
-      onCloseRef.current();
+      if (event.key === "Escape" && onCloseRef.current) {
+        event.stopPropagation();
+        onCloseRef.current();
+      }
+      if (event.key !== "Tab" || !trapFocus || !panel.current) return;
+      const controls = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")]
+        .filter((node) => node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length > 0);
+      const active = document.activeElement;
+      const edge = event.shiftKey ? controls[0] : controls.at(-1);
+      if (active !== edge && controls.includes(active as HTMLElement)) return;
+      event.preventDefault();
+      (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
     }}
   >
     {onSubmit

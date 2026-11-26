@@ -353,8 +353,8 @@ body.lg-session-active .session-screen{height:100dvh}
 }
 
 /* Session progress: one dot per exercise; the ring fills turn by turn and turns into a green check. */
-.session-progress{--progress-fill:#3f9d74;--progress-track:#e4e1ec;--progress-current:var(--violet);--progress-halo:#e4e0fb;display:flex;align-items:center;justify-content:center;gap:10px;justify-self:center}
-.session-progress .progress-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0;padding:0;list-style:none}
+.session-progress{--progress-fill:#3f9d74;--progress-track:#e4e1ec;--progress-current:var(--violet);--progress-halo:#e4e0fb;min-width:0;max-width:100%;display:flex;align-items:center;justify-content:center;gap:10px;justify-self:center}
+.session-progress .progress-dots{display:flex;min-width:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-inline:contain;gap:6px;margin:0;padding:4px;list-style:none}.progress-dots::-webkit-scrollbar{display:none}
 .session-progress .progress-dot{width:28px;height:28px;flex:0 0 auto;padding:4px;border-radius:50%;background:conic-gradient(var(--progress-fill) calc(var(--progress,0) * 1turn),var(--progress-track) 0);transition:background .3s ease}
 .session-screen .session-progress .progress-dot>span{width:100%;height:100%;margin:0;border-radius:50%;background:#fff;color:var(--muted);display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1}
 .session-progress .progress-dot.current{box-shadow:0 0 0 3px var(--progress-halo)}
@@ -362,7 +362,7 @@ body.lg-session-active .session-screen{height:100dvh}
 .session-progress .progress-dot.done{background:var(--progress-fill)}
 .session-screen .session-progress .progress-dot.done>span{background:transparent;color:#fff}
 .session-progress .progress-dot svg{width:15px;height:15px;stroke-width:3}
-.session-screen .session-progress .progress-caption{display:block;margin:0;color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
+.session-screen .session-progress .progress-caption{display:block;flex:0 0 auto;margin:0;color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
 @media(prefers-reduced-motion:reduce){.session-progress .progress-dot{transition:none}}
 @media(max-width:760px){.session-screen .session-progress .progress-dots{gap:4px}.session-screen .session-progress .progress-dot{width:24px;height:24px}.session-screen .session-progress .progress-dot>span{font-size:12px}.session-progress .progress-dot svg{width:13px;height:13px}}
 
@@ -394,7 +394,7 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 /* The chart legend wraps instead of widening the page on a phone. */
 .chart-legend{flex-wrap:wrap}
 /* Progressi: compare checkbox in the word cell, chart button next to the help count. */
-.progress-matrix .matrix-row{grid-template-columns:minmax(140px,1.3fr) 150px repeat(var(--activity-cols,4),minmax(96px,1fr)) 112px;min-width:calc(140px + 150px + var(--activity-cols,4) * 96px + 112px + (var(--activity-cols,4) + 3) * 10px + 28px);min-height:56px;column-gap:10px}
+.progress-matrix .matrix-row{grid-template-columns:minmax(140px,1.3fr) 150px var(--activity-tracks,) 112px;min-width:calc(140px + 150px + var(--activity-cols,4) * 96px + 112px + (var(--activity-cols,4) + 3) * 10px + 28px);min-height:56px;column-gap:10px}
 .matrix-word{display:flex;align-items:center;gap:8px;min-width:0}
 .matrix-compare{width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;margin-left:-8px;border-radius:10px;cursor:pointer}
 .matrix-compare:hover{background:var(--lavender)}
@@ -447,7 +447,7 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .learning-chart .chart-legend span{white-space:nowrap}
 .progress-matrix{position:relative}
 /* Progressi table: filters, status chips, sortable headers, one-line scores and a status column. */
-.progress-filters{display:grid;gap:10px;margin:0 0 8px}
+.progress-filters{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 8px}
 .progress-search{max-width:none}
 .status-chips{display:flex;flex-wrap:wrap;gap:6px}
 .status-chip{min-height:40px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;cursor:pointer}
@@ -458,8 +458,8 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .status-chip i,.word-status i{width:11px;height:11px;flex:0 0 auto;border-radius:50%;background:#c9c3d8}
 .status-chip.secure i,.word-status.secure i{background:#2fae74}.status-chip.growing i,.word-status.growing i{background:#e0a800}.status-chip.reinforce i,.word-status.reinforce i{background:#d9534f}
 .progress-selects{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
-.progress-select{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--muted)}
-.progress-select select{height:42px;min-width:150px;border:1px solid var(--line);border-radius:12px;padding-left:12px;background-color:#fff;color:var(--ink);font-weight:700}
+.progress-select{display:flex;min-width:0;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--muted)}
+.progress-select select{max-width:100%;height:42px;min-width:150px;border:1px solid var(--line);border-radius:12px;padding-left:12px;background-color:#fff;color:var(--ink);font-weight:700}
 .progress-sort{display:none}
 .progress-reset{margin:0;min-height:40px}
 .progress-results{margin:0 0 10px;color:var(--muted);font-size:12px;font-weight:700}
@@ -474,3 +474,21 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .sort-header:hover{color:var(--violet)}
 @media(pointer:coarse){.status-chip,.progress-select select,.progress-reset{min-height:44px}.progress-select select{height:44px}}
 @media(max-width:760px){.progress-sort{display:flex}.progress-select{flex:1 1 100%}.progress-select select{flex:1;min-width:0}}
+
+.session-screen .session-header { grid-template-columns: minmax(0, 1fr) minmax(0, min(38%, 340px)) minmax(max-content, 1fr); }
+@media (max-width: 760px) {
+  .session-screen .session-header { grid-template-columns: minmax(0, 1fr) auto; }
+}
+.progress-matrix .matrix-word-label { min-width: 0; overflow-wrap: anywhere; }
+.progress-matrix .matrix-word > .matrix-word-label { text-align: left; }
+.progress-chart-modal h2, .progress-chart-helps li > span { overflow-wrap: anywhere; }
+.progress-chart-modal .modal-close { min-width: 44px; min-height: 44px; }
+.progress-chart-modal .progress-chart-filter select { min-height: 44px; }
+
+.sequence-position-field { display: grid; gap: 8px; font-weight: 700; }
+.sequence-position-field select { width: 100%; min-height: 44px; padding-left: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); }
+.sequence-order-list .sequence-drag-handle:disabled { opacity: .45; cursor: default; }
+.sequence-order-list article > strong { min-width: 0; overflow-wrap: anywhere; }
+
+.sequence-order-fieldset { border: 0; min-inline-size: 0; padding: 0; margin: 0; }
+.sequence-order-fieldset:disabled button, .sequence-actions button:disabled { opacity: .55; cursor: not-allowed; }
