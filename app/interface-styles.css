@@ -138,7 +138,6 @@ html[data-style="playful"] .answer-grid > .answer-card:where(:not(.wrong, .corre
 html[data-style="playful"] .answer-grid > .answer-card:where(:not(.wrong, .correct)):nth-child(4n + 2) { background: #d9f2e6; box-shadow: 0 6px 0 #b4e0ca; }
 html[data-style="playful"] .answer-grid > .answer-card:where(:not(.wrong, .correct)):nth-child(4n + 3) { background: #fff0b8; box-shadow: 0 6px 0 #f0dc8a; }
 html[data-style="playful"] .answer-grid > .answer-card:where(:not(.wrong, .correct)):nth-child(4n + 4) { background: #e3e9ff; box-shadow: 0 6px 0 #c4cff5; }
-html[data-style="playful"] .session-progress div { height: 10px; border-radius: 999px; }
 html[data-style="playful"] .help-dock { border: 0; border-radius: 24px; box-shadow: 0 5px 0 var(--line); }
 html[data-style="playful"] .help-actions button { border: 0; border-radius: 999px; background: #fff8ef; font-weight: 800; box-shadow: 0 3px 0 var(--line); }
 html[data-style="playful"] .answer-card .answer-art { margin: 10px 10px 0; border-radius: 24px; background: rgba(255, 255, 255, 0.55); }
@@ -197,3 +196,9 @@ html[data-style="playful"] .sequence-order-list button { border: 0; border-radiu
   html:is([data-style="studio"], [data-style="playful"]) body:not(.lg-session-active) .main-content { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
   html:is([data-style="studio"], [data-style="playful"]) body:not(.lg-session-active) .toast:not(.toast-in-session) { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Session progress dots in each style (shared markup, see SessionProgress). */
+html[data-style="studio"] .session-progress { --progress-fill: #1f9d6b; --progress-track: #dde3ee; --progress-halo: var(--lavender); }
+html[data-style="playful"] .session-progress { --progress-fill: #2fae74; --progress-track: #efe4d3; --progress-halo: #ddd8ff; }
+html[data-style="playful"] .session-progress .progress-dot { width: 32px; height: 32px; padding: 4px; }
+html[data-style="playful"] .session-screen .session-progress .progress-dot > span { font-weight: 900; }

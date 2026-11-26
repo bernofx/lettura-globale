@@ -1,5 +1,6 @@
-import { ChevronLeft, ChevronRight, CircleHelp, Volume2, VolumeX, X } from "lucide-react";
-import { useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronLeft, ChevronRight, CircleHelp, Volume2, VolumeX, X } from "lucide-react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { sessionProgressLabel, sessionProgressSteps, type SessionProgressTurn } from "../../domain/session-progress";
 import { ImageCreditsButton } from "./session-image-credits";
 import { RemoteHostBadge } from "../remote/remote-host";
 import { type SessionNavigationProps } from "./session-view";
@@ -9,6 +10,24 @@ import { AudioVolumeContext, RemoteHostContext } from "../../shared/hooks";
 export function SessionTools({ onExit, protectedExit = true, canPrevious, canForward, onPrevious, onForward }: { soundEffects: boolean; onToggleSound: () => void; onExit: () => void; protectedExit?: boolean } & SessionNavigationProps) {
   const remoteHost = useContext(RemoteHostContext);
   return <div className="session-controls-stack"><div className="session-tools"><div className="session-step-navigation" aria-label="Navigazione tra i passaggi"><button type="button" onClick={onPrevious} disabled={!canPrevious} aria-label="Passaggio precedente"><ChevronLeft /></button><button type="button" onClick={onForward} disabled={!canForward} aria-label="Passaggio successivo già raggiunto"><ChevronRight /></button></div><VolumeControl />{remoteHost && <RemoteHostBadge host={remoteHost} />}{protectedExit ? <ProtectedExitButton onComplete={onExit} /> : <button className="ghost-button" type="button" onClick={onExit}>Chiudi</button>}</div><div className="session-version-credits"><ImageCreditsButton /></div></div>;
+}
+
+/** The compiled session plan, so every activity shows the same per-exercise progress dots. */
+export const SessionPlanContext = createContext<readonly SessionProgressTurn[] | null>(null);
+
+/** One dot per exercise: its ring fills turn by turn and becomes a green check when the exercise is finished. */
+export function SessionProgress({ currentIndex, total }: { currentIndex: number; total: number }) {
+  const contextPlan = useContext(SessionPlanContext);
+  const steps = useMemo(() => {
+    const plan = contextPlan?.length === total ? contextPlan : Array.from({ length: total }, (_, index) => ({ id: String(index), title: `Passaggio ${index + 1}` }));
+    return sessionProgressSteps(plan, currentIndex);
+  }, [contextPlan, currentIndex, total]);
+  const currentPosition = steps.findIndex((step) => step.status === "current");
+  const current = steps[currentPosition];
+  return <div className="session-progress" role="group" aria-label={sessionProgressLabel(steps)}>
+    <ol className="progress-dots" aria-hidden="true">{steps.map((step, index) => <li key={step.key} className={`progress-dot ${step.status}`} title={step.title} style={{ "--progress": `${step.completedTurns / step.turns}` } as React.CSSProperties}><span>{step.status === "done" ? <Check /> : index + 1}</span></li>)}</ol>
+    {current && <span className="progress-caption" aria-hidden="true">{current.turns > 1 ? `${current.completedTurns + 1} di ${current.turns}` : steps.length > 1 ? `${currentPosition + 1} di ${steps.length}` : "1 di 1"}</span>}
+  </div>;
 }
 
 function VolumeControl() {
