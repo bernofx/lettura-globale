@@ -1212,6 +1212,38 @@ try {
   await button("Elimina bozza locale");
   await wait("!document.querySelector('.sequence-draft-comparison')");
   console.log("PASS Sequenze: recupero dopo ricarica, confronto dei due ordini e selezione della sequenza corrente.");
+  // Duplicate legacy slots share a model ID. Keep a hidden middle slot in place.
+  const privateCopy = { ...demoSteps[0], title: "Copia del primo passo", id: "copy-demo", sequenceId: sequence.id, templateExerciseId: a, ownerAdultId: therapist.id };
+  state.exercises = [...state.exercises.map(item => item.id === b ? { ...item, ownerAdultId: therapist.id } : item), privateCopy];
+  const hidden = "unavailable-demo";
+  state.sequences = [{ ...sequence, exerciseIds: [a, hidden, b, a, privateCopy.id] }];
+  stateRevision++;
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelectorAll('.sequence-remove').length === 4");
+  assert.ok(!(await evaluate("document.querySelector('.exercise-list').textContent")).includes(privateCopy.title));
+  await evaluate(`(() => {
+    const author = [...document.querySelectorAll('.catalog-kind-filter')].find(label => label.textContent.includes('Autore')).querySelector('select');
+    author.value = 'mine';
+    author.dispatchEvent(new Event('change', {bubbles:true}));
+  })()`);
+  await wait("document.querySelectorAll('.exercise-row').length === 1");
+  assert.equal(await evaluate("document.querySelector('.exercise-row h3').textContent"), "Secondo");
+  assert.equal(await evaluate("document.querySelectorAll('.sequence-remove').length"), 4);
+  for (const style of ["classic", "studio", "playful"]) {
+    await evaluate(`document.documentElement.dataset.style = ${JSON.stringify(style)}`);
+    await wait(`(() => {
+      const bar = document.querySelector('.catalog-toolbar');
+      return bar.scrollWidth <= bar.clientWidth + 1 && [...bar.querySelectorAll('select')].every(el => el.getBoundingClientRect().height >= 44);
+    })()`);
+  }
+  await evaluate("document.querySelectorAll('.sequence-drag-handle')[2].dispatchEvent(new KeyboardEvent('keydown', { key:'End', bubbles:true }))");
+  await wait("document.querySelectorAll('.sequence-order-list article strong')[2]?.textContent === 'Copia del primo passo'");
+  await evaluate("document.querySelectorAll('.sequence-remove')[3].click()");
+  for (let i = 0; i < 60 && state.sequences[0].exerciseIds.length !== 4; i++) await delay(100);
+  assert.deepEqual(state.sequences[0].exerciseIds, [a, hidden, b, privateCopy.id]);
+  console.log("PASS Catalogo e sequenze: autore, copie escluse dal catalogo, riordino e rimozione di un singolo passo ripetuto.");
 } finally {
   socket.close();
 }

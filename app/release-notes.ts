@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Nel catalogo puoi filtrare i modelli per autore. Se un esercizio compare due volte nella sequenza, puoi spostare o rimuovere la singola riga.",
     "Quando due adulti cambiano i passi di una sequenza, le modifiche indipendenti si combinano. Se gli ordini sono incompatibili, li ritrovi in Esercizi → Bozze da verificare.",
     "Se il cloud segnala un conflitto dopo il salvataggio di un esercizio, puoi ritrovare la tua versione in Esercizi → Bozze da verificare, anche dopo aver riaperto l’app sullo stesso dispositivo.",
     "Se un altro adulto aggiorna un esercizio mentre lo stai modificando, al salvataggio puoi confrontare le impostazioni e scegliere quale versione usare.",

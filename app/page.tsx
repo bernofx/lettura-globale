@@ -40,7 +40,6 @@ import { remoteCommandDisposition, type RemoteControllerEvent, type RemoteSessio
 import { useRemoteSessionHost } from "./use-remote-session-host";
 import { isSimpleSentenceScene, sentenceMatchingAvailability } from "./domain/sentence-matching";
 import { logoutFromCloud } from "./domain/cloud-auth-client";
-import { moveItem, reorderVisible } from "./domain/reorder";
 import { useAppData } from "./features/app-state/use-app-data";
 import { useCloudSync } from "./features/app-state/use-cloud-sync";
 import { RecoveredExerciseDrafts } from "./features/exercises/recovered-exercise-drafts";
@@ -965,27 +964,15 @@ function HomePageContent() {
     setPendingExerciseDelete(null);
     notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
   };
+  const changeSequenceSteps = (reviewed: Sequence, exerciseIds: string[]) => {
+    setSequences(current => current.map(sequence => {
+      if (sequence.id !== reviewed.id || sequence.deleted || !canEditSequence(sequence.therapistId, therapist?.id, therapist?.role) ||
+        JSON.stringify(sequence.exerciseIds) !== JSON.stringify(reviewed.exerciseIds)) return sequence;
+      return { ...sequence, exerciseIds, updatedAt: new Date().toISOString() };
+    }));
+  };
   const restoreStepOrder = (reviewed: Sequence, order: string[]) => {
-    setSequences(current => current.map(seq => {
-      if (seq.id !== reviewed.id || seq.deleted || !canEditSequence(seq.therapistId, therapist?.id, therapist?.role) ||
-        JSON.stringify(seq.exerciseIds) !== JSON.stringify(reviewed.exerciseIds) || !canRestoreStepOrder(seq.exerciseIds, order)) return seq;
-      return { ...seq, exerciseIds: order, updatedAt: new Date().toISOString() };
-    }));
-  };
-  const toggleExerciseInSequence = (exerciseId: string) => {
-    if (!activeSequence || !canEditActiveSequence) return;
-    setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: sequence.exerciseIds.includes(exerciseId) ? sequence.exerciseIds.filter((id) => id !== exerciseId) : [...sequence.exerciseIds, exerciseId], updatedAt: new Date().toISOString() } : sequence));
-  };
-  const moveSequenceExercise = (exerciseId: string, toIndex: number) => {
-    if (!activeSequence || !canEditActiveSequence) return;
-    setSequences((current) => current.map((sequence) => {
-      if (sequence.id !== activeSequence.id) return sequence;
-      // toIndex is a position in the list the adult sees; hidden exercises keep their place.
-      const shown = sequence.exerciseIds.filter((id) => visibleExerciseById.has(id));
-      const from = shown.indexOf(exerciseId);
-      if (from < 0 || from === toIndex) return sequence;
-      return { ...sequence, exerciseIds: reorderVisible(sequence.exerciseIds, moveItem(shown, from, toIndex)), updatedAt: new Date().toISOString() };
-    }));
+    if (canRestoreStepOrder(reviewed.exerciseIds, order)) changeSequenceSteps(reviewed, order);
   };
   const saveSequence = (sequence: Sequence) => {
     const existing = sequences.find((item) => item.id === sequence.id);
@@ -1139,7 +1126,7 @@ function HomePageContent() {
           setEditingExercise(draft);
           setShowBuilder(true);
         }} />}
-        {view === "exercises" && <ExercisesView exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} canEditActiveSequence={canEditActiveSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => canEditActiveSequence && activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => canEditActiveSequence && activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onToggleInSequence={toggleExerciseInSequence} onMove={moveSequenceExercise} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
+        {view === "exercises" && <ExercisesView adultId={therapist.id} exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} canEditActiveSequence={canEditActiveSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => canEditActiveSequence && activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => canEditActiveSequence && activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onAddToSequence={id => activeSequence && changeSequenceSteps(activeSequence, [...activeSequence.exerciseIds, id])} onChangeSteps={changeSequenceSteps} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
         {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={(sessionActive || sessionReady) && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionPlanContext.Provider value={{ plan: sessionExercises, completed: completedSessionIndices }}><SessionView categorySymbols={categorySymbols} key={sessionWizardKey} onStartPrepared={startPreparedSession} onCancelPrepared={cancelPreparedSession} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} /></SessionPlanContext.Provider>}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {(view === "appearance" || view === "profiles") && <SettingsTabs view={view} onNavigate={navigate} />}

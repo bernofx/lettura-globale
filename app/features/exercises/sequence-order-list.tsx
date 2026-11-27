@@ -21,20 +21,21 @@ export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderIte
   const suppressPointerClick = useRef(false);
   const [preview, setPreview] = useState<DragPreview | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [positionDialog, setPositionDialog] = useState<{ itemId: string; to: number } | null>(null);
+  const [positionDialog, setPositionDialog] = useState<{ itemId: string; order: string; to: number } | null>(null);
   const titleId = useId();
-  const focusAfterMove = useRef<string | null>(null);
+  const focusAfterMove = useRef<number | null>(null);
   useEffect(() => {
-    const id = focusAfterMove.current;
-    if (!id) return;
+    const position = focusAfterMove.current;
+    if (position === null) return;
     focusAfterMove.current = null;
-    list.current?.querySelector<HTMLButtonElement>(`[data-handle-id="${CSS.escape(id)}"]`)?.focus();
+    list.current?.querySelectorAll<HTMLButtonElement>(".sequence-drag-handle")[position]?.focus();
   }, [items]);
-  const selectedIndex = positionDialog ? items.findIndex((item) => item.id === positionDialog.itemId) : -1;
+  const order = JSON.stringify(items.map(item => item.id));
+  const selectedIndex = positionDialog?.order === order ? items.findIndex((item) => item.id === positionDialog.itemId) : -1;
 
   const move = (item: OrderItem, from: number, to: number) => {
     if (to === from || to < 0 || to >= items.length) return;
-    focusAfterMove.current = item.id;
+    focusAfterMove.current = to;
     onMove(item.id, to);
     setAnnouncement(`${item.title} spostato in posizione ${to + 1} di ${items.length}`);
   };
@@ -97,14 +98,14 @@ export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderIte
   return <>
     <div ref={list} className={`sequence-order-list ${preview ? "is-dragging" : ""}`}>
       {items.map((item, index) => <article key={item.id} className={preview?.from === index ? "dragging" : undefined} style={preview ? { transform: `translateY(${shiftFor(index)}px)` } : undefined}>
-        <button type="button" className="sequence-drag-handle" data-handle-id={item.id} aria-haspopup="dialog" disabled={items.length < 2}
+        <button type="button" className="sequence-drag-handle" aria-haspopup="dialog" disabled={items.length < 2}
           aria-label={`Sposta ${item.title}, posizione ${index + 1} di ${items.length}`} title="Trascina o scegli la posizione"
           onPointerDown={(event) => startDrag(event, index)} onPointerMove={continueDrag} onPointerUp={(event) => endDrag(event)}
           onPointerCancel={(event) => endDrag(event, true)} onLostPointerCapture={(event) => endDrag(event, true)}
           onKeyDown={(event) => onHandleKey(event, item, index)}
           onClick={(event) => {
             if (event.detail && suppressPointerClick.current) return;
-            setPositionDialog({ itemId: item.id, to: index });
+            setPositionDialog({ itemId: item.id, order, to: index });
           }}>
           <GripVertical aria-hidden="true" />
         </button>
