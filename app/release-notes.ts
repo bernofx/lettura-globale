@@ -2,7 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove illustrazioni in Numero quantità",
   items: [
-    "Stili Studio e Giocoso completati in tutta l’app: campi, filtri, schede delle impostazioni, profili, finestre e Avvio rapido seguono lo stile scelto; in Studio le sequenze della Sessione sono schede rettangolari.",
+    "Stili Studio e Giocoso completati in tutta l’app: campi, filtri, schede delle impostazioni, profili, finestre e Avvio rapido seguono lo stile scelto; in Studio le sequenze della Sessione sono schede rettangolari. Nella finestra di un nuovo esercizio le etichette dei campi hanno tutte la stessa dimensione.",
     "In Numero quantità, caramelle, coccinelle e sassolini hanno nuove illustrazioni. Su smartphone in verticale gli oggetti sono più distanziati, in file da tre.",
     "Progressi mostra gli avvii rapidi nella loro attività quando lo storico è disponibile. Il grafico lascia uno spazio nei mesi senza prove.",
     "Nelle sequenze puoi scegliere la posizione di un esercizio toccando i puntini. Durante la sessione i pallini scorrono su una riga e i turni saltati restano da completare.",
