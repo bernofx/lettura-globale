@@ -1,3 +1,4 @@
+import { hasExerciseCopyColumns } from "../../../db/exercise-copy-schema";
 import { containsExerciseCopyMetadata } from "../../domain/exercise-copy-rollout";
 import { hydrateInterfaceStyle, isInterfaceStyle } from "../../domain/appearance";
 import { eq } from "drizzle-orm";
@@ -79,7 +80,8 @@ export async function GET(request: Request) {
     }
     const view = user.adultProfileId ? stateViewForAdult(responseState, user.adultProfileId) : { state: responseState };
     if (!view) return Response.json({ error: "adult_authentication_required" }, { status: 401, headers: stateReadHeaders() });
-    return Response.json({ ...view, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders(relationalStatus === "ready" ? await stateReadTag(user.userId, user.adultProfileId, row.revision) : undefined) });
+    const copyEditorReady = Boolean(env.DB && await hasExerciseCopyColumns(env.DB).catch(() => false));
+    return Response.json({ ...view, copyEditorReady, seedLegacyModels: !containsExerciseCopyMetadata(exercises), revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders(relationalStatus === "ready" ? await stateReadTag(user.userId, user.adultProfileId, row.revision) : undefined) });
   } catch {
     return Response.json({ error: "invalid_saved_state" }, { status: 500, headers: stateReadHeaders() });
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { readExerciseDrafts, sequenceDrafts } from "../../domain/exercise-draft-storage";
 import { canRestoreStepOrder } from "../../domain/sequence-step-merge";
-import { canEditSequence } from "../../domain/sequence-access";
+import { canAccessSequence, canEditSequence } from "../../domain/sequence-access";
 import { ConfirmDialog } from "../../shared/ui/modal";
 import type { Exercise, Sequence } from "../../shared/types";
 
@@ -9,9 +9,9 @@ type Entry = { key: string; title: string } & (
   { exercise: Exercise } | { sequence: ReturnType<typeof sequenceDrafts.read>[number]["draft"] }
 );
 
-export function RecoveredExerciseDrafts({ adultId, revision, onOpen, sequences, exercises, onSelectSequence, role, onRestore }: {
+export function RecoveredExerciseDrafts({ adultId, revision, onOpen, sequences, exercises, onSelectSequence, role, copyEditorReady, onRestore }: {
   adultId: string; revision: number; onOpen: (exercise: Exercise) => void;
-  sequences: Sequence[]; exercises: Exercise[]; onSelectSequence: (id: string) => void; role: string; onRestore: (reviewed: Sequence, order: string[]) => void;
+  sequences: Sequence[]; exercises: Exercise[]; onSelectSequence: (id: string) => void; role: string; copyEditorReady: boolean; onRestore: (reviewed: Sequence, order: string[]) => void;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [discard, setDiscard] = useState<Entry | null>(null);
@@ -36,7 +36,7 @@ export function RecoveredExerciseDrafts({ adultId, revision, onOpen, sequences, 
       <strong>{entry.title}</strong>
       {"exercise" in entry
         ? <button type="button" className="ghost-button" onClick={() => onOpen(entry.exercise)} aria-label={`Rivedi la bozza di ${entry.title}`}>Rivedi</button>
-        : <StepComparison draft={entry.sequence} current={sequences.find(seq => seq.id === entry.sequence.id)} exercises={exercises} onSelect={onSelectSequence} onRestore={onRestore} adultId={adultId} role={role} />}
+        : <StepComparison draft={entry.sequence} current={sequences.find(seq => seq.id === entry.sequence.id)} exercises={exercises} onSelect={onSelectSequence} onRestore={onRestore} adultId={adultId} role={role} copyEditorReady={copyEditorReady} />}
       <button type="button" className="ghost-button" aria-label={`Elimina la bozza locale di ${entry.title}`} onClick={() => setDiscard(entry)}>Elimina bozza</button>
     </div>)}
     {discard && <ConfirmDialog labelledBy="discard-exercise-draft" eyebrow="Bozza locale" title={`Eliminare la bozza di “${discard.title}”?`}
@@ -48,9 +48,9 @@ export function RecoveredExerciseDrafts({ adultId, revision, onOpen, sequences, 
   </section>;
 }
 
-function StepComparison({ draft, current, exercises, onSelect, onRestore, adultId, role }: {
+function StepComparison({ draft, current, exercises, onSelect, onRestore, adultId, role, copyEditorReady }: {
   draft: ReturnType<typeof sequenceDrafts.read>[number]["draft"]; current?: Sequence; exercises: Exercise[]; onSelect: (id: string) => void;
-  onRestore: (reviewed: Sequence, order: string[]) => void; adultId: string; role: string;
+  onRestore: (reviewed: Sequence, order: string[]) => void; adultId: string; role: string; copyEditorReady: boolean;
 }) {
   const draftIds = draft.steps.map(step => step.id);
   const titles = new Map(exercises.map(item => [item.id, item.title]));
@@ -61,7 +61,7 @@ function StepComparison({ draft, current, exercises, onSelect, onRestore, adultI
     <h3>Sequenza aggiornata</h3>
     {current ? <>
       <StepList titles={current.exerciseIds.map(id => titles.get(id) ?? "Esercizio non disponibile")} />
-      {canEditSequence(current.therapistId, adultId, role) && canRestoreStepOrder(current.exerciseIds, draftIds) &&
+      {(copyEditorReady ? canAccessSequence : canEditSequence)(current.therapistId, adultId, role) && canRestoreStepOrder(current.exerciseIds, draftIds) &&
         <button type="button" className="primary-button" onClick={() => onRestore(current, draftIds)}>Usa l’ordine della bozza</button>}
       <button type="button" className="ghost-button" onClick={() => onSelect(current.id)}>Seleziona questa sequenza</button>
     </> : <p>La sequenza è stata rimossa o non è più accessibile.</p>}

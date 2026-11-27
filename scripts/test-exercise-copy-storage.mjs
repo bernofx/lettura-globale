@@ -1,4 +1,5 @@
 // Called by test:auth with its local D1 binding, before the final schema upgrade.
+import { hasExerciseCopyColumns } from "../db/exercise-copy-schema.ts";
 import assert from "node:assert/strict";
 import { buildStateChange } from "../app/domain/state-changes.ts";
 import { loadRelationalState, persistRelationalShadow, prepareRelationalChange, repairRelationalShadow } from "../db/relational-state.ts";
@@ -25,7 +26,9 @@ export async function checkExerciseCopyMigration(database, migrate) {
   const options = { database, accountId, now, email: "copies@example.test", displayName: "Fixture" };
   await persistRelationalShadow({ ...options, state, rawState: JSON.stringify(state), sourceRevision: 1 });
   const legacy = await loadRelationalState(database, accountId);
+  assert.equal(await hasExerciseCopyColumns(database), false);
   await migrate();
+  assert.equal(await hasExerciseCopyColumns(database), true);
   assert.deepEqual(await loadRelationalState(database, accountId), legacy);
   for (const exercise of legacy.exercises) {
     for (const field of ["ownerAdultId", "sequenceId", "templateExerciseId"]) assert.equal(Object.hasOwn(exercise, field), false);

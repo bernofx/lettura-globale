@@ -26,8 +26,7 @@ import { useCaaStories } from "./use-caa-stories";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents } from "./domain/session-events";
 import { buildSessionHistoryItems, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
-import { canRestoreStepOrder } from "./domain/sequence-step-merge";
-import { canAccessSequence, canEditSequence, canViewAllSequences, removeExerciseFromOwnedSequences } from "./domain/sequence-access";
+import { canAccessSequence, canEditSequence, canViewAllSequences } from "./domain/sequence-access";
 import { hydrateSyllables, matchesSyllableFilter } from "./domain/syllabification";
 import { hasArtwork } from "./domain/library-availability";
 import { completesSequenceExercise, type SessionActivity } from "./domain/session-compilation";
@@ -43,6 +42,8 @@ import { logoutFromCloud } from "./domain/cloud-auth-client";
 import { useAppData } from "./features/app-state/use-app-data";
 import { useCloudSync } from "./features/app-state/use-cloud-sync";
 import { RecoveredExerciseDrafts } from "./features/exercises/recovered-exercise-drafts";
+import { useSequenceExerciseEditor } from "./features/exercises/use-sequence-exercise-editor";
+import { copyExerciseForSequence } from "./domain/sequence-exercise-editor";
 import { ExerciseEditor } from "./features/exercises/exercise-editor";
 import { ContentDeleteDialog, SequenceDialog } from "./features/exercises/exercise-dialogs";
 import { ExercisesView } from "./features/exercises/exercises-view";
@@ -435,11 +436,11 @@ function HomePageContent() {
   const visibleExerciseById = useMemo(() => new Map(visibleExercises.map((exercise) => [exercise.id, exercise])), [visibleExercises]);
   const visibleSequences = useMemo(() => sequences.filter((sequence) => !sequence.deleted && canAccessSequence(sequence.therapistId, therapist?.id, therapist?.role)), [sequences, therapist]);
   const activeSequence = useMemo(() => visibleSequences.find((sequence) => sequence.id === activeSequenceId) ?? visibleSequences[0], [activeSequenceId, visibleSequences]);
-  const currentEditedExercise = editingExercise && (!editingExercise.sequenceId ||
-    visibleSequences.some(sequence => sequence.id === editingExercise.sequenceId && sequence.exerciseIds.includes(editingExercise.id)))
-    ? exercises.find(exercise => exercise.id === editingExercise.id && !exercise.deleted) : undefined;
+  const programEditor = useSequenceExerciseEditor({ data, cloud, therapist, activeSequence, visibleSequences, visibleLibrary,
+    editingExercise, setEditingExercise, setShowBuilder, pendingExerciseDelete, setPendingExerciseDelete, notify });
+  const { canManageSequence, canEditActiveSequence, editNotice, currentEditedExercise, addModel, saveExercise, duplicateExercise,
+    deleteExercise, changeSequenceSteps, restoreStepOrder, openStep, openExercise, canDetachSteps } = programEditor;
   const editingRecoveredDraft = recoveredExercise?.draft === editingExercise;
-  const canEditActiveSequence = Boolean(activeSequence && canEditSequence(activeSequence.therapistId, therapist?.id, therapist?.role));
   const sequenceExercises = useMemo(() => activeSequence?.exerciseIds.map((id) => visibleExerciseById.get(id)).filter((exercise): exercise is Exercise => Boolean(exercise)) ?? [], [activeSequence, visibleExerciseById]);
   const sessionExercises = sessionPlan;
   const currentExercise = sessionExercises[sessionIndex] ?? sessionExercises[0];
@@ -939,41 +940,6 @@ function HomePageContent() {
     return () => document.body.classList.remove("lg-remote-controller-active");
   }, [remoteConnected, setSessionPaused]);
 
-  const saveExercise = (exercise: Exercise) => {
-    const error = categoryImageError(exercise, visibleLibrary, categorySymbols);
-    if (error) { notify(error); return; }
-    const exists = exercises.some((item) => item.id === exercise.id);
-    setExercises((current) => exists ? current.map((item) => item.id === exercise.id ? exercise : item) : [exercise, ...current]);
-    if (!exists && activeSequence && canEditActiveSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, exercise.id], updatedAt: new Date().toISOString() } : sequence));
-    setShowBuilder(false);
-    setEditingExercise(null);
-    notify(exists ? "Esercizio aggiornato" : canEditActiveSequence ? "Esercizio creato e aggiunto alla sequenza" : "Esercizio creato");
-  };
-  const duplicateExercise = (exercise: Exercise) => {
-    const duplicate = { ...exercise, id: crypto.randomUUID(), title: `${exercise.title} (copia)`, updatedAt: new Date().toISOString(), deleted: false };
-    setExercises((current) => [duplicate, ...current]);
-    if (activeSequence && canEditActiveSequence) setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: [...sequence.exerciseIds, duplicate.id], updatedAt: new Date().toISOString() } : sequence));
-    notify(canEditActiveSequence ? "Esercizio duplicato nella sequenza" : "Esercizio duplicato");
-  };
-  const deleteExercise = () => {
-    if (!pendingExerciseDelete) return;
-    const id = pendingExerciseDelete.id;
-    setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, deleted: true, updatedAt: new Date().toISOString() } : exercise));
-    const updatedAt = new Date().toISOString();
-    setSequences((current) => removeExerciseFromOwnedSequences(current, id, therapist?.id, therapist?.role, updatedAt));
-    setPendingExerciseDelete(null);
-    notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
-  };
-  const changeSequenceSteps = (reviewed: Sequence, exerciseIds: string[]) => {
-    setSequences(current => current.map(sequence => {
-      if (sequence.id !== reviewed.id || sequence.deleted || !canEditSequence(sequence.therapistId, therapist?.id, therapist?.role) ||
-        JSON.stringify(sequence.exerciseIds) !== JSON.stringify(reviewed.exerciseIds)) return sequence;
-      return { ...sequence, exerciseIds, updatedAt: new Date().toISOString() };
-    }));
-  };
-  const restoreStepOrder = (reviewed: Sequence, order: string[]) => {
-    if (canRestoreStepOrder(reviewed.exerciseIds, order)) changeSequenceSteps(reviewed, order);
-  };
   const saveSequence = (sequence: Sequence) => {
     const existing = sequences.find((item) => item.id === sequence.id);
     if (existing && !canEditSequence(existing.therapistId, therapist?.id, therapist?.role)) return;
@@ -986,17 +952,19 @@ function HomePageContent() {
     notify(exists ? "Sequenza rinominata" : "Nuova sequenza creata");
   };
   const saveQuickAsSequence = () => {
-    if (!quickExerciseToSave) return;
-    const exercise = { ...quickExerciseToSave, sourceExerciseId: undefined, title: quickExerciseToSave.title.replace("Avvio rapido · ", ""), updatedAt: new Date().toISOString() };
+    if (!quickExerciseToSave || !therapist) return;
+    const exercise = { ...quickExerciseToSave, ownerAdultId: cloud.copyEditorReady ? therapist.id : undefined, sourceExerciseId: undefined, title: quickExerciseToSave.title.replace("Avvio rapido · ", ""), updatedAt: new Date().toISOString() };
     const sequence: Sequence = { id: crypto.randomUUID(), title: `${exercise.title} · ${new Date().toLocaleDateString("it-IT")}`, exerciseIds: [exercise.id], therapistId: therapist?.id || initialAdministrator.id, updatedAt: new Date().toISOString(), deleted: false };
-    setExercises((current) => [exercise, ...current]);
-    setSequences((current) => [...current, sequence]);
+    const step = cloud.copyEditorReady ? copyExerciseForSequence(exercise, sequence.id, therapist.id) : exercise;
+    setExercises(current => step === exercise ? [exercise, ...current] : [exercise, step, ...current]);
+    setSequences(current => [...current, { ...sequence, exerciseIds: [step.id] }]);
     setActiveSequenceId(sequence.id);
     setQuickExerciseToSave(null);
     notify("Avvio rapido salvato come sequenza");
   };
-  const deleteSequence = () => {
+  const deleteSequence = async () => {
     if (!pendingSequenceDelete || !canEditSequence(pendingSequenceDelete.therapistId, therapist?.id, therapist?.role)) return;
+    if (!await canDetachSteps(pendingSequenceDelete, [])) return;
     const id = pendingSequenceDelete.id;
     const next = visibleSequences.find((sequence) => sequence.id !== id);
     setSequences((current) => current.map((sequence) => sequence.id === id ? { ...sequence, deleted: true, updatedAt: new Date().toISOString() } : sequence));
@@ -1121,12 +1089,14 @@ function HomePageContent() {
           setLibrary((current) => [{ id, word: category, category, categorySymbolOnly: true, image, imageKey, remoteImageId: remote?.id, privateUpload: true, source: "Upload privato", license: "Diritti confermati dall’adulto", author: "Utente" }, ...current]);
           setCategorySymbols((current) => ({ ...current, [category]: id }));
         }} items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
-        {view === "exercises" && <RecoveredExerciseDrafts role={therapist.role} onRestore={restoreStepOrder} sequences={visibleSequences} exercises={exercises} onSelectSequence={setActiveSequenceId} key={therapist.id} adultId={therapist.id} revision={cloud.exerciseDraftRevision} onOpen={draft => {
+        {view === "exercises" && <RecoveredExerciseDrafts copyEditorReady={cloud.copyEditorReady} role={therapist.role} onRestore={restoreStepOrder} sequences={visibleSequences} exercises={exercises} onSelectSequence={setActiveSequenceId} key={therapist.id} adultId={therapist.id} revision={cloud.exerciseDraftRevision} onOpen={draft => {
           setRecoveredExercise({ adultId: therapist.id, draft });
-          setEditingExercise(draft);
-          setShowBuilder(true);
+          openExercise(draft);
         }} />}
-        {view === "exercises" && <ExercisesView adultId={therapist.id} exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} canEditActiveSequence={canEditActiveSequence} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => canEditActiveSequence && activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => canEditActiveSequence && activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setEditingExercise(null); setNewExerciseKind(kind); setShowBuilder(true); }} onEdit={(exercise) => { setEditingExercise(exercise); setNewExerciseKind(exerciseKind(exercise)); setShowBuilder(true); }} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onAddToSequence={id => activeSequence && changeSequenceSteps(activeSequence, [...activeSequence.exerciseIds, id])} onChangeSteps={changeSequenceSteps} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
+        {view === "exercises" && <ExercisesView adultId={therapist.id} exercises={visibleExercises} sequences={visibleSequences} activeSequence={activeSequence} canEditActiveSequence={canEditActiveSequence} canManageSequence={canManageSequence} onEditStep={cloud.copyEditorReady ? openStep : undefined} therapists={therapists} showSequenceOwners={canSeeAllSequences} library={visibleLibrary} onSelectSequence={setActiveSequenceId} onCreateSequence={() => setEditingSequence("new")} onRenameSequence={() => canManageSequence && activeSequence && setEditingSequence(activeSequence)} onDeleteSequence={() => canManageSequence && activeSequence && setPendingSequenceDelete(activeSequence)} onBuild={(kind) => { setNewExerciseKind(kind); openExercise(null); }} onEdit={exercise => openExercise(exercises.find(item => item.id === exercise.id) ?? exercise)} onDuplicate={duplicateExercise} onDelete={setPendingExerciseDelete} onAddToSequence={id => {
+          const model = exercises.find(item => item.id === id && !item.deleted && !item.sequenceId);
+          if (model && canEditActiveSequence) addModel(model, false);
+        }} onChangeSteps={changeSequenceSteps} onTry={tryExercise} onShareSequence={() => activeSequence && shareLaunch({ kind: "sequence", id: activeSequence.id }, activeSequence.title)} onShareExercise={(exercise) => shareLaunch({ kind: "exercise", id: exercise.id }, exercise.title)} />}
         {view === "session" && <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><RemoteHostContext.Provider value={(sessionActive || sessionReady) && !sessionFromSharedLink && !sessionIsTrial ? remoteHost : null}>{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionPlanContext.Provider value={{ plan: sessionExercises, completed: completedSessionIndices }}><SessionView categorySymbols={categorySymbols} key={sessionWizardKey} onStartPrepared={startPreparedSession} onCancelPrepared={cancelPreparedSession} active={sessionActive} complete={sessionComplete} fromSharedLink={sessionFromSharedLink} isTrial={sessionIsTrial} remoteConnected={remoteConnected} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={visibleSequences} therapists={therapists} showSequenceOwners={canSeeAllSequences} activeChild={activeChild} childProfiles={associatedChildren} onSelectChild={setActiveChildId} onStartSequence={startSequenceById} onStartQuick={startQuickSession} quickCanBeSaved={Boolean(quickExerciseToSave)} onSaveQuick={saveQuickAsSequence} completionComment={completedSessionRecord?.comment ?? ""} onSaveCompletionComment={(comment) => { setSessionHistory((current) => current.map((record) => record.id === sessionRunId ? { ...record, comment } : record)); notify("Valutazione della sessione salvata"); }} onCloseComplete={() => { setSessionComplete(false); setQuickExerciseToSave(null); navigate("stats"); }} onExit={sessionIsTrial ? closeActiveSession : () => setExitPinOpen(true)} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} /></SessionPlanContext.Provider>}</RemoteHostContext.Provider></AudioVolumeContext.Provider>}
         {view === "session" && sessionActive && sessionPaused && remoteConnected && <div className="remote-pause-overlay" role="status"><Pause /><strong>Sessione in pausa</strong><span>Riprendi dal telefono collegato.</span></div>}
         {(view === "appearance" || view === "profiles") && <SettingsTabs view={view} onNavigate={navigate} />}
@@ -1140,7 +1110,7 @@ function HomePageContent() {
       {(showUpload === "word" || showUpload === "sentence") && <UploadDialog kind={showUpload} onClose={() => setShowUpload(null)} onSave={async (item) => { try { let next = item; if (item.image) { const remote = backendStatus === "local" || !navigator.onLine ? null : await uploadRemoteImage(crypto.randomUUID(), item.image); const imageKey = `library-image-${item.id}`; await storeLibraryImage(imageKey, item.image); next = { ...item, imageKey, remoteImageId: remote?.id }; } const outcome = await cloud.persistLibraryNow([next, ...localBootstrapSnapshot.current.library.filter((current) => current.id !== next.id)]); setShowUpload(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Elemento locale · errore cloud: ${cloud.lastSaveError()}`); } catch { notify("Impossibile salvare l’elemento"); } }} />}
       {editingItem && <EditLibraryDialog item={editingItem} onClose={() => setEditingItem(null)} onSave={async (updated) => { try { if (!libraryItemWasEdited({ ...hydrateSyllables(editingItem), article: articleFor(editingItem) ?? null }, updated)) { setEditingItem(null); notify("Nessuna modifica da salvare"); return; } let next = updated; if (updated.image && updated.image !== editingItem.image) { const remote = backendStatus === "local" || !navigator.onLine ? null : await uploadRemoteImage(crypto.randomUUID(), updated.image); const imageKey = `library-image-${updated.id}-${crypto.randomUUID()}`; await storeLibraryImage(imageKey, updated.image); next = { ...updated, imageKey, remoteImageId: remote?.id }; } const currentLibrary = localBootstrapSnapshot.current.library; const outcome = await cloud.persistLibraryNow(currentLibrary.map((item) => item.id === next.id ? next : item)); setEditingItem(null); notify(outcome === "cloud" ? "Elemento salvato nel cloud" : outcome === "local" ? "Elemento salvato solo su questo dispositivo" : `Modifica locale · errore cloud: ${cloud.lastSaveError()}`); } catch { notify("Impossibile salvare le modifiche"); } }} />}
       {pendingLibraryDelete && <LibraryDeleteDialog item={pendingLibraryDelete} onCancel={() => setPendingLibraryDelete(null)} onConfirm={() => { setLibrary((current) => current.map((item) => item.id === pendingLibraryDelete.id ? { ...item, deleted: true } : item)); setPendingLibraryDelete(null); notify("Elemento archiviato e rimosso dai nuovi esercizi"); }} />}
-      {showBuilder && (!editingRecoveredDraft || recoveredExercise?.adultId === therapist.id) && <ExerciseEditor key={JSON.stringify([therapist.id, editingExercise?.id])} recovered={editingRecoveredDraft} current={currentEditedExercise} categorySymbols={categorySymbols} kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
+      {showBuilder && (!editingRecoveredDraft || recoveredExercise?.adultId === therapist.id) && <ExerciseEditor editNotice={editNotice} key={JSON.stringify([therapist.id, editingExercise?.id])} recovered={editingRecoveredDraft} current={currentEditedExercise} categorySymbols={categorySymbols} kind={editingExercise ? exerciseKind(editingExercise) : newExerciseKind} library={visibleLibrary} exercise={editingExercise ?? undefined} onClose={() => { setShowBuilder(false); setEditingExercise(null); }} onSave={saveExercise} />}
       {editingSequence && <SequenceDialog sequence={editingSequence === "new" ? undefined : editingSequence} therapistId={therapist.id} onClose={() => setEditingSequence(null)} onSave={saveSequence} />}
       {saveJournalOpen && <SaveJournalDialog onClose={() => setSaveJournalOpen(false)} onRetry={backendStatus === "error" ? cloud.retrySave : undefined} />}
       {pendingExerciseDelete && <ContentDeleteDialog title={`Eliminare “${pendingExerciseDelete.title}”?`} detail="L’esercizio non sarà più disponibile nelle sessioni. I risultati già registrati resteranno nello storico." onCancel={() => setPendingExerciseDelete(null)} onConfirm={deleteExercise} />}

@@ -15,6 +15,7 @@ import { backendStateForStorage, hydrateExercises, hydrateLibrary, hydrateSequen
 import { type Attempt, type BackendState, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Sequence, type Therapist } from "../../shared/types";
 
 type ApplyBackendStateOptions = {
+  includeExerciseSeeds?: boolean;
   /** Library to use instead of `state.library` (e.g. after recovering pending uploads). */
   library?: LibraryItem[];
   /** Explicit sound preferences; `null` keeps the current ones, `undefined` hydrates `state.soundPreferences`. */
@@ -36,7 +37,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   const [children, setChildren, childrenLoaded] = useStoredState<ChildProfile[]>("lg-children", initialChildren);
   const [activeChildId, setActiveChildId, activeChildLoaded] = useStoredState<string>("lg-active-child", initialChildren[0].id);
   const [library, setLibrary, libraryLoaded] = useStoredState<LibraryItem[]>("lg-library", stockItems, hydrateLibrary, libraryForStorage);
-  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, hydrateExercises);
+  const [exercises, setExercises, exercisesLoaded] = useStoredState<Exercise[]>("lg-exercises", initialExercises, saved => hydrateExercises(saved, localStorage.getItem("lg-exercise-copy-schema") !== "1"));
   const [sequences, setSequences, sequencesLoaded] = useStoredState<Sequence[]>("lg-sequences", initialSequences, hydrateSequences);
   const [activeSequenceId, setActiveSequenceId, activeSequenceLoaded] = useStoredState<string>("lg-active-sequence", initialSequences[0].id);
   const [attempts, setAttempts, attemptsLoaded] = useStoredState<Attempt[]>("lg-attempts", []);
@@ -129,7 +130,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     setChildren(state.children?.length ? state.children : initialChildren);
     setActiveChildId(state.activeChildId || state.children?.[0]?.id || initialChildren[0].id);
     setLibrary(hydrateLibrary(options.library ?? state.library ?? stockItems, officialCatalog.current.entries).map((item) => item.remoteImageId ? { ...item, image: `/api/media/${encodeURIComponent(item.remoteImageId)}` } : item));
-    setExercises(hydrateExercises(state.exercises ?? []));
+    setExercises(hydrateExercises(state.exercises ?? [], options.includeExerciseSeeds));
     setSequences(hydrateSequences(state.sequences ?? []));
     setActiveSequenceId(state.activeSequenceId || state.sequences?.[0]?.id || initialSequences[0].id);
     setAttempts(state.attempts ?? []);

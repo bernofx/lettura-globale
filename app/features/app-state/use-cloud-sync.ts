@@ -12,13 +12,13 @@ import { seedDefaultCategorySymbols } from "../../domain/category-symbol-catalog
 import { cloudSaveCanSettle } from "../../domain/share-preparation";
 import { backendResponseError, clearPendingCloudSave, fetchWithTimeout, readPendingCloudSave, saveErrorDetails, storePendingCloudSave } from "../../shared/cloud-client";
 import { readLibraryImage, uploadRemoteImage } from "../../shared/media-storage";
-import { backendStateForStorage, discardUnauthorizedNewSequences, normalizeBackendState } from "../../shared/state-hydration";
+import { backendStateForStorage, discardUnauthorizedNewSequences, needsLegacyExerciseSeeds, normalizeBackendState } from "../../shared/state-hydration";
 import { type BackendState, type BackendStatus, type LibraryItem } from "../../shared/types";
 import type { ProgressReferences } from "../../domain/state-visibility";
 import { useStoredState } from "../../shared/hooks";
 import { type AppData } from "./use-app-data";
 
-type CloudStateRead = { state: BackendState | null; revision: number; progressReferences?: ProgressReferences };
+type CloudStateRead = { copyEditorReady?: boolean; seedLegacyModels?: boolean; state: BackendState | null; revision: number; progressReferences?: ProgressReferences };
 
 function writeContent(change: StateChangeRequest) {
   return JSON.stringify([change.collections, change.values, change.libraryReplacements]);
@@ -41,7 +41,7 @@ type CloudSyncOptions = {
  */
 export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify }: CloudSyncOptions) {
   const {
-    therapists, children, activeChildId, activeSequenceId, library, setLibrary, exercises, sequences, attempts, helps,
+    therapists, children, activeChildId, activeSequenceId, library, setLibrary, exercises, setExercises, sequences, attempts, helps,
     sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, currentSnapshot, applyBackendState,
   } = data;
   const [progressReferences, setProgressReferences] = useStoredState<ProgressReferences | null>("lg-progress-references", null);
@@ -50,6 +50,13 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const [backendRefreshKey, setBackendRefreshKey] = useState(0);
   const [backendSaveRetryKey, setBackendSaveRetryKey] = useState(0);
   const [backendInitialized, setBackendInitialized] = useState(false);
+  const [copyEditorReady, setCopyEditorReady] = useState(false);
+  const copyProtocol = useRef(false);
+  const acceptCopyProtocol = useCallback((ready: boolean) => {
+    try { localStorage.setItem("lg-exercise-copy-schema", ready ? "1" : "0"); } catch { /* offline cache unavailable */ }
+    copyProtocol.current = ready;
+    setCopyEditorReady(ready);
+  }, []);
   const backendHydrating = useRef(true);
   const backendSaveTimer = useRef<number | null>(null);
   const backendRevision = useRef(0);
@@ -81,10 +88,15 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   }), [loggedInTherapistId, notify]);
 
   const fallBackToLocal = useCallback(() => {
+    try {
+      const pending = readPendingCloudSave();
+      acceptCopyProtocol(localStorage.getItem("lg-exercise-copy-schema") === "1" &&
+        (!pending || (pending.change as { copyEditorVersion?: number })?.copyEditorVersion === 1));
+    } catch { acceptCopyProtocol(false); }
     localFallbackBaseline.current = currentSnapshot();
     backendHydrating.current = false;
     setBackendStatus("local");
-  }, [currentSnapshot]);
+  }, [currentSnapshot, acceptCopyProtocol]);
 
   useEffect(() => {
     const resume = (event?: PageTransitionEvent) => {
@@ -133,6 +145,9 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       if (confirmed && buildStateChange(confirmed, currentSnapshot(), crypto.randomUUID(), backendRevision.current)) return;
       lastStateReadTag.current = response.headers.get("etag") ?? "";
       lastStateReadAdultId.current = loggedInTherapistId;
+      const ready = result.copyEditorReady === true && !(result.seedLegacyModels && needsLegacyExerciseSeeds(result.state.exercises ?? []));
+      acceptCopyProtocol(ready);
+      if (!ready && result.copyEditorReady) lastStateReadTag.current = "";
       if (result.revision === backendRevision.current && !scopeChanged) return;
       const saved = result.state;
       const savedBaseline = normalizeBackendState(saved);
@@ -140,7 +155,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       backendRevision.current = result.revision;
       lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
       setProgressReferences(result.progressReferences ?? null);
-      applyBackendState(saved, { soundPreferences: saved.soundPreferences ? undefined : null });
+      applyBackendState(saved, { includeExerciseSeeds: !ready, soundPreferences: saved.soundPreferences ? undefined : null });
       backendHydrating.current = false;
       setBackendStatus("ready");
       notify("Dati aggiornati dal cloud");
@@ -153,7 +168,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, setProgressReferences, currentSnapshot]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, setProgressReferences, currentSnapshot, acceptCopyProtocol]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady) return;
@@ -211,13 +226,18 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
             clearPendingCloudSave();
           }
         }
+        // Drain old offline programming edits under the protocol that created them.
+        const legacyQueue = recoveredPendingSave && (pendingSave?.change as { copyEditorVersion?: number })?.copyEditorVersion !== 1;
+        const ready = result.copyEditorReady === true && !(result.seedLegacyModels && needsLegacyExerciseSeeds(savedBaseline.exercises));
+        acceptCopyProtocol(ready && !legacyQueue);
+        if (legacyQueue || (!ready && result.copyEditorReady)) lastStateReadTag.current = "";
         const recoveredLibrary = recoverPendingRemoteUploads(restoredState.library, localBootstrapSnapshot.current.library);
         backendRevision.current = result.revision;
         lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_loaded", revision: result.revision, sequenceCount: restoredState.sequences.length });
         localFallbackBaseline.current = null;
         setProgressReferences(result.progressReferences ?? null);
-        applyBackendState(restoredState, { library: recoveredLibrary, soundPreferences: hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences) });
+        applyBackendState(restoredState, { includeExerciseSeeds: !ready, library: recoveredLibrary, soundPreferences: hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences) });
         backendHydrating.current = false;
         setBackendInitialized(true);
         setBackendStatus(recoveredPendingSave ? "syncing" : "ready");
@@ -253,7 +273,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       fallBackToLocal();
     });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, draftRecovery, loggedInTherapistId, setLibrary, setCategorySymbols, applyBackendState, setProgressReferences, fallBackToLocal, localBootstrapSnapshot, setLoggedInTherapistId, notify]);
+  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, draftRecovery, loggedInTherapistId, setLibrary, setCategorySymbols, applyBackendState, setProgressReferences, fallBackToLocal, localBootstrapSnapshot, setLoggedInTherapistId, notify, acceptCopyProtocol]);
 
   useEffect(() => {
     if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
@@ -293,7 +313,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         snapshot = discardUnauthorizedNewSequences(previous, snapshot, loggedInTherapistId);
         const operationId = crypto.randomUUID();
         attemptedRevision = backendRevision.current;
-        const change = buildCloudSaveChange(previous, snapshot, operationId, backendRevision.current, loggedInTherapistId);
+        const change = buildCloudSaveChange(previous, snapshot, operationId, backendRevision.current, loggedInTherapistId, copyProtocol.current);
         if (!change) return;
         const content = writeContent(change);
         const rejected = rejectedWrite.current;
@@ -304,17 +324,19 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         attemptedOperationId = operationId;
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_started", operationId, revision: backendRevision.current, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: snapshot.sequences.length });
         setBackendStatus("syncing");
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (change.copyEditorVersion) headers["x-lg-exercise-copy-version"] = "1";
         let response: Response;
-        if (granularWritesUnavailable.current && !change.libraryReplacements) {
+        if (!change.copyEditorVersion && granularWritesUnavailable.current && !change.libraryReplacements) {
           response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
         } else {
           const body = JSON.stringify(parseStateChangeRequest(change));
           response = await retryOperation(async () => {
-            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500);
+            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers, body }, 6500);
             if (result.status >= 500) throw await backendResponseError(result, "backend_save_failed");
             return result;
           }, { attempts: 2, delayMs: 400 });
-          if (!change.libraryReplacements && [404, 405, 501].includes(response.status)) {
+          if (!change.copyEditorVersion && !change.libraryReplacements && [404, 405, 501].includes(response.status)) {
             granularWritesUnavailable.current = true;
             response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
           }
@@ -334,13 +356,19 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
           syncedSnapshot = rebased.state as BackendState;
           if (!rebased.change) confirmedRevision = latest.revision;
           else response = await retryOperation(async () => {
-            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(rebased.change) }, 6500);
+            const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers, body: JSON.stringify(rebased.change) }, 6500);
             if (result.status >= 500) throw await backendResponseError(result, "backend_conflict_failed");
             return result;
           }, { attempts: 2, delayMs: 400 });
         }
         if (confirmedRevision === undefined && !response.ok) {
           const error = await backendResponseError(response, "backend_save_failed");
+          if (error.status === 403 && error.reason === "template_in_use") {
+            const refused = new Map(change.collections.exercises?.upserts.filter(row => row.deleted && !row.sequenceId).map(row => [row.id, row.updatedAt]));
+            setExercises(current => current.map(item => item.deleted && refused.has(item.id) && refused.get(item.id) === item.updatedAt
+              ? previous.exercises.find(model => model.id === item.id) ?? item : item));
+            notify("Il modello è ancora usato da una sequenza. È stato conservato nel catalogo.", 7000);
+          }
           const needsUpdate = error.status === 412 && error.code === "exercise_editor_update_required";
           if (needsUpdate) notify("Per salvare queste modifiche agli esercizi, aggiorna l’app. La bozza resta su questo dispositivo.", 7000);
           if (needsUpdate || (error.status === 403 && error.code === "state_change_forbidden")) {
@@ -362,7 +390,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
             ? discardUnauthorizedNewSequences(syncedSnapshot, replayEditsAfterSave(localAtEnqueue, visibleSnapshot, syncedSnapshot, revision, draftRecovery), loggedInTherapistId)
             : syncedSnapshot;
           backendHydrating.current = true;
-          applyBackendState(visibleSnapshot);
+          applyBackendState(visibleSnapshot, { includeExerciseSeeds: !copyProtocol.current });
           backendHydrating.current = false;
         }
 
@@ -382,20 +410,20 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       });
     backendSaveQueue.current = task;
     return task;
-  }, [loggedInTherapistId, draftRecovery, settleBackendSaveStatus, applyBackendState, setProgressReferences, currentSnapshot, notify]);
+  }, [loggedInTherapistId, draftRecovery, settleBackendSaveStatus, applyBackendState, setProgressReferences, setExercises, currentSnapshot, notify]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
     const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle });
     if (!backendInitialized) {
       if (!localFallbackBaseline.current) return;
-      const localChange = buildCloudSaveChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1, loggedInTherapistId);
+      const localChange = buildCloudSaveChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1, loggedInTherapistId, copyProtocol.current);
       if (localChange) storePendingCloudSave(localChange);
       return;
     }
     const baseline = lastSyncedBackendState.current;
     if (!baseline) return;
-    const pendingChange = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current, loggedInTherapistId);
+    const pendingChange = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current, loggedInTherapistId, copyProtocol.current);
     if (!pendingChange) {
       const idleTimer = window.setTimeout(settleBackendSaveStatus, 0);
       return () => window.clearTimeout(idleTimer);
@@ -448,8 +476,8 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   }, []);
   /** Change between the last confirmed cloud revision and `snapshot` (current local state by default). */
   const pendingChange = useCallback((snapshot: BackendState = currentSnapshot()) => {
-    const baseline = lastSyncedBackendState.current;
-    return baseline ? buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current, loggedInTherapistId) : null;
+    const baseline = lastSyncedBackendState.current ?? localFallbackBaseline.current;
+    return baseline ? buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current, loggedInTherapistId, copyProtocol.current) : null;
   }, [currentSnapshot, loggedInTherapistId]);
   const hasBaseline = useCallback(() => Boolean(lastSyncedBackendState.current), []);
   /** True when a confirmed cloud baseline exists and the local state matches it. */
@@ -474,7 +502,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     if (!backendInitialized || backendStatus === "local" || !navigator.onLine) {
       const baseline = lastSyncedBackendState.current ?? localFallbackBaseline.current;
       if (baseline) {
-        const change = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current || 1, loggedInTherapistId);
+        const change = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current || 1, loggedInTherapistId, copyProtocol.current);
         if (change) storePendingCloudSave(change);
       }
       return "local" as const;
@@ -490,7 +518,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   };
 
   return {
-    exerciseDraftRevision,
+    exerciseDraftRevision, copyEditorReady,
     progressReferences: progressReferences?.adultProfileId === loggedInTherapistId ? progressReferences.exercises : undefined,
     backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave,
     cancelScheduledSave, currentSnapshot, pendingChange, hasBaseline, isSynced, saveNow, saveQueue, revision,

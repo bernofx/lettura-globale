@@ -42,8 +42,13 @@ export function hydrateLibrary(items: LibraryItem[], official: OfficialCatalogEn
   return mergeOfficialLibrary(merged, official);
 }
 
-export function hydrateExercises(items: Exercise[]) {
-  return mergeById(items, initialExercises).map((exercise) => ({
+export function needsLegacyExerciseSeeds(items: Exercise[]) {
+  const ids = new Set(items.map(item => item.id));
+  return initialExercises.some(item => !ids.has(item.id));
+}
+
+export function hydrateExercises(items: Exercise[], includeSeeds = true) {
+  return (includeSeeds ? mergeById(items, initialExercises) : items).map((exercise) => ({
     ...exercise,
     categoryNames: exercise.categoryNames?.map(normalizeLearningCategory),
     recognitionCategories: exercise.recognitionCategories?.map(normalizeLearningCategory),

@@ -1,4 +1,4 @@
-import { GripVertical, X } from "lucide-react";
+import { GripVertical, Pencil, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { dropIndex } from "../../domain/reorder";
 import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
@@ -15,7 +15,7 @@ type Drag = {
 };
 type DragPreview = { from: number; offset: number; to: number; tops: number[] };
 
-export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderItem[]; onMove: (id: string, toIndex: number) => void; onRemove: (id: string) => void }) {
+export function SequenceOrderList({ items, onMove, onEdit, onRemove }: { items: OrderItem[]; onEdit?: (id: string) => void; onMove: (id: string, toIndex: number) => void; onRemove: (id: string) => void }) {
   const list = useRef<HTMLDivElement>(null);
   const activeDrag = useRef<Drag | null>(null);
   const suppressPointerClick = useRef(false);
@@ -111,7 +111,10 @@ export function SequenceOrderList({ items, onMove, onRemove }: { items: OrderIte
         </button>
         <span>{String(index + 1).padStart(2, "0")}</span>
         <strong>{item.title}</strong>
-        <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X aria-hidden="true" /></button>
+        <div className="sequence-step-actions">
+          {onEdit && <button type="button" className="sequence-step-edit" onClick={() => onEdit(item.id)} aria-label={`Modifica il passo ${index + 1}: ${item.title}`}><Pencil aria-hidden="true" /></button>}
+          <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X aria-hidden="true" /></button>
+        </div>
       </article>)}
     </div>
     <p className="visually-hidden" role="status">{announcement}</p>

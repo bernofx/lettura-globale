@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] ADR 0028, attivazione nell’editor dopo conferma delle colonne 0020 dal Worker. La matita isola la singola occorrenza al primo salvataggio effettivo. Aggiunta dal catalogo, creazione, duplicazione e avvio rapido assegnano una copia per passo. Il supervisore modifica il contenuto delle sequenze visibili. Le code precedenti mantengono il loro protocollo. La migrazione dell’ambiente resta a carico del gestore.
+
 - [x] ADR 0028, elenco esercizi. Il catalogo distingue modelli e copie e filtra per autore. Nella sequenza ogni occorrenza storica si sposta e si rimuove singolarmente anche se ci sono passi non visualizzabili. La creazione delle copie dalla matita resta da attivare.
 
 - [x] Numero quantità usa nuove illustrazioni di caramella, coccinella e sassolino, precaricate anche per l’uso offline. Su smartphone in verticale i dieci oggetti sono disposti in file da tre, con l’ultimo in quarta fila. Su schermi larghi sono in due file da cinque. Le superfici di tocco restano stabili e mostrano la spunta di selezione. Formato dei risultati e configurazioni compatibili. Vedi ADR 0010.

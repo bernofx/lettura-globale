@@ -517,3 +517,6 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .nav-item{transition-property:background-color,color,border-color,box-shadow}
 /* Labels in two-column builder rows match the dialog's other field labels. */
 .builder-inline-fields{margin-top:15px}.builder-inline-fields label{display:grid;gap:7px;align-content:start;font-size:12px;font-weight:800}
+
+.sequence-order-list article .sequence-step-actions{display:flex;align-items:center;gap:4px}
+.sequence-order-list .sequence-step-edit{width:44px;min-height:44px}

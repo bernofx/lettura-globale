@@ -7,11 +7,12 @@ import type { BackendState, Sequence } from "../shared/types";
 
 // Record the fields edited on this device alongside the full rows in the offline queue.
 // The Worker continues to receive the ordinary revision-checked PATCH.
-type ClientChange = StateChangeRequest & { exerciseEditBases?: ExerciseEditBases; sequenceEdits?: { id: string; fields: string[]; stepBase?: SequenceStepBase }[] };
+type ClientChange = StateChangeRequest & { copyEditorVersion?: 1; exerciseEditBases?: ExerciseEditBases; sequenceEdits?: { id: string; fields: string[]; stepBase?: SequenceStepBase }[] };
 
-export function buildCloudSaveChange(previous: BackendState, next: BackendState, operationId: string, revision: number, adultId?: string | null): ClientChange | null {
+export function buildCloudSaveChange(previous: BackendState, next: BackendState, operationId: string, revision: number, adultId?: string | null, copyEditor = false): ClientChange | null {
   const change: ClientChange | null = buildLibrarySaveChange(previous, next, operationId, revision);
   if (!change) return null;
+  if (copyEditor) change.copyEditorVersion = 1;
   const exercises = change.collections.exercises;
   if (exercises && previous.exercises.length === exercises.order.length && previous.exercises.every((item, index) => item.id === exercises.order[index])) {
     exercises.order = [];
