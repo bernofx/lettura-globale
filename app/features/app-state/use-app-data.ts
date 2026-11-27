@@ -11,7 +11,7 @@ import { defaultSoundPreferences, hydrateSoundPreferences, type SoundPreferences
 import { useStoredState } from "../../shared/hooks";
 import { readLibraryImage, storeLibraryImage } from "../../shared/media-storage";
 import { initialAdministrator, initialChildren, initialExercises, initialSequences, initialTherapists, stockItems } from "../../shared/seed-data";
-import { hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, mergeOfficialLibrary } from "../../shared/state-hydration";
+import { backendStateForStorage, hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, mergeOfficialLibrary } from "../../shared/state-hydration";
 import { type Attempt, type BackendState, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Sequence, type Therapist } from "../../shared/types";
 
 type ApplyBackendStateOptions = {
@@ -103,6 +103,8 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   const allLocalDataLoaded = therapistsLoaded && childrenLoaded && activeChildLoaded && libraryLoaded && exercisesLoaded && sequencesLoaded && activeSequenceLoaded && attemptsLoaded && helpsLoaded && sessionHistoryLoaded && appearanceLoaded && soundPreferencesLoaded && categorySymbolsLoaded && tracingOrderLoaded && interfaceStyleLoaded;
   const localBootstrapSnapshot = useRef<BackendState>({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle });
 
+  const currentSnapshot = useCallback(() => backendStateForStorage(localBootstrapSnapshot.current), []);
+
   useEffect(() => {
     localBootstrapSnapshot.current = { schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle };
   }, [therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle]);
@@ -145,7 +147,7 @@ export function useAppData(notify: (message: string, duration?: number) => void)
     library, setLibrary, exercises, setExercises, sequences, setSequences, activeSequenceId, setActiveSequenceId,
     attempts, setAttempts, helps, setHelps, sessionHistory, setSessionHistory, appearance, setAppearance,
     categorySymbols, setCategorySymbols, soundPreferences, setSoundPreferences, tracingOrderRequired, setTracingOrderRequired, interfaceStyle, setInterfaceStyle,
-    allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, applyBackendState, refreshOfficialCatalog,
+    allLocalDataLoaded, localLoadSlow, localBootstrapSnapshot, currentSnapshot, applyBackendState, refreshOfficialCatalog,
   };
 }
 

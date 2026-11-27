@@ -6,7 +6,8 @@ import { hashPinForStorage } from "../app/domain/pin-credentials.ts";
 import { checkExerciseCopyWrites } from "./test-exercise-copy-writes.mjs";
 import { checkLegacyExerciseWrites } from "./test-legacy-exercise-writes.mjs";
 import { checkExerciseCopyMigration } from "./test-exercise-copy-storage.mjs";
-import { buildStateChange } from "../app/domain/state-changes.ts";
+import { buildCloudSaveChange, rebaseCloudSaveChange } from "../app/domain/cloud-save-change.ts";
+import { buildStateChange, parseStateChangeRequest } from "../app/domain/state-changes.ts";
 import { createHash, pbkdf2Sync } from "node:crypto";
 
 const require = createRequire(import.meta.resolve("wrangler/package.json"));
@@ -217,6 +218,10 @@ try {
   const models = ["synth-first", "synth-second"].map(id => ({ id, title: id, kind: "recognition" }));
   const sequence = { id: "synth-sequence", therapistId: "adult-b", title: "Sequenza di prova", deleted: false, exerciseIds: models.map(model => model.id) };
   assert.equal((await patchState(adminCookie, baseline, { ...baseline.state, exercises: models, sequences: [sequence] })).status, 200);
+  const ownerBefore = await (await read(secondCookie)).json();
+  const lastUsedAt = "2026-11-27T08:30:00.000Z";
+  const launchChange = buildCloudSaveChange(ownerBefore.state, { ...ownerBefore.state,
+    sequences: [{ ...ownerBefore.state.sequences[0], lastUsedAt }] }, crypto.randomUUID(), ownerBefore.revision);
   const shared = await (await read(supervisorCookie)).json();
   const reordered = { ...shared.state, sequences: [{ ...shared.state.sequences[0], exerciseIds: [...sequence.exerciseIds].reverse() }] };
   assert.equal((await patchState(supervisorCookie, shared, reordered)).status, 403);
@@ -226,7 +231,14 @@ try {
   assert.equal(ownerView.dataSource, "relational");
   assert.deepEqual(ownerView.state.sequences[0].exerciseIds, reordered.sequences[0].exerciseIds);
   assert.equal(ownerView.state.sequences[0].therapistId, "adult-b");
+  const saveLaunch = change => request("/api/state/changes", { method: "PATCH",
+    headers: { cookie: secondCookie, "content-type": "application/json" }, body: JSON.stringify(parseStateChangeRequest(change)) });
+  assert.equal((await saveLaunch(launchChange)).status, 409);
+  const restored = rebaseCloudSaveChange(ownerView.state, JSON.parse(JSON.stringify(launchChange)), crypto.randomUUID(), ownerView.revision);
+  assert.equal((await saveLaunch(restored.change)).status, 200);
   const currentShared = await (await read(supervisorCookie)).json();
+  assert.equal(currentShared.state.sequences[0].lastUsedAt, lastUsedAt);
+  assert.deepEqual(currentShared.state.sequences[0].exerciseIds, reordered.sequences[0].exerciseIds);
   const renamed = { ...currentShared.state, sequences: [{ ...currentShared.state.sequences[0], title: "Altro" }] };
   assert.equal((await patchState(supervisorCookie, currentShared, renamed, contentVersion)).status, 403);
   const fullReplace = await request("/api/state", {
