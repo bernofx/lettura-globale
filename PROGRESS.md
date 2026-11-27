@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] ADR 0028, elenco esercizi. Il catalogo distingue modelli e copie e filtra per autore. Nella sequenza ogni occorrenza storica si sposta e si rimuove singolarmente anche se ci sono passi non visualizzabili. La creazione delle copie dalla matita resta da attivare.
+
 - [x] Numero quantità usa nuove illustrazioni di caramella, coccinella e sassolino, precaricate anche per l’uso offline. Su smartphone in verticale i dieci oggetti sono disposti in file da tre, con l’ultimo in quarta fila. Su schermi larghi sono in due file da cinque. Le superfici di tocco restano stabili e mostrano la spunta di selezione. Formato dei risultati e configurazioni compatibili. Vedi ADR 0010.
 
 - [x] Stili dell’interfaccia selezionabili in Impostazioni → Aspetto: Classico (predefinito), Studio e Giocoso, dalle proposte della tela di design. Studio: menu scuro raggruppato e riordinato, titoli Space Grotesk e testo Inter, pannelli compatti, «Da sistemare» in Oggi, aiuti dell’adulto in un pannello laterale scuro sugli schermi grandi e in un cassetto su telefono e tablet. Giocoso: icone del menu colorate per area, carattere Nunito, riquadri delle aree in Oggi, pulsanti a pillola, parola dell’esercizio come pillola e carte di risposta colorate. Preferenza `interfaceStyle` sincronizzata con l’account senza migrazioni D1; caratteri inclusi nell’app. Test di dominio, test di autenticazione (andata e ritorno su proiezione relazionale) e test browser sulla scelta dei tre stili. Vedi ADR 0007.
