@@ -388,8 +388,9 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
           </div>
           <div role="group" aria-label="Strumenti" className="coloring-tools">
             {tools.map(({ id, label, icon: Icon }) => (
-              <button key={id} type="button" aria-label={label} title={label} aria-pressed={tool === id} onClick={() => setTool(id)}>
-                <Icon size={22} aria-hidden="true" />
+              <button key={id} type="button" data-tool={id} aria-label={label} title={label} aria-pressed={tool === id} onClick={() => setTool(id)}>
+                <Icon size={30} strokeWidth={2.2} aria-hidden="true" />
+                {tool === id && <i className="coloring-tool-color" style={{ backgroundColor: color }} aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -399,7 +400,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
             {colors.map(([label, value]) => (
               <button key={value} type="button" aria-label={label} title={label} aria-pressed={color === value} onClick={() => setColor(value)}>
                 <span className="coloring-swatch" style={{ backgroundColor: value }} aria-hidden="true">
-                  {color === value && <Check size={16} aria-hidden="true" />}
+                  {color === value && <Check size={20} strokeWidth={3} aria-hidden="true" />}
                 </span>
               </button>
             ))}
