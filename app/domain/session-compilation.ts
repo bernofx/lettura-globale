@@ -1,4 +1,4 @@
-import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor } from "./activity-generation.ts";
+import { createRandomRecognitionRounds, pickCategoryRoundIds, recognitionModeFor, recognitionTargetsFor } from "./activity-generation.ts";
 import { availableForWordCategories, wordCategoryNames } from "./word-category-content.ts";
 import { availableForRecognition, hasArtwork, type LibraryMediaItem } from "./library-availability.ts";
 import type { SyllableFilter } from "./syllabification.ts";
@@ -23,6 +23,8 @@ export type SessionExercise = {
   categorySymbolIds?: CategorySymbols;
   recognitionMode?: "fixed" | "random";
   recognitionItemIds?: string[];
+  /** Chosen target words, proposed in turn (random mode). `promptId` mirrors the first one for older clients. */
+  recognitionTargetIds?: string[];
   recognitionCategories?: string[];
   recognitionSyllables?: SyllableFilter;
   namingItemIds?: string[];
@@ -106,7 +108,7 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
       return createRandomRecognitionRounds(availableForRecognition(library, exercise.presentation), {
         rounds: exercise.rounds ?? 6,
         distractorCount: exercise.distractorCount ?? 3,
-        fixedPromptId: exercise.promptId || undefined,
+        fixedPromptIds: recognitionTargetsFor(exercise),
         distractorSource: exercise.distractorSource ?? "mixed",
         allowedIds: exercise.recognitionItemIds,
         categories: exercise.recognitionCategories,

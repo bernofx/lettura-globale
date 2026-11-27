@@ -15,7 +15,7 @@ export function validateSharedExercises(exercises: SessionExercise[], library: S
     const kind = exercise.kind ?? "recognition";
     if (!["recognition", "articles", "word-categories", "naming", "number-quantity", "sentence-matching"].includes(kind)) return fail("invalid_configuration");
     const references = kind === "recognition"
-      ? [exercise.promptId, ...(exercise.recognitionMode === "random" ? exercise.promptId ? [] : exercise.recognitionItemIds ?? [] : exercise.optionIds ?? [])]
+      ? [exercise.promptId, ...(exercise.recognitionTargetIds ?? []), ...(exercise.recognitionMode === "random" ? exercise.promptId ? [] : exercise.recognitionItemIds ?? [] : exercise.optionIds ?? [])]
       : kind === "articles" ? exercise.articleItemIds ?? []
       : kind === "word-categories" ? exercise.categoryItemIds ?? []
       : kind === "naming" ? exercise.namingItemIds ?? []

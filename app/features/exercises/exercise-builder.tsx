@@ -1,6 +1,6 @@
 import { Check, Save, Search, Settings, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import { hasSameCategoryDistractors } from "../../domain/activity-generation";
+import { hasSameCategoryDistractors, recognitionTargetsFor } from "../../domain/activity-generation";
 import { categoryImageError, type CategorySymbols } from "../../domain/category-images";
 import { availableForWordCategories, wordCategoryNames } from "../../domain/word-category-content";
 import { articleFor } from "../../domain/article-classification";
@@ -27,6 +27,7 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
   const [recognitionMode, setRecognitionMode] = useState<"fixed" | "random">(exercise?.recognitionMode ?? (exercise ? "fixed" : "random"));
   const [randomPromptMode, setRandomPromptMode] = useState<"random" | "fixed">(exercise?.recognitionMode === "random" && exercise.promptId ? "fixed" : "random");
   const [recognitionItemIds, setRecognitionItemIds] = useState<string[]>(exercise?.recognitionItemIds ?? []);
+  const [targetIds, setTargetIds] = useState<string[]>(exercise?.recognitionMode === "random" && exercise.promptId ? recognitionTargetsFor(exercise) : []);
   const [recognitionCategories, setRecognitionCategories] = useState<string[]>(exercise?.recognitionCategories ?? []);
   const [recognitionSyllables, setRecognitionSyllables] = useState<SyllableFilter>(exercise?.recognitionSyllables ?? "all");
   const [namingItemIds, setNamingItemIds] = useState<string[]>(exercise?.namingItemIds ?? []);
@@ -62,14 +63,17 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
   const compatibleRandomCandidates = recognitionCandidates.filter((item) => (!recognitionCategories.length || recognitionCategories.includes(item.category)) && matchesSyllableFilter(item, recognitionSyllables));
   const randomCandidates = randomPromptMode === "fixed" ? compatibleRandomCandidates : compatibleRandomCandidates.filter((item) => !recognitionItemIds.length || recognitionItemIds.includes(item.id));
   const prompt = recognitionCandidates.find((item) => item.id === effectivePromptId);
-  const randomDistractors = randomCandidates.filter((item) => item.id !== effectivePromptId && (distractorSource !== "same-category" || item.category === prompt?.category));
+  // Chosen targets (one or more): each one needs enough compatible distractors of its own.
+  const targets = targetIds.flatMap((id) => recognitionCandidates.filter((item) => item.id === id));
+  const distractorsFor = (target: LibraryItem) => randomCandidates.filter((item) => item.id !== target.id && (distractorSource !== "same-category" || item.category === target.category));
+  const shortTargets = targets.filter((target) => distractorsFor(target).length < distractorCount);
   const randomConfigValid = randomPromptMode === "fixed"
-    ? Boolean(prompt) && randomDistractors.length >= distractorCount
+    ? targets.length > 0 && shortTargets.length === 0
     : randomCandidates.length >= distractorCount + 1 && (distractorSource === "mixed" || hasSameCategoryDistractors(randomCandidates, distractorCount));
-  const randomConfigError = randomConfigValid ? "" : randomPromptMode === "fixed" && !prompt
-    ? "Scegli la parola da trovare."
+  const randomConfigError = randomConfigValid ? "" : randomPromptMode === "fixed" && !targets.length
+    ? "Scegli almeno una parola da trovare."
     : randomPromptMode === "fixed"
-      ? `Servono almeno ${distractorCount} distrattori compatibili; con i filtri attuali ce ne sono ${randomDistractors.length}.`
+      ? `Servono almeno ${distractorCount} distrattori compatibili per ${shortTargets.map((item) => item.word.toLocaleUpperCase("it-IT")).join(", ")}; prova a togliere qualche filtro.`
       : distractorSource === "same-category"
         ? `Serve almeno una categoria con ${distractorCount + 1} parole compatibili con i filtri.`
         : `Servono almeno ${distractorCount + 1} parole compatibili con i filtri; al momento ce ne sono ${randomCandidates.length}.`;
@@ -89,7 +93,9 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
     updatedAt: new Date().toISOString(),
     deleted: false,
   });
-  const saveRandom = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || (randomPromptMode === "fixed" ? `Trova ${prompt?.word.toLowerCase() ?? "la parola"}` : "Trova la parola · casuale"), kind: "recognition", recognitionMode: "random", presentation: exercisePresentation, autoPronounce, promptId: randomPromptMode === "fixed" ? effectivePromptId : "", optionIds: [], recognitionItemIds, recognitionCategories, recognitionSyllables, distractorCount, distractorSource, rounds: Math.max(1, rounds), updatedAt: new Date().toISOString(), deleted: false });
+  const targetWords = targets.map((item) => item.word.toLowerCase());
+  const targetsTitle = targetWords.length > 3 ? `Trova ${targetWords.slice(0, 3).join(", ")} e altre ${targetWords.length - 3}` : `Trova ${targetWords.join(", ") || "la parola"}`;
+  const saveRandom = () => onSave({ id: exercise?.id ?? crypto.randomUUID(), title: title.trim() || (randomPromptMode === "fixed" ? targetsTitle : "Trova la parola · casuale"), kind: "recognition", recognitionMode: "random", presentation: exercisePresentation, autoPronounce, promptId: randomPromptMode === "fixed" ? targets[0]?.id ?? "" : "", recognitionTargetIds: randomPromptMode === "fixed" && targets.length > 1 ? targets.map((item) => item.id) : undefined, optionIds: [], recognitionItemIds: recognitionItemIds.filter((id) => randomPromptMode !== "fixed" || !targetIds.includes(id)), recognitionCategories, recognitionSyllables, distractorCount, distractorSource, rounds: Math.max(1, rounds), updatedAt: new Date().toISOString(), deleted: false });
   if (kind === "sentence-matching") {
     const selectedIds = sentenceItemIds.filter((id) => sentenceCandidates.some((item) => item.id === id));
     const availability = sentenceMatchingAvailability(sentenceCandidates, { rounds: Math.max(1, rounds), optionCount: sentenceOptionCount, difficulty: sentenceDifficulty, allowedIds: selectedIds });
@@ -147,12 +153,13 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
         {recognitionMode === "random" ? <>
           <div className="builder-label">Parola da trovare</div>
           <div className="selection-tabs">
-            <button type="button" className={randomPromptMode === "fixed" ? "selected" : ""} onClick={() => setRandomPromptMode("fixed")}>Una parola precisa</button>
+            <button type="button" className={randomPromptMode === "fixed" ? "selected" : ""} onClick={() => setRandomPromptMode("fixed")}>Parole precise</button>
             <button type="button" className={randomPromptMode === "random" ? "selected" : ""} onClick={() => setRandomPromptMode("random")}>Casuale a ogni turno</button>
           </div>
           {randomPromptMode === "fixed" && <>
-            <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>
-            <FullTextItemPicker items={recognitionCandidates} selectedIds={effectivePromptId ? [effectivePromptId] : []} onChange={(ids) => setPromptId(ids[0] ?? "")} multiple={false} presentation={exercisePresentation} placeholder="Cerca la parola da riconoscere…" />
+            <div className="builder-label">{exercisePresentation === "words" ? "Parole da riconoscere" : "Immagini da riconoscere"} <span>{targets.length === 1 ? "1 scelta" : `${targets.length} scelte`}</span></div>
+            <p className="field-note">Scegline una o più: a ogni turno ne compare una, a rotazione e in ordine mescolato.</p>
+            <FullTextItemPicker items={recognitionCandidates} selectedIds={targets.map((item) => item.id)} onChange={(ids) => { setTargetIds(ids); setRecognitionItemIds((current) => current.filter((id) => !ids.includes(id))); }} multiple presentation={exercisePresentation} placeholder="Cerca e aggiungi le parole da riconoscere…" />
           </>}
           <div className="builder-inline-fields">
             <label>Numero di turni<NumericField min={1} max={50} value={Math.max(1, rounds)} onValueChange={(nextValue) => setRounds(nextValue)} /></label>
@@ -162,7 +169,7 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
           <div className="filter-chips">{availableCategories.map((category) => <button type="button" key={category} className={recognitionCategories.includes(category) ? "selected" : ""} onClick={() => setRecognitionCategories((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category])} aria-pressed={recognitionCategories.includes(category)}>{category}</button>)}</div>
           <div className="builder-label">{randomPromptMode === "fixed" ? "Distrattori preferiti (facoltativo)" : "Limita a parole specifiche"} <span>{recognitionItemIds.length ? `${recognitionItemIds.length} scelte` : randomPromptMode === "fixed" ? "Scelta automatica" : "Tutte"}</span></div>
           {randomPromptMode === "fixed" && <p className="field-note">Se non ne scegli abbastanza, l’app completa automaticamente le opzioni con elementi compatibili della libreria.</p>}
-          <FullTextItemPicker items={compatibleRandomCandidates.filter((item) => randomPromptMode !== "fixed" || item.id !== effectivePromptId)} selectedIds={recognitionItemIds} onChange={setRecognitionItemIds} multiple presentation={exercisePresentation} placeholder={randomPromptMode === "fixed" ? "Cerca uno o più distrattori preferiti…" : "Cerca e aggiungi più parole…"} />
+          <FullTextItemPicker items={compatibleRandomCandidates.filter((item) => randomPromptMode !== "fixed" || !targetIds.includes(item.id))} selectedIds={recognitionItemIds} onChange={setRecognitionItemIds} multiple presentation={exercisePresentation} placeholder={randomPromptMode === "fixed" ? "Cerca uno o più distrattori preferiti…" : "Cerca e aggiungi più parole…"} />
           {randomConfigError && <p className="wizard-error" role="alert">{randomConfigError}</p>}
         </> : <>
           <div className="builder-label">{exercisePresentation === "words" ? "Parola da riconoscere" : "Immagine da riconoscere"} <span>{prompt?.word}</span></div>

@@ -1,11 +1,11 @@
 type References = {
   promptId?: string; optionIds?: string[]; articleItemIds?: string[];
-  categoryItemIds?: string[]; recognitionItemIds?: string[]; namingItemIds?: string[]; sentenceItemIds?: string[];
+  categoryItemIds?: string[]; recognitionItemIds?: string[]; recognitionTargetIds?: string[]; namingItemIds?: string[]; sentenceItemIds?: string[];
 };
 
 /** Only remap explicit IDs; never change random/fixed mode, filters or history. */
 export function remapExerciseReferences<T extends References>(exercise: T, replacements: Map<string, string>): T {
-  const keys = ["optionIds", "articleItemIds", "categoryItemIds", "recognitionItemIds", "namingItemIds", "sentenceItemIds"] as const;
+  const keys = ["optionIds", "articleItemIds", "categoryItemIds", "recognitionItemIds", "recognitionTargetIds", "namingItemIds", "sentenceItemIds"] as const;
   const next = { ...exercise };
   let changed = false;
   if (exercise.promptId && replacements.has(exercise.promptId)) { next.promptId = replacements.get(exercise.promptId)!; changed = true; }

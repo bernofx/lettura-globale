@@ -88,3 +88,11 @@ test("compila Numero quantità anche senza elementi di libreria, come nei link c
   assert.equal(plan[0].quantityTarget, 5);
   assert.equal(plan[0].quantityObject, "stone");
 });
+
+test("Trova la parola con più bersagli precisi compila un turno per bersaglio a rotazione", () => {
+  const exercise: SessionExercise = { id: "multi", title: "Trova", kind: "recognition", recognitionMode: "random", promptId: "mela", recognitionTargetIds: ["mela", "gatto"], optionIds: [], distractorCount: 1, rounds: 4, presentation: "words", updatedAt: "2026-11-27" };
+  const plan = compileSessionPlan([exercise], library, { articleFor: (item) => item.article, random: () => 0.3, createId: () => "id" });
+  assert.equal(plan.length, 4);
+  assert.deepEqual([...new Set(plan.map((turn) => turn.promptId))].sort(), ["gatto", "mela"]);
+  assert.ok(plan.every((turn) => turn.sourceExerciseId === "multi" && turn.optionIds.length === 2 && turn.optionIds.includes(turn.promptId ?? "")));
+});

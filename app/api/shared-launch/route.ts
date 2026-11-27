@@ -28,6 +28,7 @@ type SharedExercise = Record<string, unknown> & {
   categoryNames?: string[];
   recognitionMode?: "fixed" | "random";
   recognitionItemIds?: string[];
+  recognitionTargetIds?: string[];
   recognitionCategories?: string[];
   recognitionSyllables?: SyllableFilter;
   namingItemIds?: string[];
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
     }
     else if (exercise.recognitionMode === "random") {
       if (exercise.promptId) referencedIds.add(exercise.promptId);
+      exercise.recognitionTargetIds?.forEach((id) => { if (typeof id === "string") referencedIds.add(id); });
       if (!exercise.promptId && exercise.recognitionItemIds?.length) exercise.recognitionItemIds.forEach((id) => referencedIds.add(id));
       else targetLibrary.filter((item) => (exercise.presentation === "words" || hasArtwork(item)) && (!exercise.recognitionCategories?.length || exercise.recognitionCategories.includes(item.category ?? "")) && matchesSyllableFilter(item, exercise.recognitionSyllables)).forEach((item) => { if (item.id) referencedIds.add(item.id); });
     } else {

@@ -193,7 +193,10 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
     const semanticKind = string(exercise.kind, "recognition");
     const persistedKind = semanticKind === "number-quantity" || semanticKind === "sentence-matching" ? "recognition" : semanticKind;
     tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: persistedKind, semantic_kind: semanticKind === persistedKind ? null : semanticKind, recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), category_speak_word: exercise.categorySpeakWord ? 1 : 0, category_show_target_image: exercise.categoryShowTargetImage ? 1 : 0, category_show_symbols: exercise.categoryShowSymbols ? 1 : 0, auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), sentence_option_count: integer(exercise.sentenceOptionCount), sentence_difficulty: integer(exercise.sentenceDifficulty), quantity_min: integer(exercise.quantityMin), quantity_max: integer(exercise.quantityMax), quantity_object_set: optionalString(exercise.quantityObjectSet), quantity_auto_complete: exercise.quantityAutoComplete ? 1 : 0, quantity_speak_numbers: exercise.quantitySpeakNumbers ? 1 : 0, quantity_errorless: exercise.quantityErrorless ? 1 : 0, quantity_idle_seconds: integer(exercise.quantityIdleSeconds) ?? 3, source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
-    if (typeof exercise.promptId === "string" && exercise.promptId) addExerciseItems(id, "prompt", [exercise.promptId]);
+    // Several chosen targets are stored as ordered "prompt" rows (no new role, so the
+    // deployed CHECK constraint still holds); the first one is the legacy promptId.
+    const promptIds = [...new Set([...(typeof exercise.promptId === "string" && exercise.promptId ? [exercise.promptId] : []), ...strings(exercise.recognitionTargetIds)])];
+    if (promptIds.length) addExerciseItems(id, "prompt", promptIds);
     addExerciseItems(id, "option", strings(exercise.optionIds));
     addExerciseItems(id, "recognition_pool", semanticKind === "sentence-matching" ? strings(exercise.sentenceItemIds) : strings(exercise.recognitionItemIds));
     addExerciseItems(id, "article_pool", strings(exercise.articleItemIds));
@@ -348,10 +351,12 @@ export function rebuildLegacyState(projection: RelationalProjection) {
       ["article", row.article], ["syllabification", row.syllabification], ["syllableCount", row.syllable_count], ["syllableStatus", row.syllable_status], ["privateUpload", media?.is_private_upload ? true : undefined], ["deleted", row.deleted_at === null ? undefined : true],
     ]);
   });
+  // Targets keep the order the adult chose: D1 returns rows without ORDER BY.
+  const promptRole = (exerciseId: unknown) => rowsFor(tables.exercise_items, "exercise_id", exerciseId).filter((row) => row.role === "prompt").sort((a, b) => Number(a.position) - Number(b.position)).map((row) => row.library_item_id);
   const exerciseRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_items, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.library_item_id);
   const categoryRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_categories, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.category_name);
   const exercises = ordered(tables.exercises).map((row) => definedEntries([
-    ["id", row.id], ["title", row.title], ["kind", row.semantic_kind ?? (row.quantity_min != null || row.quantity_max != null || row.quantity_object_set != null ? "number-quantity" : row.kind)], ["promptId", exerciseRole(row.id, "prompt")[0]], ["optionIds", exerciseRole(row.id, "option")],
+    ["id", row.id], ["title", row.title], ["kind", row.semantic_kind ?? (row.quantity_min != null || row.quantity_max != null || row.quantity_object_set != null ? "number-quantity" : row.kind)], ["promptId", promptRole(row.id)[0]], ["recognitionTargetIds", promptRole(row.id).length > 1 ? promptRole(row.id) : undefined], ["optionIds", exerciseRole(row.id, "option")],
     ["articleItemIds", exerciseRole(row.id, "article_pool").length ? exerciseRole(row.id, "article_pool") : undefined],
     ["categoryItemIds", exerciseRole(row.id, "category_pool").length ? exerciseRole(row.id, "category_pool") : undefined],
     ["categorySpeakWord", row.category_speak_word ? true : undefined], ["categoryShowTargetImage", row.category_show_target_image ? true : undefined], ["categoryShowSymbols", row.category_show_symbols ? true : undefined],
