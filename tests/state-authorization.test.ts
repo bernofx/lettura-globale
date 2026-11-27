@@ -50,3 +50,30 @@ test("un terapista non può modificare sequenze altrui", () => {
   next.sequences[0].title = "Rubata";
   assert.deepEqual(authorizeStateTransition(previous, next, "adult-a"), { allowed: false, reason: "sequence_owner_required" });
 });
+
+test("il supervisore cambia solo le voci delle sequenze attive con il protocollo esplicito", () => {
+  const sequence = { id: "s", therapistId: "adult-b", title: "Prova", exerciseIds: ["historical"] };
+  const previous = { ...state, sequences: [sequence], exercises: [{ id: "model" }], therapists: [
+    ...state.therapists, { id: "supervisor", role: "Supervisore", childIds: [] },
+  ] };
+  const updated = { ...sequence, exerciseIds: ["model", "historical"], updatedAt: "2026-01-01T00:00:00Z" };
+  const permits = (sequences: unknown[], profile = "supervisor", enabled = true) =>
+    authorizeStateTransition(previous, { ...previous, sequences }, profile, { allowSupervisorContentEdits: enabled }).allowed;
+  assert.ok(permits([updated]));
+  assert.ok(permits([{ ...updated, exerciseIds: [] }]));
+  assert.equal(permits([updated], "supervisor", false), false);
+  assert.equal(permits([updated], "adult-a"), false);
+  for (const fields of [{ title: "Altro" }, { deleted: true }, { lastUsedAt: updated.updatedAt },
+    { updatedAt: 1 }, { exerciseIds: ["unknown"] }, { exerciseIds: null }]) {
+    assert.equal(permits([{ ...updated, ...fields }]), false);
+  }
+  assert.equal(permits([]), false);
+  assert.equal(permits([sequence, { ...sequence, id: "new" }]), false);
+  for (const profile of ["supervisor", "adult-b", "admin"]) {
+    assert.equal(permits([{ ...updated, therapistId: "adult-a" }], profile), false);
+  }
+  const archived = { ...previous, sequences: [{ ...sequence, deleted: true }] };
+  assert.equal(authorizeStateTransition(archived, { ...archived, sequences: [updated] }, "supervisor",
+    { allowSupervisorContentEdits: true }).allowed, false);
+  assert.equal(authorizeStateTransition(previous, { ...previous, activeChildId: "child-b" }, "supervisor").allowed, false);
+});
