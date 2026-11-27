@@ -337,3 +337,9 @@ html[data-style="playful"] .sequence-symbol span { border: 0; box-shadow: 0 3px 
 html[data-style="playful"] .sequence-cloud { border-width: 2px; }
 html[data-style="playful"] .modal { border-radius: 32px; }
 html[data-style="playful"] .modal-close { border-radius: 50%; }
+
+.exercise-edit-conflict dl { margin-block: 1rem; }
+.exercise-edit-conflict dl > div { padding-block: .6rem; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.exercise-edit-conflict dt { font-weight: 700; }
+.exercise-edit-conflict dd { margin: .25rem 0 0; }
+.exercise-edit-conflict .modal-actions button { min-height: 44px; }

@@ -1030,6 +1030,9 @@ try {
   await send("Emulation.setEmulatedMedia", { features: [] });
   console.log("PASS Ripassa lettere e numeri: ordine libero, ordine obbligatorio con errore rosso e audio, tratti continui, preferenza cloud, avanzamento e musica.");
 
+  const editable = { id: "exercise-browser-demo", title: "Conteggio demo", kind: "number-quantity", optionIds: [], updatedAt: "2026-01-01T00:00:00Z" };
+  state.exercises = [editable];
+  stateRevision++;
   availableVersion = "r999999-abcdef0";
   await viewport(320, 800);
   await send("Page.reload");
@@ -1077,6 +1080,50 @@ try {
     await wait("document.activeElement?.matches('.menu-button') && !document.querySelector('.sidebar.open')");
   }
   console.log("PASS App shell: nine views fit six mobile and tablet widths; Classico, Studio and Giocoso styles apply.");
+  await viewport(1024, 768);
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelector('[aria-label=\"Modifica Conteggio demo\"]')");
+  await button("Modifica Conteggio demo");
+  const titleField = "document.querySelector('#exercise-builder-title').parentElement.querySelector('label input')";
+  await evaluate(`${titleField}.focus(); ${titleField}.select()`);
+  await send("Input.insertText", { text: "Bozza demo" });
+  await wait(`${titleField}.value === 'Bozza demo'`);
+  // Let the debounced preference write from opening the app settle before the simulated remote edit.
+  await delay(1000);
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  state.exercises = [{ ...editable, title: "Conteggio aggiornato", rounds: 4 }];
+  stateRevision++;
+  // A resume refresh can be throttled for 15 seconds after the last foreground check.
+  await wait("document.querySelector('.nav-item.active[data-area=exercises]')");
+  for (let i = 0; i < 20; i++) {
+    await evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))");
+    if (await evaluate("!!document.querySelector('[aria-label=\"Modifica Conteggio aggiornato\"]')")) break;
+    await delay(1000);
+  }
+  await wait("document.querySelector('[aria-label=\"Modifica Conteggio aggiornato\"]')");
+  await button("Salva esercizio");
+  await wait("document.querySelector('#exercise-edit-conflict')");
+  const comparison = await evaluate("document.querySelector('.exercise-edit-conflict').textContent");
+  assert.ok(comparison.includes("Conteggio aggiornato") && comparison.includes("Bozza demo"));
+  await viewport(320, 800);
+  for (const style of ["studio", "playful", "classic"]) {
+    const fits = await evaluate(`(() => {
+      document.documentElement.dataset.style = ${JSON.stringify(style)};
+      const panel = document.querySelector('.exercise-edit-conflict');
+      return panel.scrollWidth <= panel.clientWidth + 1 && [...panel.querySelectorAll('button')].every(button => {
+        const bounds = button.getBoundingClientRect();
+        return bounds.height >= 44 && bounds.left >= 0 && bounds.right <= innerWidth + 1;
+      });
+    })()`);
+    assert.ok(fits, "il confronto e i suoi pulsanti sono accessibili su mobile in " + style);
+  }
+  await button("Prosegui con la mia bozza");
+  await wait(`!document.querySelector('#exercise-edit-conflict') && ${titleField}.value === 'Bozza demo'`);
+  await button("Salva esercizio");
+  await wait("!document.querySelector('#exercise-builder-title') && document.querySelector('[aria-label=\"Modifica Bozza demo\"]')");
+  console.log("PASS Esercizi: un aggiornamento cloud durante la modifica conserva la bozza e richiede un salvataggio esplicito.");
 } finally {
   socket.close();
 }
