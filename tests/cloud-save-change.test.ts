@@ -67,3 +67,55 @@ test("una rinomina accodata durante il salvataggio conserva i passi modificati n
   assert.deepEqual(replayEditsAfterSave(launched, local, confirmed, 4).sequences,
     [confirmed.sequences[0], { ...confirmed.sequences[1], title: "Nuovo titolo" }]);
 });
+
+const model = { id: "model", title: "Demo", kind: "number-quantity" as const, optionIds: [], rounds: 3, updatedAt: first };
+const cloudState = { ...baseline, exercises: [model] };
+const draft = { ...model, title: "Bozza", updatedAt: second };
+const local = { ...cloudState, exercises: [draft], tracingOrderRequired: true };
+
+test("al ripristino della coda un conflitto conserva bozza e versione cloud, con le altre modifiche del lotto", () => {
+  const raw = buildCloudSaveChange(cloudState, local, operation, 2, "adult")!;
+  assert.ok(!("exerciseEditBases" in parseStateChangeRequest(raw)));
+  const pending = parsePendingCloudSave(serializePendingCloudSave(raw))!;
+  for (const exercises of [[], [{ ...model, rounds: 4 }], [{ ...model, deleted: true }]]) {
+    const latest = { ...cloudState, exercises };
+    const saved: unknown[] = [];
+    const result = rebaseCloudSaveChange(latest, pending.change, operation, 5, { adultId: "adult", preserve: (...args) => saved.push(args) });
+    assert.deepEqual(saved, [["adult", draft]]);
+    assert.deepEqual(result.state, { ...latest, tracingOrderRequired: true });
+    assert.deepEqual(applyStateChange(latest, result.change), result.state);
+  }
+});
+
+test("un esercizio già salvato non viene riproposto; una seconda modifica durante l’invio resta recuperabile", () => {
+  const submitted = { ...cloudState, exercises: [draft] };
+  const pending = buildCloudSaveChange(cloudState, submitted, operation, 2, "adult")!;
+  const saved: unknown[] = [];
+  const recovery = { adultId: "adult", preserve: (...args: unknown[]) => { saved.push(args); } };
+  assert.equal(rebaseCloudSaveChange(submitted, pending, operation, 3, recovery).change, null);
+  const next = { ...draft, rounds: 6 };
+  const remote = { ...cloudState, exercises: [{ ...model, title: "Confermato" }] };
+  assert.deepEqual(replayEditsAfterSave(submitted, { ...submitted, exercises: [next] }, remote, 4, recovery), remote);
+  assert.deepEqual(saved, [["adult", next]]);
+});
+
+test("il cambio di profilo non applica una bozza altrui anche con una definizione identica", () => {
+  const pending = buildCloudSaveChange(cloudState, local, operation, 2, "adult")!;
+  const saved: unknown[] = [];
+  const result = rebaseCloudSaveChange(cloudState, pending, operation, 3, { adultId: "other", preserve: (...args) => saved.push(args) });
+  assert.deepEqual(result.state.exercises, cloudState.exercises);
+  assert.deepEqual(saved, [["adult", draft]]);
+});
+
+test("una copia staccata viene conservata come bozza anche se le impostazioni sono identiche alla base", () => {
+  const copy = { ...model, id: "copy", sequenceId: sequence.id, templateExerciseId: model.id };
+  const before = { ...baseline, exercises: [model, copy], sequences: [{ ...sequence, exerciseIds: [copy.id] }] };
+  const modified = { ...copy, rounds: 8 };
+  const change = buildCloudSaveChange(before, { ...before, exercises: [model, modified] }, operation, 2, "adult")!;
+  const current = { ...before, sequences: [{ ...sequence, exerciseIds: [] }] };
+  const saved: unknown[] = [];
+  const result = rebaseCloudSaveChange(current, change, operation, 4, { adultId: "adult", preserve: (_, draft) => saved.push(draft) });
+  assert.deepEqual(saved, [modified]);
+  assert.equal(result.change, null);
+  assert.deepEqual(result.state, current);
+});

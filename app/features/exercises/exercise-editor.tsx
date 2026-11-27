@@ -39,12 +39,12 @@ function settingValue(exercise: Exercise, key: keyof Exercise, library: LibraryI
   return Object.hasOwn(optionLabels, value) ? optionLabels[value] : String(value);
 }
 
-type Props = ComponentProps<typeof ExerciseBuilder> & { current?: Exercise };
+type Props = ComponentProps<typeof ExerciseBuilder> & { current?: Exercise; recovered?: boolean };
 
-export function ExerciseEditor({ exercise, current, kind, onSave, onClose, ...props }: Props) {
-  const [baseline, setBaseline] = useState(current);
+export function ExerciseEditor({ exercise, current, recovered, kind, onSave, onClose, ...props }: Props) {
+  const [baseline, setBaseline] = useState(recovered ? exercise : current);
   const [form, setForm] = useState(exercise);
-  const [review, setReview] = useState<{ draft: Exercise; seen?: Exercise } | null>(null);
+  const [review, setReview] = useState<{ draft: Exercise; seen?: Exercise } | null>(recovered && exercise ? { draft: exercise, seen: current } : null);
   const [formVersion, setFormVersion] = useState(0);
 
   const save = (draft: Exercise) => {
