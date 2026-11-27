@@ -300,3 +300,34 @@ html:has(.coloring-dialog[open], .balloon-game-dialog[open]) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Bigger palette and tool tiles: square swatches, larger tool icons with their own tint. */
+.coloring-controls { grid-template-columns: repeat(2, 56px); gap: 8px; padding: 6px; }
+.coloring-tools { gap: 8px; }
+.coloring-tools button, .coloring-controls .coloring-tools button { position: relative; flex: 0 0 56px; width: 56px; height: 56px; border: 0; border-radius: 16px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%), 0 3px 0 rgb(0 0 0 / 8%); transition: transform .12s ease, background-color .15s ease; }
+.coloring-tools button[data-tool="brush"] { background: #ffe8de; color: #b4471d; }
+.coloring-tools button[data-tool="crayon"] { background: #fff3c4; color: #8a6400; }
+.coloring-tools button[data-tool="fill"] { background: #dff4ea; color: #1f7a52; }
+.coloring-tools button:hover { transform: translateY(-1px); }
+.coloring-controls .coloring-tools button[aria-pressed="true"] { background: var(--violet); color: #ffffff; box-shadow: 0 3px 0 var(--violet-dark); }
+.coloring-tool-color { position: absolute; right: 5px; bottom: 5px; width: 14px; height: 14px; border: 2px solid #ffffff; border-radius: 5px; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
+.coloring-colors { gap: 6px; padding: 4px 0; }
+.coloring-controls .coloring-colors button { flex: 0 0 50px; width: 56px; height: 50px; }
+.coloring-swatch { width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 -3px 0 rgb(0 0 0 / 12%); }
+.coloring-colors button[aria-pressed="true"] .coloring-swatch { outline: 3px solid var(--violet); outline-offset: 2px; }
+.coloring-swatch svg { border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .coloring-tools button { transition: none; } .coloring-tools button:hover { transform: none; } }
+/* Short landscape phones keep the canvas wide: slightly smaller tiles, still above the 44px target. */
+@media (max-height: 430px) {
+  .coloring-controls { grid-template-columns: repeat(2, 48px); gap: 6px; padding: 4px; }
+  .coloring-tools button, .coloring-controls .coloring-tools button { flex-basis: 48px; width: 48px; height: 48px; border-radius: 14px; }
+  .coloring-tools svg { width: 26px; height: 26px; }
+  .coloring-controls .coloring-colors button { flex-basis: 44px; width: 48px; height: 44px; }
+  .coloring-swatch { width: 36px; height: 36px; border-radius: 9px; }
+}
+/* The turned game on a portrait phone has the same short landscape room. */
+.coloring-dialog[data-rotated="true"] .coloring-controls { grid-template-columns: repeat(2, 48px); gap: 6px; padding: 4px; }
+.coloring-dialog[data-rotated="true"] .coloring-tools button { flex-basis: 48px; width: 48px; height: 48px; border-radius: 14px; }
+.coloring-dialog[data-rotated="true"] .coloring-tools svg { width: 26px; height: 26px; }
+.coloring-dialog[data-rotated="true"] .coloring-controls .coloring-colors button { flex-basis: 44px; width: 48px; height: 44px; }
+.coloring-dialog[data-rotated="true"] .coloring-swatch { width: 36px; height: 36px; border-radius: 9px; }
