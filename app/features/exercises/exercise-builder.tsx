@@ -140,7 +140,7 @@ export function ExerciseBuilder({ categorySymbols, kind, exercise, library, onCl
       description="Puoi scegliere una parola precisa con distrattori casuali, rendere casuale anche il bersaglio oppure configurare tutte le opzioni a mano."
       title={title}
       onTitleChange={setTitle}
-      titlePlaceholder={recognitionMode === "random" ? randomPromptMode === "fixed" && prompt ? `Trova ${prompt.word.toLowerCase()}` : "Trova la parola · casuale" : prompt ? `Trova ${prompt.word.toLowerCase()}` : "Titolo esercizio"}
+      titlePlaceholder={recognitionMode === "random" ? randomPromptMode === "fixed" ? targetsTitle : "Trova la parola · casuale" : prompt ? `Trova ${prompt.word.toLowerCase()}` : "Titolo esercizio"}
       saveDisabled={recognitionMode === "fixed" ? !effectivePromptId || finalOptions.length < 2 : !randomConfigValid}
       onSave={recognitionMode === "random" ? saveRandom : saveFixed}
       onClose={onClose}
