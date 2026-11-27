@@ -7,11 +7,11 @@ import { ProgressWordTable } from "./progress-word-table";
 import { downloadProgressCsv } from "./progress-export";
 import { Artwork } from "../../shared/artwork";
 
-import { type Attempt, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Mode, type Therapist } from "../../shared/types";
+import { type Attempt, type ChildProfile, type HelpEvent, type LibraryItem, type Mode, type Therapist } from "../../shared/types";
 import { PageHeader, PanelHeading } from "../../shared/ui/headings";
-import { buildWordProgress } from "../../domain/progress-data";
+import { buildWordProgress, type ProgressExercise } from "../../domain/progress-data";
 
-export function StatsView({ dataFirst = false, child, therapist, therapists, attempts, helps, histories, exercises, library, onSaveHistoryComment, onDeleteHistory, onDeleteAllHistory, onReset }: { dataFirst?: boolean; child: ChildProfile; therapist: Therapist; therapists: Therapist[]; attempts: Attempt[]; helps: HelpEvent[]; histories: SessionHistoryRecord[]; exercises: Exercise[]; library: LibraryItem[]; onSaveHistoryComment: (id: string, comment: string) => void; onDeleteHistory: (id: string, label: string) => void; onDeleteAllHistory: () => void; onReset: () => void }) {
+export function StatsView({ dataFirst = false, child, therapist, therapists, attempts, helps, histories, exercises, library, onSaveHistoryComment, onDeleteHistory, onDeleteAllHistory, onReset }: { dataFirst?: boolean; child: ChildProfile; therapist: Therapist; therapists: Therapist[]; attempts: Attempt[]; helps: HelpEvent[]; histories: SessionHistoryRecord[]; exercises: ProgressExercise[]; library: LibraryItem[]; onSaveHistoryComment: (id: string, comment: string) => void; onDeleteHistory: (id: string, label: string) => void; onDeleteAllHistory: () => void; onReset: () => void }) {
   const [selectedMode, setSelectedMode] = useState<Mode>("test");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [chartWords, setChartWords] = useState<ChartWord[] | null>(null);

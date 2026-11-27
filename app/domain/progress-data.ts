@@ -6,7 +6,7 @@ import type { TableRow, TableScore } from "./progress-table";
 import type { TrendRecord } from "./progress-trend";
 
 export type WordActivity = Exclude<SessionActivity, "number-quantity">;
-type ProgressExercise = Pick<SessionExercise, "id" | "kind" | "promptId"> & { title?: string };
+export type ProgressExercise = Pick<SessionExercise, "id" | "kind" | "promptId"> & { title?: string };
 type AttemptReference = Pick<AttemptEvent, "exerciseId" | "wordId" | "sessionId" | "sessionItemId" | "quantityErrorless"> & { id?: string };
 export type ProgressHistory = Pick<SessionHistoryRecord, "id" | "items">;
 

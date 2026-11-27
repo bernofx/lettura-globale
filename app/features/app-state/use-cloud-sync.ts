@@ -11,7 +11,11 @@ import { backendResponseError, clearPendingCloudSave, fetchWithTimeout, readPend
 import { readLibraryImage, uploadRemoteImage } from "../../shared/media-storage";
 import { backendStateForStorage, discardUnauthorizedNewSequences, normalizeBackendState } from "../../shared/state-hydration";
 import { type BackendState, type BackendStatus, type LibraryItem } from "../../shared/types";
+import type { ProgressReferences } from "../../domain/state-visibility";
+import { useStoredState } from "../../shared/hooks";
 import { type AppData } from "./use-app-data";
+
+type CloudStateRead = { state: BackendState | null; revision: number; progressReferences?: ProgressReferences };
 
 function writeContent(change: StateChangeRequest) {
   return JSON.stringify([change.collections, change.values]);
@@ -37,6 +41,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     therapists, children, activeChildId, activeSequenceId, library, setLibrary, exercises, sequences, attempts, helps,
     sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, applyBackendState,
   } = data;
+  const [progressReferences, setProgressReferences] = useStoredState<ProgressReferences | null>("lg-progress-references", null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [backendRetryKey, setBackendRetryKey] = useState(0);
   const [backendRefreshKey, setBackendRefreshKey] = useState(0);
@@ -104,7 +109,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       const response = await fetchWithTimeout("/api/state", { cache: "no-store", headers: tag ? { "if-none-match": tag } : {} }, 6500);
       if (response.status === 304) return;
       if (!response.ok) throw await backendResponseError(response, "backend_refresh_failed");
-      const result = await response.json() as { state: BackendState | null; revision: number };
+      const result = await response.json() as CloudStateRead;
       if (cancelled || !result.state || result.revision < backendRevision.current) return;
       const confirmed = lastSyncedBackendState.current;
       if (confirmed && buildStateChange(confirmed, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current)) return;
@@ -116,6 +121,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       backendHydrating.current = true;
       backendRevision.current = result.revision;
       lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
+      setProgressReferences(result.progressReferences ?? null);
       applyBackendState(saved, { soundPreferences: saved.soundPreferences ? undefined : null });
       backendHydrating.current = false;
       setBackendStatus("ready");
@@ -129,7 +135,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, localBootstrapSnapshot]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, setProgressReferences, localBootstrapSnapshot]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady) return;
@@ -162,7 +168,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         return;
       }
       if (!response.ok) throw new Error("backend_load_failed");
-      const result = await response.json() as { state: BackendState | null; revision: number };
+      const result = await response.json() as CloudStateRead;
       if (cancelled) return;
       lastStateReadTag.current = response.headers.get("etag") ?? "";
       lastStateReadAdultId.current = loggedInTherapistId;
@@ -188,6 +194,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         lastSyncedBackendState.current = backendStateForStorage(savedBaseline);
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "cloud_loaded", revision: result.revision, sequenceCount: restoredState.sequences.length });
         localFallbackBaseline.current = null;
+        setProgressReferences(result.progressReferences ?? null);
         applyBackendState(restoredState, { library: recoveredLibrary, soundPreferences: hydrateSoundPreferences(restoredState.soundPreferences ?? localBootstrapSnapshot.current.soundPreferences) });
         backendHydrating.current = false;
         setBackendInitialized(true);
@@ -224,7 +231,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       fallBackToLocal();
     });
     return () => { cancelled = true; };
-  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, loggedInTherapistId, setLibrary, setCategorySymbols, applyBackendState, fallBackToLocal, localBootstrapSnapshot, setLoggedInTherapistId]);
+  }, [allLocalDataLoaded, backendInitialized, backendRetryKey, loggedInTherapistId, setLibrary, setCategorySymbols, applyBackendState, setProgressReferences, fallBackToLocal, localBootstrapSnapshot, setLoggedInTherapistId]);
 
   useEffect(() => {
     if (backendInitialized || (backendStatus !== "loading" && backendStatus !== "migrating")) return;
@@ -288,8 +295,9 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         if (response.status === 409) {
           const latestResponse = await fetchWithTimeout("/api/state", { cache: "no-store" }, 6500);
           if (!latestResponse.ok) throw new Error("backend_conflict_reload_failed");
-          const latest = await latestResponse.json() as { state: BackendState | null; revision: number };
+          const latest = await latestResponse.json() as CloudStateRead;
           if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
+          setProgressReferences(latest.progressReferences ?? null);
           const rebased = rebaseStateChange(latest.state, change, crypto.randomUUID(), latest.revision);
           attemptedRevision = latest.revision;
           appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_rebased", operationId, revision: latest.revision, changedSequences: change.collections.sequences?.upserts.length ?? 0 });
@@ -339,7 +347,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       });
     backendSaveQueue.current = task;
     return task;
-  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, localBootstrapSnapshot, notify]);
+  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, setProgressReferences, localBootstrapSnapshot, notify]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
@@ -440,6 +448,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   };
 
   return {
+    progressReferences: progressReferences?.adultProfileId === loggedInTherapistId ? progressReferences.exercises : undefined,
     backendStatus, setBackendStatus, backendInitialized, enqueueBackendSave,
     cancelScheduledSave, currentSnapshot, pendingChange, hasBaseline, isSynced, saveNow, saveQueue, revision,
     resetReadScope, retryLoad, retrySave, fallBackToLocal, persistLibraryNow, lastSaveError,
