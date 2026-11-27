@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { preserveExerciseDraft } from "../../domain/exercise-draft-storage";
+import { preserveExerciseDraft, sequenceDrafts } from "../../domain/exercise-draft-storage";
 import type { DraftRecovery } from "../../domain/queued-exercise-edits";
 import { recoverPendingRemoteUploads } from "../../domain/library-deduplication";
 import { retryOperation } from "../../domain/retry";
@@ -68,6 +68,11 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const [exerciseDraftRevision, setExerciseDraftRevision] = useState(0);
   const draftRecovery: DraftRecovery = useMemo(() => ({
     adultId: loggedInTherapistId,
+    preserveSequence(adultId, draft) {
+      sequenceDrafts.preserve(localStorage, adultId, draft);
+      setExerciseDraftRevision(revision => revision + 1);
+      if (adultId === loggedInTherapistId) notify("La sequenza è cambiata. Confronta i passi in Esercizi → Bozze da verificare.", 7000);
+    },
     preserve(adultId, draft) {
       preserveExerciseDraft(localStorage, adultId, draft);
       setExerciseDraftRevision(revision => revision + 1);

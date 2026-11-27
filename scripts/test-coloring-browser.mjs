@@ -1,5 +1,7 @@
 // Run against the local production build and a fresh Chromium profile with CDP.
 import assert from "node:assert/strict";
+import { buildCloudSaveChange } from "../app/domain/cloud-save-change.ts";
+import { PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave } from "../app/domain/pending-cloud-save.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -127,6 +129,8 @@ socket.addEventListener("message", event => {
     }
     if (url.pathname === "/api/state/changes" && request.method === "PATCH") {
       const { values, collections } = JSON.parse(request.postData);
+      const sequenceEdit = collections.sequences?.upserts.find(item => item.id === "sequence-order-demo");
+      if (sequenceEdit) state.sequences = [sequenceEdit];
       const demoEdit = collections.exercises?.upserts.find(item => item.id === "exercise-browser-demo");
       if (demoEdit && concurrentExerciseUpdate) {
         concurrentExerciseUpdate = false;
@@ -1172,6 +1176,42 @@ try {
   await button("Elimina bozza locale");
   await wait("!document.querySelector('.recovered-exercise-drafts')");
   console.log("PASS Esercizi: conflitto HTTP 409, bozza del profilo recuperata dopo ricarica e salvataggio esplicito.");
+  // Restore a real queued change after another adult has reordered the same steps.
+  const demoSteps = ["Primo", "Secondo", "Terzo"].map((title, index) => ({
+    ...editable, id: "sequence-step-demo-" + index, title,
+  }));
+  const [a, b, c] = demoSteps.map(item => item.id);
+  const sequence = { id: "sequence-order-demo", title: "Ordine demo", therapistId: therapist.id, exerciseIds: [a, b, c] };
+  const before = { ...state, exercises: [...state.exercises, ...demoSteps], sequences: [sequence] };
+  const pendingChange = buildCloudSaveChange(before, { ...before, sequences: [{ ...sequence, exerciseIds: [b, a, c] }] },
+    "pending-sequence-demo", stateRevision, therapist.id);
+  state.exercises = before.exercises;
+  state.sequences = [{ ...sequence, exerciseIds: [a, c, b] }];
+  stateRevision++;
+  await evaluate(`localStorage.setItem(${JSON.stringify(PENDING_CLOUD_SAVE_STORAGE_KEY)}, ${JSON.stringify(serializePendingCloudSave(pendingChange))})`);
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelector('.sequence-draft-comparison summary')");
+  await evaluate("document.querySelector('.sequence-draft-comparison summary').click()");
+  const orders = await evaluate("[...document.querySelectorAll('.sequence-draft-comparison ol')].map(list => [...list.children].map(li => li.textContent))");
+  assert.deepEqual(orders, [["Secondo", "Primo", "Terzo"], ["Primo", "Terzo", "Secondo"]]);
+  for (const style of ["studio", "playful", "classic"]) {
+    assert.ok(await evaluate(`(() => {
+      document.documentElement.dataset.style = ${JSON.stringify(style)};
+      const details = document.querySelector('.sequence-draft-comparison');
+      return details.scrollWidth <= details.clientWidth + 1 && details.querySelector('summary').getBoundingClientRect().height >= 44;
+    })()`));
+  }
+  await button("Seleziona questa sequenza");
+  assert.deepEqual(state.sequences[0].exerciseIds, [a, c, b]);
+  await button("Usa l’ordine della bozza");
+  for (let i = 0; i < 50 && state.sequences[0].exerciseIds[0] !== b; i++) await delay(100);
+  assert.deepEqual(state.sequences[0].exerciseIds, [b, a, c]);
+  await button("Elimina la bozza locale di Ordine demo");
+  await button("Elimina bozza locale");
+  await wait("!document.querySelector('.sequence-draft-comparison')");
+  console.log("PASS Sequenze: recupero dopo ricarica, confronto dei due ordini e selezione della sequenza corrente.");
 } finally {
   socket.close();
 }

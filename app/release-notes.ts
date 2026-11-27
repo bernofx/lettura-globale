@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Quando due adulti cambiano i passi di una sequenza, le modifiche indipendenti si combinano. Se gli ordini sono incompatibili, li ritrovi in Esercizi → Bozze da verificare.",
     "Se il cloud segnala un conflitto dopo il salvataggio di un esercizio, puoi ritrovare la tua versione in Esercizi → Bozze da verificare, anche dopo aver riaperto l’app sullo stesso dispositivo.",
     "Se un altro adulto aggiorna un esercizio mentre lo stai modificando, al salvataggio puoi confrontare le impostazioni e scegliere quale versione usare.",
     "Se avvii una sequenza mentre un altro adulto la modifica, il salvataggio dell’ultimo utilizzo conserva la nuova programmazione anche al rientro online.",

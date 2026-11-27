@@ -1,11 +1,13 @@
+import { reconcileSequenceSteps, sameSequenceScope, type SequenceStepBase } from "./queued-sequence-steps.ts";
+import { legacySequenceOwnerId } from "./sequence-access.ts";
 import { queuedExerciseBases, reconcileQueuedExercises, type ExerciseEditBases, type DraftRecovery } from "./queued-exercise-edits.ts";
 import { buildLibrarySaveChange, rebaseLibrarySaveChange } from "./library-save-change.ts";
 import { parseStateChangeRequest, type StateChangeRequest } from "./state-changes.ts";
-import type { BackendState } from "../shared/types";
+import type { BackendState, Sequence } from "../shared/types";
 
 // Record the fields edited on this device alongside the full rows in the offline queue.
 // The Worker continues to receive the ordinary revision-checked PATCH.
-type ClientChange = StateChangeRequest & { exerciseEditBases?: ExerciseEditBases; sequenceEdits?: { id: string; fields: string[] }[] };
+type ClientChange = StateChangeRequest & { exerciseEditBases?: ExerciseEditBases; sequenceEdits?: { id: string; fields: string[]; stepBase?: SequenceStepBase }[] };
 
 export function buildCloudSaveChange(previous: BackendState, next: BackendState, operationId: string, revision: number, adultId?: string | null): ClientChange | null {
   const change: ClientChange | null = buildLibrarySaveChange(previous, next, operationId, revision);
@@ -23,11 +25,18 @@ export function buildCloudSaveChange(previous: BackendState, next: BackendState,
   if (previous.sequences.length === sequences.order.length && previous.sequences.every((seq, i) => seq.id === sequences.order[i])) {
     sequences.order = [];
   }
+  const titles = new Map(next.exercises.map(item => [item.id, item.title]));
   const sequenceEdits = sequences.upserts.flatMap(seq => {
     const original = prior.get(seq.id);
     if (!original) return [];
     const keys = new Set([...Object.keys(original), ...Object.keys(seq)]);
     const fields = [...keys].filter(key => JSON.stringify(original[key]) !== JSON.stringify(seq[key]));
+    if (adultId && !seq.deleted && fields.includes("exerciseIds") && Array.isArray(original.exerciseIds) && Array.isArray(seq.exerciseIds)) {
+      const ids = seq.exerciseIds as string[];
+      const stepBase: SequenceStepBase = { adultId, ownerId: String(original.therapistId || legacySequenceOwnerId(original.ownerAdultId)),
+        ids: original.exerciseIds, titles: Object.fromEntries(ids.map(id => [id, titles.get(id) ?? "Esercizio non disponibile"])) };
+      return [{ id: seq.id, fields, stepBase }];
+    }
     return [{ id: seq.id, fields }];
   });
   return sequenceEdits.length ? { ...change, sequenceEdits } : change;
@@ -39,15 +48,39 @@ export function rebaseCloudSaveChange(latest: BackendState, raw: unknown, operat
   const sequences = change.collections.sequences;
   if (sequences) {
     const edits = (raw as ClientChange).sequenceEdits;
-    const fieldsById = new Map((Array.isArray(edits) ? edits : [])
+    const byId = new Map((Array.isArray(edits) ? edits : [])
       .filter(edit => typeof edit?.id === "string" && Array.isArray(edit.fields))
-      .map(edit => [edit.id, new Set(edit.fields)]));
+      .map(edit => [edit.id, edit]));
     const current = new Map((latest.sequences ?? []).map(sequence => [sequence.id, sequence]));
     sequences.upserts = sequences.upserts.flatMap(local => {
       const cloud = current.get(local.id);
       const localTime = typeof local.lastUsedAt === "string" ? Date.parse(local.lastUsedAt) : NaN;
       const cloudTime = cloud?.lastUsedAt ? Date.parse(cloud.lastUsedAt) : NaN;
-      const fields = fieldsById.get(local.id);
+      const edit = byId.get(local.id);
+      const fields = edit && new Set(edit.fields);
+      if (edit?.stepBase) {
+        const resolved = reconcileSequenceSteps(change, edit.stepBase, local as Sequence, cloud, latest.exercises ?? [], recovery);
+        if (resolved) {
+          local = resolved;
+          if (cloud && JSON.stringify(cloud.exerciseIds) === JSON.stringify(resolved.exerciseIds)) {
+            fields?.delete("exerciseIds");
+            if (fields?.size === 1 && fields.has("updatedAt")) return [];
+            if (!fields?.size) return [];
+          }
+        }
+        else {
+          if (!sameSequenceScope(edit.stepBase, cloud, recovery)) {
+            if (change.values.activeSequenceId === local.id) {
+              change.values = { ...change.values };
+              delete change.values.activeSequenceId;
+            }
+            return [];
+          }
+          fields?.delete("exerciseIds");
+          fields?.delete("updatedAt");
+          if (!fields?.size) return [];
+        }
+      }
       if (fields?.size === 1 && fields.has("lastUsedAt")) {
         if (!cloud || cloud.deleted) {
           if (change.values.activeSequenceId === local.id) {
