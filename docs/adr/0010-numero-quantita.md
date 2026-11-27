@@ -6,7 +6,7 @@ Gli esercizi esistenti registrano risposte riferite soprattutto a elementi della
 
 ## Decisione
 
-- Ogni turno mostra dieci illustrazioni in due file da cinque e sorteggia un bersaglio nell’intervallo configurato. Gli oggetti selezionati possono essere deselezionati.
+- Ogni turno mostra dieci illustrazioni in una griglia e sorteggia un bersaglio nell’intervallo configurato. Gli oggetti selezionati possono essere deselezionati.
 - In valutazione non ci sono timer: l’adulto registra sempre `Numero corretto` o `Numero errato` e passa subito al turno seguente.
 - In insegnamento una barra neutra mostra il tempo di inattività, configurabile e uguale per conteggi corretti ed errati, così non anticipa l’esito. Ogni clic, tocco o pressione di tasto riavvia la barra. Se il conteggio è corretto e il riconoscimento automatico è abilitato, compare la spunta; altrimenti serve la conferma adulta. Un conteggio errato produce suono e X rossa. Dopo l’esito solo l’adulto avanza con `Continua`; dopo un errore può anche scegliere `Riprova`, conservando nello storico gli esiti precedenti. Il link condiviso usa sempre il timer dell’insegnamento senza salvare risultati.
 - La configurazione viene persistita in colonne dedicate della tabella `exercises`.
@@ -21,7 +21,7 @@ Lo schema D1 storico di `session_items.kind` non include `number-quantity`. Per 
 
 ### Illustrazioni degli oggetti
 
-Caramella, coccinella e sassolino usano tre WebP trasparenti in `public/images/quantity`. Sono illustrazioni originali generate con OpenAI ImageGen per l’uso in Lettura Globale e distribuite con l’app. La cache offline le precarica all’installazione. Ogni carta ha una posizione stabile e mostra una spunta quando è selezionata.
+Caramella, coccinella e sassolino usano tre WebP trasparenti in `public/images/quantity`. Sono illustrazioni originali generate con OpenAI ImageGen per l’uso in Lettura Globale e distribuite con l’app. La cache offline le precarica all’installazione. Ogni carta ha una posizione stabile e mostra una spunta quando è selezionata. Su smartphone in verticale le carte sono distribuite in file da tre, con più spazio fra i bersagli. Sui formati più larghi sono in due file da cinque. Lo schermo dell’esercizio permette di scorrere se le immagini e i controlli dell’adulto superano l’altezza disponibile.
 
 ## Verifica
 
