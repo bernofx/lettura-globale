@@ -1,5 +1,7 @@
 // Run against the local production build and a fresh Chromium profile with CDP.
 import assert from "node:assert/strict";
+import { applyStateChange } from "../app/domain/state-changes.ts";
+import { validateExerciseCopyWrite } from "../app/domain/exercise-copy-writes.ts";
 import { buildCloudSaveChange } from "../app/domain/cloud-save-change.ts";
 import { PENDING_CLOUD_SAVE_STORAGE_KEY, serializePendingCloudSave } from "../app/domain/pending-cloud-save.ts";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,6 +19,7 @@ await new Promise((resolve, reject) => {
 const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Giochi", email: "games@example.test", role: "Terapista", childIds: [] };
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
 let stateRevision = 1;
+let copyEditorReady = false;
 let concurrentExerciseUpdate = false;
 const pending = new Map();
 let id = 0;
@@ -128,6 +131,17 @@ socket.addEventListener("message", event => {
       return;
     }
     if (url.pathname === "/api/state/changes" && request.method === "PATCH") {
+      if (copyEditorReady) {
+        const change = JSON.parse(request.postData);
+        const next = applyStateChange(state, change);
+        const header = Object.entries(request.headers).find(([name]) => name.toLowerCase() === "x-lg-exercise-copy-version");
+        const reason = header?.[1] === "1" ? validateExerciseCopyWrite(state, next, change, therapist.id) : "missing_copy_protocol";
+        if (!reason) { Object.assign(state, next); stateRevision++; }
+        void send("Fetch.fulfillRequest", { requestId, responseCode: reason ? 403 : 200,
+          responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+          body: Buffer.from(JSON.stringify(reason ? { error: "state_change_forbidden", reason } : {revision:stateRevision})).toString("base64") });
+        return;
+      }
       const { values, collections } = JSON.parse(request.postData);
       const sequenceEdit = collections.sequences?.upserts.find(item => item.id === "sequence-order-demo");
       if (sequenceEdit) state.sequences = [sequenceEdit];
@@ -146,7 +160,7 @@ socket.addEventListener("message", event => {
       if (typeof values.tracingOrderRequired === "boolean") state.tracingOrderRequired = values.tracingOrderRequired;
       stateRevision++;
     }
-    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: stateRevision };
+    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: stateRevision, copyEditorReady, seedLegacyModels: !copyEditorReady };
     void send("Fetch.fulfillRequest", {
       requestId, responseCode: 200,
       responseHeaders: [{ name: "Content-Type", value: "application/json" }],
@@ -1244,6 +1258,66 @@ try {
   for (let i = 0; i < 60 && state.sequences[0].exerciseIds.length !== 4; i++) await delay(100);
   assert.deepEqual(state.sequences[0].exerciseIds, [a, hidden, b, privateCopy.id]);
   console.log("PASS Catalogo e sequenze: autore, copie escluse dal catalogo, riordino e rimozione di un singolo passo ripetuto.");
+  assert.equal(await evaluate("document.querySelector('.sequence-step-edit')"), null);
+  copyEditorReady = true;
+  state.sequences = [{ ...sequence, exerciseIds: [a, hidden, a] }, { ...sequence, id: "other-sequence", title: "Altra prova", exerciseIds: [a] }];
+  stateRevision++;
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelectorAll('.sequence-step-edit').length === 2");
+  for (const style of ["classic", "studio", "playful"]) {
+    await evaluate(`document.documentElement.dataset.style = ${JSON.stringify(style)}`);
+    await wait(`(() => {
+      const row = document.querySelector('.sequence-step-edit').closest('article');
+      const target = row.querySelector('.sequence-step-edit').getBoundingClientRect();
+      return row.scrollWidth <= row.clientWidth + 1 && target.width >= 44 && target.height >= 44;
+    })()`);
+  }
+  await button("Modifica il passo 2: Primo");
+  await wait("document.querySelector('#exercise-builder-title').closest('.modal').textContent.includes('Altra prova')");
+  await button("Salva esercizio");
+  await wait("!document.querySelector('#exercise-builder-title')");
+  await delay(750);
+  assert.deepEqual(state.sequences[0].exerciseIds, [a, hidden, a]);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.sequence-order-list strong')].map(el => el.textContent)"), ["Primo","Primo"]);
+  await button("Modifica il passo 2: Primo");
+  await evaluate(`${titleField}.focus(); ${titleField}.select()`);
+  await send("Input.insertText", { text: "Solo secondo passo" });
+  await button("Salva esercizio");
+  for (let i=0; i<70 && state.sequences[0].exerciseIds[2] === a; i++) await delay(100);
+  const copyId = state.sequences[0].exerciseIds[2];
+  assert.notEqual(copyId,a);
+  assert.deepEqual(state.sequences[0].exerciseIds,[a,hidden,copyId]);
+  assert.deepEqual(state.sequences[1].exerciseIds,[a]);
+  assert.equal(state.exercises.find(item => item.id === a).title, "Primo");
+  const savedStep = state.exercises.find(item => item.id === copyId);
+  assert.deepEqual([savedStep.title,savedStep.ownerAdultId,savedStep.templateExerciseId,savedStep.sequenceId],["Solo secondo passo",therapist.id,a,sequence.id]);
+  assert.equal(savedStep.quantityMax, undefined);
+  await button("Modifica il passo 2: Solo secondo passo");
+  await evaluate(`${titleField}.focus(); ${titleField}.select()`);
+  await send("Input.insertText", { text: "Seconda modifica" });
+  await button("Salva esercizio");
+  for (let i=0; i<70 && state.exercises.find(item => item.id===copyId)?.title!=="Seconda modifica"; i++) await delay(100);
+  assert.equal(state.exercises.find(item => item.id===copyId)?.title,"Seconda modifica");
+  await button("Duplica Primo");
+  for (let i=0; i<70 && state.sequences[0].exerciseIds.length!==4; i++) await delay(100);
+  const model = state.exercises.find(item => !item.sequenceId && item.title === "Primo (copia)");
+  assert.equal(model?.ownerAdultId,therapist.id);
+  assert.equal(state.exercises.find(item => item.id===state.sequences[0].exerciseIds[3]).templateExerciseId, model.id);
+  await button("Modifica Primo");
+  await evaluate(`${titleField}.focus(); ${titleField}.select()`);
+  await send("Input.insertText", { text: "Modello aggiornato" });
+  await button("Salva esercizio");
+  for (let i=0; i<70 && state.exercises.find(item => item.id===a)?.title!=="Modello aggiornato"; i++) await delay(100);
+  assert.equal(state.exercises.find(item => item.id === a).title, "Modello aggiornato");
+  assert.equal(state.exercises.find(item => item.id === copyId).title, "Seconda modifica");
+  await evaluate("document.querySelector('[aria-label=\"Modifica Modello aggiornato\"]').closest('article').querySelector('.sequence-toggle').click()");
+  for (let i=0; i<70 && state.sequences[0].exerciseIds.length!==5; i++) await delay(100);
+  const repeated = state.exercises.find(item => item.id === state.sequences[0].exerciseIds[4]);
+  assert.deepEqual([repeated.title, repeated.templateExerciseId], ["Modello aggiornato", a]);
+  assert.notEqual(repeated.id, copyId);
+  console.log("PASS Matita: avviso, distacco pigro del solo passo ripetuto, copia stabile, autore e duplicazione dal catalogo.");
 } finally {
   socket.close();
 }

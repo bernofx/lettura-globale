@@ -6,6 +6,7 @@ export async function checkExerciseCopyWrites({ request, read, ownerCookie, supe
   const patch = (cookie, change) => request("/api/state/changes", { method: "PATCH",
     headers: { cookie, "content-type": "application/json", "x-lg-exercise-copy-version": "1" }, body: JSON.stringify(change) });
   const baseline = await view(supervisorCookie);
+  assert.equal(baseline.copyEditorReady, true);
   const sequence = baseline.state.sequences[0];
   const model = baseline.state.exercises.find(exercise => exercise.id === sequence.exerciseIds[1]);
   const copy = { ...model, id: "edited-slot", title: "Solo nella sequenza", ownerAdultId: "supervisor", sequenceId: sequence.id, templateExerciseId: model.id };

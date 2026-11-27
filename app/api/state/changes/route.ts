@@ -1,3 +1,4 @@
+import { hasExerciseCopyColumns } from "../../../../db/exercise-copy-schema";
 import { containsExerciseCopyMetadata, legacyEditNeedsUpdate } from "../../../domain/exercise-copy-rollout";
 import { validateExerciseCopyWrite } from "../../../domain/exercise-copy-writes";
 import { eq } from "drizzle-orm";
@@ -86,8 +87,7 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
     const reason = validateExerciseCopyWrite(currentState, state, change, user.adultProfileId);
     if (reason) return Response.json({ error: "state_change_forbidden", reason, diagnosticId }, { status: 403 });
     if (change.collections.exercises?.upserts.some(exercise => exercise.sequenceId != null)) {
-      const columns = await database.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('exercises') WHERE name IN ('sequence_id', 'template_exercise_id')").first<number>("n");
-      if (columns !== 2) return Response.json({ error: "exercise_copy_migration_required", diagnosticId }, { status: 503 });
+      if (!await hasExerciseCopyColumns(database)) return Response.json({ error: "exercise_copy_migration_required", diagnosticId }, { status: 503 });
     }
   } else {
     if (legacyEditNeedsUpdate(currentState, change)) return Response.json({ error: "exercise_editor_update_required" }, { status: 412 });

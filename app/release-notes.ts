@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Dove è attiva la gestione delle copie, la matita accanto a un passo modifica solo quella sequenza. Le copie mantengono le impostazioni anche quando il modello viene aggiornato.",
     "Nel catalogo puoi filtrare i modelli per autore. Se un esercizio compare due volte nella sequenza, puoi spostare o rimuovere la singola riga.",
     "Quando due adulti cambiano i passi di una sequenza, le modifiche indipendenti si combinano. Se gli ordini sono incompatibili, li ritrovi in Esercizi → Bozze da verificare.",
     "Se il cloud segnala un conflitto dopo il salvataggio di un esercizio, puoi ritrovare la tua versione in Esercizi → Bozze da verificare, anche dopo aver riaperto l’app sullo stesso dispositivo.",
