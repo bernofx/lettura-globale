@@ -8,6 +8,8 @@
 
 ## Completato
 
+- [x] Obiettivo 2 — I sei moduli esercizio condividono opzioni avanzate richiudibili, titolo automatico modificabile e riepilogo prima del salvataggio. In Trova la parola una scelta tra tre modalità mantiene la configurazione esistente.
+
 - [x] ADR 0028, attivazione nell’editor dopo conferma delle colonne 0020 dal Worker. La matita isola la singola occorrenza al primo salvataggio effettivo. Aggiunta dal catalogo, creazione, duplicazione e avvio rapido assegnano una copia per passo. Il supervisore modifica il contenuto delle sequenze visibili. Le code precedenti mantengono il loro protocollo. La migrazione dell’ambiente resta a carico del gestore.
 
 - [x] ADR 0028, elenco esercizi. Il catalogo distingue modelli e copie e filtra per autore. Nella sequenza ogni occorrenza storica si sposta e si rimuove singolarmente anche se ci sono passi non visualizzabili. La creazione delle copie dalla matita resta da attivare.
