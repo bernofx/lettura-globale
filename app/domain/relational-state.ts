@@ -109,10 +109,12 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   const children = list(state.children);
   const histories = list(state.sessionHistory);
   const sequences = list(state.sequences);
+  const exercises = list(state.exercises);
   const attempts = list(state.attempts);
   const helps = list(state.helps);
 
   const requiredAdultIds = new Set<string>();
+  exercises.forEach((exercise) => { const id = optionalString(exercise.ownerAdultId); if (id) requiredAdultIds.add(id); });
   sequences.forEach((item) => { const id = string(item.therapistId); if (id) requiredAdultIds.add(id); });
   histories.forEach((item) => { const id = string(item.therapistId); if (id) requiredAdultIds.add(id); });
   attempts.forEach((item) => { const id = string(item.therapistId); if (id) requiredAdultIds.add(id); });
@@ -164,7 +166,7 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   const categorySymbols = object(state.categorySymbols) ?? {};
   const categoryNames = new Set<string>(["Altro", ...Object.keys(categorySymbols)]);
   library.forEach((item) => categoryNames.add(string(item.category, "Altro")));
-  for (const exercise of list(state.exercises)) {
+  for (const exercise of exercises) {
     strings(exercise.categoryNames).forEach((name) => categoryNames.add(name));
     strings(exercise.recognitionCategories).forEach((name) => categoryNames.add(name));
     strings(exercise.namingCategories).forEach((name) => categoryNames.add(name));
@@ -186,13 +188,19 @@ export function projectLegacyState(input: unknown, accountId: string, now = Date
   });
   const addExerciseCategories = (exerciseId: string, role: string, names: string[]) => names.forEach((name, position) => addUnique(tables.exercise_categories, ["account_id", "exercise_id", "role", "category_name"], { account_id: accountId, exercise_id: exerciseId, category_name: name, role, position }));
 
-  for (const [position, exercise] of list(state.exercises).entries()) {
+  for (const [position, exercise] of exercises.entries()) {
     const id = string(exercise.id);
     if (!id) { warnings.push("exercise_without_id"); continue; }
     const updatedAt = time(exercise.updatedAt, now);
     const semanticKind = string(exercise.kind, "recognition");
     const persistedKind = semanticKind === "number-quantity" || semanticKind === "sentence-matching" ? "recognition" : semanticKind;
-    tables.exercises.push({ account_id: accountId, id, owner_adult_id: null, title: string(exercise.title, "Esercizio"), kind: persistedKind, semantic_kind: semanticKind === persistedKind ? null : semanticKind, recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), category_speak_word: exercise.categorySpeakWord ? 1 : 0, category_show_target_image: exercise.categoryShowTargetImage ? 1 : 0, category_show_symbols: exercise.categoryShowSymbols ? 1 : 0, auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), sentence_option_count: integer(exercise.sentenceOptionCount), sentence_difficulty: integer(exercise.sentenceDifficulty), quantity_min: integer(exercise.quantityMin), quantity_max: integer(exercise.quantityMax), quantity_object_set: optionalString(exercise.quantityObjectSet), quantity_auto_complete: exercise.quantityAutoComplete ? 1 : 0, quantity_speak_numbers: exercise.quantitySpeakNumbers ? 1 : 0, quantity_errorless: exercise.quantityErrorless ? 1 : 0, quantity_idle_seconds: integer(exercise.quantityIdleSeconds) ?? 3, source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
+    tables.exercises.push({
+      // Omit copy-only columns for legacy records so an unchanged account still writes before migration 0020.
+      ...(exercise.sequenceId || exercise.templateExerciseId ? {
+        sequence_id: optionalString(exercise.sequenceId),
+        template_exercise_id: optionalString(exercise.templateExerciseId),
+      } : {}),
+      account_id: accountId, id, owner_adult_id: optionalString(exercise.ownerAdultId), title: string(exercise.title, "Esercizio"), kind: persistedKind, semantic_kind: semanticKind === persistedKind ? null : semanticKind, recognition_mode: optionalString(exercise.recognitionMode), presentation: optionalString(exercise.presentation), category_speak_word: exercise.categorySpeakWord ? 1 : 0, category_show_target_image: exercise.categoryShowTargetImage ? 1 : 0, category_show_symbols: exercise.categoryShowSymbols ? 1 : 0, auto_pronounce: exercise.autoPronounce ? 1 : 0, auto_pronounce_configured: typeof exercise.autoPronounce === "boolean" ? 1 : 0, rounds: integer(exercise.rounds), distractor_count: integer(exercise.distractorCount), distractor_source: optionalString(exercise.distractorSource), syllable_filter: optionalString(exercise.recognitionSyllables), sentence_option_count: integer(exercise.sentenceOptionCount), sentence_difficulty: integer(exercise.sentenceDifficulty), quantity_min: integer(exercise.quantityMin), quantity_max: integer(exercise.quantityMax), quantity_object_set: optionalString(exercise.quantityObjectSet), quantity_auto_complete: exercise.quantityAutoComplete ? 1 : 0, quantity_speak_numbers: exercise.quantitySpeakNumbers ? 1 : 0, quantity_errorless: exercise.quantityErrorless ? 1 : 0, quantity_idle_seconds: integer(exercise.quantityIdleSeconds) ?? 3, source_exercise_id: optionalString(exercise.sourceExerciseId), position, version: 1, deleted_at: deletedTime(exercise.deleted, now), created_at: updatedAt, updated_at: updatedAt });
     // Several chosen targets are stored as ordered "prompt" rows (no new role, so the
     // deployed CHECK constraint still holds); the first one is the legacy promptId.
     const promptIds = [...new Set([...(typeof exercise.promptId === "string" && exercise.promptId ? [exercise.promptId] : []), ...strings(exercise.recognitionTargetIds)])];
@@ -356,6 +364,7 @@ export function rebuildLegacyState(projection: RelationalProjection) {
   const exerciseRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_items, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.library_item_id);
   const categoryRole = (exerciseId: unknown, role: string) => rowsFor(tables.exercise_categories, "exercise_id", exerciseId).filter((row) => row.role === role).map((row) => row.category_name);
   const exercises = ordered(tables.exercises).map((row) => definedEntries([
+    ["ownerAdultId", row.owner_adult_id], ["sequenceId", row.sequence_id], ["templateExerciseId", row.template_exercise_id],
     ["id", row.id], ["title", row.title], ["kind", row.semantic_kind ?? (row.quantity_min != null || row.quantity_max != null || row.quantity_object_set != null ? "number-quantity" : row.kind)], ["promptId", promptRole(row.id)[0]], ["recognitionTargetIds", promptRole(row.id).length > 1 ? promptRole(row.id) : undefined], ["optionIds", exerciseRole(row.id, "option")],
     ["articleItemIds", exerciseRole(row.id, "article_pool").length ? exerciseRole(row.id, "article_pool") : undefined],
     ["categoryItemIds", exerciseRole(row.id, "category_pool").length ? exerciseRole(row.id, "category_pool") : undefined],

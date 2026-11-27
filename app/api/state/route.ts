@@ -1,3 +1,4 @@
+import { containsExerciseCopyMetadata } from "../../domain/exercise-copy-rollout";
 import { hydrateInterfaceStyle, isInterfaceStyle } from "../../domain/appearance";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
@@ -97,6 +98,8 @@ export async function PUT(request: Request) {
   if (!state || typeof state !== "object" || (state as { schemaVersion?: unknown }).schemaVersion !== 1) return Response.json({ error: "invalid_state" }, { status: 400 });
   if ("tracingOrderRequired" in state && typeof state.tracingOrderRequired !== "boolean") return Response.json({ error: "invalid_tracing_order" }, { status: 400 });
   if ("interfaceStyle" in state && !isInterfaceStyle(state.interfaceStyle)) return Response.json({ error: "invalid_interface_style" }, { status: 400 });
+
+  if (containsExerciseCopyMetadata((state as { exercises?: unknown }).exercises)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
 
   const now = Date.now();
   const db = getDb();

@@ -25,7 +25,11 @@ export type QuickStartConfig = { categorySpeakWord?: boolean; categoryShowTarget
 
 export type LibraryItem = { categorySymbolOnly?: boolean; id: string; word: string; emoji?: string; image?: string; imageKey?: string; remoteImageId?: string; category: string; source: string; sourceUrl?: string; license: string; licenseUrl?: string; author: string; article?: Article | null; syllabification?: string; syllableCount?: number; syllableStatus?: SyllableStatus; contentKind?: "word" | "sentence"; phraseStructure?: PhraseStructure; subject?: string; verb?: string; complement?: string; privateUpload?: boolean; deleted?: boolean };
 
-export type Exercise = SessionExercise;
+export type Exercise = SessionExercise & {
+  ownerAdultId?: string;
+  sequenceId?: string;
+  templateExerciseId?: string;
+};
 
 export type Sequence = { id: string; title: string; exerciseIds: string[]; therapistId: string; updatedAt?: string; lastUsedAt?: string; deleted?: boolean };
 
