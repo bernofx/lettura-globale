@@ -26,6 +26,7 @@ import { useCaaStories } from "./use-caa-stories";
 import { appendAttempt, appendHelp, shouldRecordSessionEvents } from "./domain/session-events";
 import { buildSessionHistoryItems, type SessionHistoryRecord } from "./domain/session-history";
 import { buildSharedPreviewUrl, parseSharedLaunch, parseSharedPreview, type SharedLaunch } from "./domain/shared-launch";
+import { canRestoreStepOrder } from "./domain/sequence-step-merge";
 import { canAccessSequence, canEditSequence, canViewAllSequences, removeExerciseFromOwnedSequences } from "./domain/sequence-access";
 import { hydrateSyllables, matchesSyllableFilter } from "./domain/syllabification";
 import { hasArtwork } from "./domain/library-availability";
@@ -964,6 +965,13 @@ function HomePageContent() {
     setPendingExerciseDelete(null);
     notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
   };
+  const restoreStepOrder = (reviewed: Sequence, order: string[]) => {
+    setSequences(current => current.map(seq => {
+      if (seq.id !== reviewed.id || seq.deleted || !canEditSequence(seq.therapistId, therapist?.id, therapist?.role) ||
+        JSON.stringify(seq.exerciseIds) !== JSON.stringify(reviewed.exerciseIds) || !canRestoreStepOrder(seq.exerciseIds, order)) return seq;
+      return { ...seq, exerciseIds: order, updatedAt: new Date().toISOString() };
+    }));
+  };
   const toggleExerciseInSequence = (exerciseId: string) => {
     if (!activeSequence || !canEditActiveSequence) return;
     setSequences((current) => current.map((sequence) => sequence.id === activeSequence.id ? { ...sequence, exerciseIds: sequence.exerciseIds.includes(exerciseId) ? sequence.exerciseIds.filter((id) => id !== exerciseId) : [...sequence.exerciseIds, exerciseId], updatedAt: new Date().toISOString() } : sequence));
@@ -1126,7 +1134,7 @@ function HomePageContent() {
           setLibrary((current) => [{ id, word: category, category, categorySymbolOnly: true, image, imageKey, remoteImageId: remote?.id, privateUpload: true, source: "Upload privato", license: "Diritti confermati dall’adulto", author: "Utente" }, ...current]);
           setCategorySymbols((current) => ({ ...current, [category]: id }));
         }} items={visibleLibrary} search={search} setSearch={setSearch} onUpload={setShowUpload} onEdit={setEditingItem} onDelete={setPendingLibraryDelete} sounds={soundPreferences} onSoundsChange={setSoundPreferences} />}
-        {view === "exercises" && <RecoveredExerciseDrafts key={therapist.id} adultId={therapist.id} revision={cloud.exerciseDraftRevision} onOpen={draft => {
+        {view === "exercises" && <RecoveredExerciseDrafts role={therapist.role} onRestore={restoreStepOrder} sequences={visibleSequences} exercises={exercises} onSelectSequence={setActiveSequenceId} key={therapist.id} adultId={therapist.id} revision={cloud.exerciseDraftRevision} onOpen={draft => {
           setRecoveredExercise({ adultId: therapist.id, draft });
           setEditingExercise(draft);
           setShowBuilder(true);

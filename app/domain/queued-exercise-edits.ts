@@ -1,9 +1,10 @@
+import type { SequenceStepDraft } from "./queued-sequence-steps.ts";
 import { exerciseEditStatus } from "./exercise-edit-version.ts";
 import type { StateChangeRequest } from "./state-changes.ts";
 import type { BackendState, Exercise } from "../shared/types";
 
 export type ExerciseEditBases = { adultId: string; exercises: Exercise[] };
-export type DraftRecovery = { adultId: string | null; preserve: (adultId: string, draft: Exercise) => void };
+export type DraftRecovery = { adultId: string | null; preserve: (adultId: string, draft: Exercise) => void; preserveSequence?: (adultId: string, draft: SequenceStepDraft) => void };
 
 export function queuedExerciseBases(previous: BackendState, change: StateChangeRequest, adultId?: string | null) {
   const edits = change.collections.exercises;

@@ -348,3 +348,7 @@ html[data-style="playful"] .modal-close { border-radius: 50%; }
 .recovered-exercise-drafts > div { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-block: .5rem; }
 .recovered-exercise-drafts strong { overflow-wrap: anywhere; }
 .recovered-exercise-drafts button { min-height: 44px; }
+
+.sequence-draft-comparison { min-width: 0; overflow-wrap: anywhere; }
+.sequence-draft-comparison summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
+.sequence-draft-comparison h3 { margin-block: .75rem .25rem; }
