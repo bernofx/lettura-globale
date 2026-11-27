@@ -92,7 +92,11 @@ export function compileSessionPlan<T extends SessionPlanLibraryItem>(exercises: 
   const random = options.random ?? Math.random;
   const createId = options.createId ?? (() => crypto.randomUUID());
 
-  return exercises.flatMap((exercise) => {
+  // A prepared run owns its configuration, including nested option and target lists.
+  const configuredExercises: SessionExercise[] = typeof structuredClone === "function"
+    ? structuredClone(exercises)
+    : JSON.parse(JSON.stringify(exercises));
+  return configuredExercises.flatMap((exercise) => {
     const kind = exercise.kind ?? "recognition";
     const sourceExerciseId = exercise.sourceExerciseId ?? exercise.id;
     const round = (index: number, overrides: Partial<SessionExercise>): SessionExercise => ({
