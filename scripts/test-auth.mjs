@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hashPinForStorage } from "../app/domain/pin-credentials.ts";
+import { checkExerciseCopyMigration } from "./test-exercise-copy-storage.mjs";
 import { buildStateChange } from "../app/domain/state-changes.ts";
 import { createHash, pbkdf2Sync } from "node:crypto";
 
@@ -100,12 +101,16 @@ async function request(path, init) {
 }
 try {
   const db = await mf.getD1Database("DB");
-  for (const file of readdirSync("drizzle").filter((name) => name.endsWith(".sql")).sort()) {
+  const migrate = async file => {
     for (const statement of readFileSync(join("drizzle", file), "utf8").split("--> statement-breakpoint")) {
       if (statement.trim()) await db.prepare(statement.trim()).run();
     }
+  };
+  for (const file of readdirSync("drizzle").filter(name => name.endsWith(".sql")).sort()) {
+    if (file === "0020_sequence_exercise_copies.sql") await checkExerciseCopyMigration(db, () => migrate(file));
+    else await migrate(file);
   }
-  console.log("Auth test: schema D1 locale pronto.");
+  console.log("Auth test: migrazione 0020, copie delle sei attività e compatibilità con lo schema precedente verificate.");
   const now = Date.now(), account = "synthetic-account";
   const firstHash = await hashPinForStorage("1357"), secondHash = await hashPinForStorage("9753");
   const oldSalt = Buffer.alloc(16, 7);
@@ -157,6 +162,18 @@ try {
   const adminAgain = await login("adult-a@example.test", "1357");
   const adminCookie = cookie(adminAgain);
   const beforeReset = await (await read(adminCookie)).json();
+  const prematureCopy = { id: "copy", ownerAdultId: "adult-a", sequenceId: "sequence", templateExerciseId: "model" };
+  const prematureState = { ...beforeReset.state, exercises: [prematureCopy] };
+  const prematureChange = buildStateChange(beforeReset.state, prematureState, crypto.randomUUID(), beforeReset.revision);
+  for (const [path, method, body] of [["/api/state", "PUT", prematureState], ["/api/state/changes", "PATCH", prematureChange]]) {
+    const result = await request(path, {
+      method, headers: { cookie: adminCookie, "content-type": "application/json", "x-base-revision": String(beforeReset.revision) },
+      body: JSON.stringify(body),
+    });
+    assert.equal(result.status, 422);
+    assert.equal((await result.json()).error, "exercise_copies_not_enabled");
+  }
+  assert.equal((await (await read(adminCookie)).json()).revision, beforeReset.revision);
   const resetHash = await hashPinForStorage("8642");
   const updatedState = { ...beforeReset.state, therapists: beforeReset.state.therapists.map((adult) => adult.id === "adult-old" ? { ...adult, pinHash: resetHash } : adult) };
   const change = buildStateChange(beforeReset.state, updatedState, crypto.randomUUID(), beforeReset.revision);

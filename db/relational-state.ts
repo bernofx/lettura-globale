@@ -81,7 +81,7 @@ export function relationalTablesForChange(change: StateChangeRequest) {
   if (change.collections.therapists) add("adult_profiles", "adult_child_access");
   if (change.collections.children) add("children", "adult_child_access");
   if (change.collections.library) add("categories", "media_assets", "library_items", "exercise_items");
-  if (change.collections.exercises) add("categories", "exercises", "exercise_items", "exercise_categories", "sequence_exercises");
+  if (change.collections.exercises) add("adult_profiles", "categories", "exercises", "exercise_items", "exercise_categories", "sequence_exercises");
   if (change.collections.sequences) add("adult_profiles", "sequences", "sequence_exercises");
   if (change.collections.sessionHistory) add("adult_profiles", "children", "sessions", "session_items", "session_item_content", "session_item_responses", "session_item_help_labels");
   if (change.collections.attempts) add("adult_profiles", "children", "attempts", "attempt_options");
@@ -107,7 +107,7 @@ export async function prepareRelationalChange(options: {
     .bind(accountId, options.email, options.displayName, now, now, accountId, operationId));
 
   // New historical references can require archived parents even when profiles did not change.
-  if (change.collections.sequences || change.collections.sessionHistory || change.collections.attempts || change.collections.helps) {
+  if (change.collections.exercises || change.collections.sequences || change.collections.sessionHistory || change.collections.attempts || change.collections.helps) {
     upsert("adult_profiles", tables.adult_profiles.filter((row) => row.deleted_at !== null));
   }
   if (change.collections.sessionHistory || change.collections.attempts || change.collections.helps) {

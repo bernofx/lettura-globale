@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const userStates = sqliteTable("user_states", {
@@ -115,8 +116,12 @@ export const libraryItems = sqliteTable("library_items", {
 }, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
 
 export const exercises = sqliteTable("exercises", {
+  sequenceId: text("sequence_id"), templateExerciseId: text("template_exercise_id"),
   accountId: text("account_id").notNull(), id: text("id").notNull(), ownerAdultId: text("owner_adult_id"), title: text("title").notNull(), kind: text("kind").notNull(), semanticKind: text("semantic_kind"), recognitionMode: text("recognition_mode"), presentation: text("presentation"), categorySpeakWord: integer("category_speak_word", { mode: "boolean" }).notNull().default(false), categoryShowTargetImage: integer("category_show_target_image", { mode: "boolean" }).notNull().default(false), categoryShowSymbols: integer("category_show_symbols", { mode: "boolean" }).notNull().default(false), autoPronounce: integer("auto_pronounce", { mode: "boolean" }).notNull(), autoPronounceConfigured: integer("auto_pronounce_configured", { mode: "boolean" }).notNull(), rounds: integer("rounds"), distractorCount: integer("distractor_count"), distractorSource: text("distractor_source"), syllableFilter: text("syllable_filter"), sentenceOptionCount: integer("sentence_option_count"), sentenceDifficulty: integer("sentence_difficulty"), quantityMin: integer("quantity_min"), quantityMax: integer("quantity_max"), quantityObjectSet: text("quantity_object_set"), quantityAutoComplete: integer("quantity_auto_complete", { mode: "boolean" }).notNull().default(false), quantitySpeakNumbers: integer("quantity_speak_numbers", { mode: "boolean" }).notNull().default(false), quantityErrorless: integer("quantity_errorless", { mode: "boolean" }).notNull().default(false), quantityIdleSeconds: integer("quantity_idle_seconds").notNull().default(3), sourceExerciseId: text("source_exercise_id"), position: integer("position").notNull(), version: integer("version").notNull(), deletedAt: integer("deleted_at"), createdAt: integer("created_at").notNull(), updatedAt: integer("updated_at").notNull(),
-}, (table) => [primaryKey({ columns: [table.accountId, table.id] })]);
+}, (table) => [
+  primaryKey({ columns: [table.accountId, table.id] }),
+  index("exercises_sequence_idx").on(table.accountId, table.sequenceId).where(sql`${table.sequenceId} IS NOT NULL`),
+]);
 
 export const exerciseItems = sqliteTable("exercise_items", {
   accountId: text("account_id").notNull(), exerciseId: text("exercise_id").notNull(), libraryItemId: text("library_item_id").notNull(), role: text("role").notNull(), position: integer("position").notNull(),

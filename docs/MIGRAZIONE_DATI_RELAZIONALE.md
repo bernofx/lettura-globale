@@ -13,6 +13,10 @@ La compatibilità attuale proietta lo storico quantità con `kind = 'recognition
 
 In entrambi i casi testare una sessione completa e il relativo salvataggio contro lo **schema già distribuito**, non soltanto contro un database nuovo. Dopo la pubblicazione controllare un salvataggio reale, la revisione cloud e `/api/state/relational-status`. Se ricompare `state_change_failed_batch`, cercare nel log server il `diagnosticId`, la fase e il codice SQLite; non ripetere alla cieca il salvataggio né concludere dai soli contatori del journal quale entità sia difettosa. La copia locale va preservata finché il cloud non conferma il salvataggio.
 
+## Migrazione 0020 per le copie degli esercizi
+
+Applicare `0020_sequence_exercise_copies.sql` dopo la 0019 e prima di abilitare la creazione di copie (ADR 0028). Aggiunge due colonne nullable e un indice parziale. Le righe esistenti conservano autore e riferimenti originali. Le scritture dei modelli storici funzionano anche sullo schema precedente. In questa fase il Worker rifiuta nuovi metadati di copia nei salvataggi pubblici PATCH e PUT, inclusa l’inizializzazione. La sola applicazione della migrazione non attiva la funzione nell’editor.
+
 ## Prima della pubblicazione
 
 1. Esportare il D1 dell'ambiente interessato e conservarlo secondo la policy approvata.

@@ -1,3 +1,4 @@
+import { containsExerciseCopyMetadata } from "../../../domain/exercise-copy-rollout";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
@@ -51,6 +52,8 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   if (new TextEncoder().encode(rawRequest).byteLength > MAX_CHANGE_BYTES) return Response.json({ error: "change_too_large" }, { status: 413 });
   let change;
   try { change = parseStateChangeRequest(JSON.parse(rawRequest)); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
+
+  if (containsExerciseCopyMetadata(change.collections.exercises?.upserts)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
 
   const requestChecksum = await stateChecksum(rawRequest);
   setPhase("operation_lookup");
