@@ -118,6 +118,7 @@ try {
   const therapists = [
     { id: "adult-a", email: "adult-a@example.test", firstName: "Synthetic A", role: "Amministratore", pinHash: firstHash, childIds: [] },
     { id: "adult-b", email: "adult-b@example.test", firstName: "Synthetic B", role: "Terapista", pinHash: secondHash, childIds: [] },
+    { id: "supervisor", email: "supervisor@example.test", firstName: "Synthetic S", role: "Supervisore", pinHash: firstHash, childIds: [] },
     { id: "adult-old", email: "adult-old@example.test", firstName: "Synthetic Old", role: "Terapista", pinHash: oldHash, childIds: [] },
   ];
   const state = { schemaVersion: 1, therapists, children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
@@ -204,6 +205,44 @@ try {
     const loaded = await (await read(adminCookie)).json();
     assert.equal(loaded.state.interfaceStyle, style);
   }
+  // Use the normal PATCH and filtered GET on a local D1, including the snapshot/relational boundary.
+  const supervisorCookie = cookie(await login("supervisor@example.test", "1357"));
+  const patchState = async (key, snapshot, nextState, headers = {}) => {
+    const change = buildStateChange(snapshot.state, nextState, crypto.randomUUID(), snapshot.revision);
+    return request("/api/state/changes", { method: "PATCH", headers: { cookie: key, "content-type": "application/json", ...headers }, body: JSON.stringify(change) });
+  };
+  const baseline = await (await read(adminCookie)).json();
+  const models = ["synth-first", "synth-second"].map(id => ({ id, title: id, kind: "recognition" }));
+  const sequence = { id: "synth-sequence", therapistId: "adult-b", title: "Sequenza di prova", deleted: false, exerciseIds: models.map(model => model.id) };
+  assert.equal((await patchState(adminCookie, baseline, { ...baseline.state, exercises: models, sequences: [sequence] })).status, 200);
+  const shared = await (await read(supervisorCookie)).json();
+  const reordered = { ...shared.state, sequences: [{ ...shared.state.sequences[0], exerciseIds: [...sequence.exerciseIds].reverse() }] };
+  assert.equal((await patchState(supervisorCookie, shared, reordered)).status, 403);
+  const contentVersion = { "x-lg-sequence-content-version": "1" };
+  assert.equal((await patchState(supervisorCookie, shared, reordered, contentVersion)).status, 200);
+  const ownerView = await (await read(secondCookie)).json();
+  assert.equal(ownerView.dataSource, "relational");
+  assert.deepEqual(ownerView.state.sequences[0].exerciseIds, reordered.sequences[0].exerciseIds);
+  assert.equal(ownerView.state.sequences[0].therapistId, "adult-b");
+  const currentShared = await (await read(supervisorCookie)).json();
+  const renamed = { ...currentShared.state, sequences: [{ ...currentShared.state.sequences[0], title: "Altro" }] };
+  assert.equal((await patchState(supervisorCookie, currentShared, renamed, contentVersion)).status, 403);
+  const fullReplace = await request("/api/state", {
+    method: "PUT", headers: { cookie: supervisorCookie, "content-type": "application/json", "x-base-revision": String(currentShared.revision), ...contentVersion },
+    body: JSON.stringify(renamed),
+  });
+  assert.equal(fullReplace.status, 403);
+  assert.equal((await fullReplace.json()).error, "full_state_replacement_forbidden");
+  const adminView = await (await read(adminCookie)).json();
+  const reassigned = { ...adminView.state, sequences: [{ ...adminView.state.sequences[0], therapistId: "adult-a" }] };
+  const transfer = await request("/api/state", {
+    method: "PUT", headers: { cookie: adminCookie, "content-type": "application/json", "x-base-revision": String(adminView.revision) },
+    body: JSON.stringify(reassigned),
+  });
+  assert.equal(transfer.status, 403);
+  assert.equal((await transfer.json()).reason, "invalid_sequence_owner");
+  assert.equal((await (await read(secondCookie)).json()).revision, currentShared.revision);
+  console.log("Auth test: riordino del supervisore visibile al proprietario, rinomina e sostituzione integrale protette.");
   const soundtrackPath = "/api/game-soundtrack";
   const mp3 = readFileSync("public/audio/coloring-calypso.mp3");
   const uploadHeaders = { "content-type": "audio/mpeg", "x-soundtrack-name": encodeURIComponent("Colonna sonora 🎵.mp3"), "x-soundtrack-source": encodeURIComponent("Autore di prova"), "x-soundtrack-license": "CC0", "x-soundtrack-rights": "confirmed" };

@@ -74,7 +74,10 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   let currentState: unknown;
   try { currentState = JSON.parse(current.payload); state = applyStateChange(currentState, change); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
   if (!user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
-  const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
+  const authorization = authorizeStateTransition(currentState, state, user.adultProfileId, {
+    // Older offline queues may include automatic cleanup of another adult’s sequence.
+    allowSupervisorContentEdits: request.headers.get("x-lg-sequence-content-version") === "1",
+  });
   if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason, diagnosticId }, { status: 403 });
   const rawState = JSON.stringify(state);
   if (new TextEncoder().encode(rawState).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });

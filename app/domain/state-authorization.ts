@@ -25,13 +25,30 @@ function collectionTransition(previous: StateDocument, next: StateDocument, name
   return { before, after, beforeById: new Map(before.map((item) => [item.id, item])), afterById: new Map(after.map((item) => [item.id, item])) };
 }
 
-export function authorizeStateTransition(previousValue: unknown, nextValue: unknown, adultProfileId: string): StateAuthorizationResult {
+// The relational reader omits a false archive flag and can return fields in a different order.
+function isSequenceContentEdit(previous: Entity, next: Entity, activeExercises: Set<string>) {
+  if (next.deleted !== undefined && next.deleted !== false) return false;
+  const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
+  for (const key of ["exerciseIds", "updatedAt", "deleted"]) keys.delete(key);
+  for (const key of keys) if (!equal(previous[key], next[key])) return false;
+  if (next.updatedAt !== previous.updatedAt && (typeof next.updatedAt !== "string" || !Number.isFinite(Date.parse(next.updatedAt)))) return false;
+  const previousIds = new Set(Array.isArray(previous.exerciseIds) ? previous.exerciseIds : []);
+  return Array.isArray(next.exerciseIds) && next.exerciseIds.every((id) =>
+    typeof id === "string" && (previousIds.has(id) || activeExercises.has(id)));
+}
+
+export function authorizeStateTransition(previousValue: unknown, nextValue: unknown, adultProfileId: string, options: { allowSupervisorContentEdits?: boolean } = {}): StateAuthorizationResult {
   if (!previousValue || typeof previousValue !== "object" || Array.isArray(previousValue) || !nextValue || typeof nextValue !== "object" || Array.isArray(nextValue)) return { allowed: false, reason: "invalid_state" };
   const previous = previousValue as StateDocument;
   const next = nextValue as StateDocument;
   const adults = records(previous.therapists);
   const adult = adults.find((item) => item.id === adultProfileId);
   if (!adult) return { allowed: false, reason: "adult_not_found" };
+  const sequences = collectionTransition(previous, next, "sequences");
+  for (const sequence of sequences.before) {
+    const updated = sequences.afterById.get(sequence.id);
+    if (updated && sequence.therapistId !== updated.therapistId) return { allowed: false, reason: "invalid_sequence_owner" };
+  }
   if (adult.role === "Amministratore") return { allowed: true };
 
   const allowedChildren = new Set(Array.isArray(adult.childIds) ? adult.childIds.filter((id): id is string => typeof id === "string") : []);
@@ -51,10 +68,13 @@ export function authorizeStateTransition(previousValue: unknown, nextValue: unkn
     if (!updated || (!allowedChildren.has(item.id) && !equal(item, updated))) return { allowed: false, reason: "child_access_forbidden" };
   }
 
-  const sequences = collectionTransition(previous, next, "sequences");
+  let activeExercises: Set<string> | undefined;
   for (const item of sequences.before) {
     const updated = sequences.afterById.get(item.id);
-    if (item.therapistId !== adultProfileId && !equal(item, updated)) return { allowed: false, reason: "sequence_owner_required" };
+    if (item.therapistId === adultProfileId || equal(item, updated)) continue;
+    if (!options.allowSupervisorContentEdits || adult.role !== "Supervisore" || !updated || item.deleted) return { allowed: false, reason: "sequence_owner_required" };
+    activeExercises ??= new Set(records(next.exercises).filter((exercise) => !exercise.deleted).map((exercise) => exercise.id));
+    if (!isSequenceContentEdit(item, updated, activeExercises)) return { allowed: false, reason: "sequence_owner_required" };
   }
   for (const item of sequences.after) {
     if (!sequences.beforeById.has(item.id) && item.therapistId !== adultProfileId) return { allowed: false, reason: "invalid_sequence_owner" };
@@ -80,6 +100,6 @@ export function authorizeStateTransition(previousValue: unknown, nextValue: unkn
     if (item.therapistId !== adultProfileId || typeof item.childId !== "string" || !allowedChildren.has(item.childId)) return { allowed: false, reason: "history_access_forbidden" };
   }
 
-  if (typeof next.activeChildId === "string" && !allowedChildren.has(next.activeChildId)) return { allowed: false, reason: "active_child_forbidden" };
+  if (next.activeChildId !== previous.activeChildId && typeof next.activeChildId === "string" && !allowedChildren.has(next.activeChildId)) return { allowed: false, reason: "active_child_forbidden" };
   return { allowed: true };
 }
