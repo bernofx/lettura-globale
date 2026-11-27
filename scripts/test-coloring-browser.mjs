@@ -15,6 +15,7 @@ await new Promise((resolve, reject) => {
 const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Giochi", email: "games@example.test", role: "Terapista", childIds: [] };
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
 let stateRevision = 1;
+let concurrentExerciseUpdate = false;
 const pending = new Map();
 let id = 0;
 let availableVersion = null;
@@ -125,7 +126,19 @@ socket.addEventListener("message", event => {
       return;
     }
     if (url.pathname === "/api/state/changes" && request.method === "PATCH") {
-      const { values } = JSON.parse(request.postData);
+      const { values, collections } = JSON.parse(request.postData);
+      const demoEdit = collections.exercises?.upserts.find(item => item.id === "exercise-browser-demo");
+      if (demoEdit && concurrentExerciseUpdate) {
+        concurrentExerciseUpdate = false;
+        state.exercises = [{ ...demoEdit, title: "Versione del collega", rounds: 3 }];
+        stateRevision++;
+        void send("Fetch.fulfillRequest", {
+          requestId, responseCode: 409, responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+          body: Buffer.from(JSON.stringify({ error: "revision_conflict" })).toString("base64"),
+        });
+        return;
+      }
+      if (demoEdit) state.exercises = [demoEdit];
       if (typeof values.tracingOrderRequired === "boolean") state.tracingOrderRequired = values.tracingOrderRequired;
       stateRevision++;
     }
@@ -1124,6 +1137,41 @@ try {
   await button("Salva esercizio");
   await wait("!document.querySelector('#exercise-builder-title') && document.querySelector('[aria-label=\"Modifica Bozza demo\"]')");
   console.log("PASS Esercizi: un aggiornamento cloud durante la modifica conserva la bozza e richiede un salvataggio esplicito.");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  for (let i = 0; i < 50 && state.exercises[0].title !== "Bozza demo"; i++) await delay(100);
+  assert.equal(state.exercises[0].title, "Bozza demo");
+  await button("Modifica Bozza demo");
+  await evaluate(`${titleField}.focus(); ${titleField}.select()`);
+  await send("Input.insertText", { text: "Bozza da recuperare" });
+  concurrentExerciseUpdate = true;
+  await button("Salva esercizio");
+  await wait("document.querySelector('.recovered-exercise-drafts button')");
+  await wait("document.querySelector('[aria-label=\"Modifica Versione del collega\"]')");
+  assert.equal(state.exercises[0].title, "Versione del collega");
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelector('.recovered-exercise-drafts button')");
+  for (const style of ["studio", "playful", "classic"]) {
+    assert.ok(await evaluate(`(() => {
+      document.documentElement.dataset.style = ${JSON.stringify(style)};
+      const panel = document.querySelector('.recovered-exercise-drafts');
+      return panel.scrollWidth <= panel.clientWidth + 1 && [...panel.querySelectorAll('button')].every(b => b.getBoundingClientRect().height >= 44);
+    })()`));
+  }
+  await button("Rivedi la bozza di Bozza da recuperare");
+  await wait("document.querySelector('#exercise-edit-conflict')");
+  const recovered = await evaluate("document.querySelector('.exercise-edit-conflict').textContent");
+  assert.ok(recovered.includes("Versione del collega") && recovered.includes("Bozza da recuperare"));
+  await button("Prosegui con la mia bozza");
+  await button("Salva esercizio");
+  await wait("document.querySelector('[aria-label=\"Modifica Bozza da recuperare\"]')");
+  for (let i = 0; i < 50 && state.exercises[0].title !== "Bozza da recuperare"; i++) await delay(100);
+  assert.equal(state.exercises[0].title, "Bozza da recuperare");
+  await button("Elimina la bozza locale di Bozza da recuperare");
+  await button("Elimina bozza locale");
+  await wait("!document.querySelector('.recovered-exercise-drafts')");
+  console.log("PASS Esercizi: conflitto HTTP 409, bozza del profilo recuperata dopo ricarica e salvataggio esplicito.");
 } finally {
   socket.close();
 }

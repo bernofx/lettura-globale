@@ -343,3 +343,8 @@ html[data-style="playful"] .modal-close { border-radius: 50%; }
 .exercise-edit-conflict dt { font-weight: 700; }
 .exercise-edit-conflict dd { margin: .25rem 0 0; }
 .exercise-edit-conflict .modal-actions button { min-height: 44px; }
+
+.recovered-exercise-drafts { margin-bottom: 1rem; }
+.recovered-exercise-drafts > div { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-block: .5rem; }
+.recovered-exercise-drafts strong { overflow-wrap: anywhere; }
+.recovered-exercise-drafts button { min-height: 44px; }
