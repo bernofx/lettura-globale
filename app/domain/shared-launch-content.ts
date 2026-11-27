@@ -21,15 +21,16 @@ export function shareableContent(state: {
 }
 
 // Only session settings belong in the public snapshot. Unknown fields stay private.
-const publicExerciseFields = [
-  "id", "title", "kind", "promptId", "optionIds", "updatedAt", "rounds", "autoPronounce", "presentation",
-  "recognitionMode", "recognitionItemIds", "recognitionTargetIds", "recognitionCategories", "recognitionSyllables",
-  "distractorCount", "distractorSource", "articleItemIds", "categoryItemIds", "categoryNames", "categorySpeakWord",
-  "categoryShowTargetImage", "categoryShowSymbols", "categorySymbolIds", "namingItemIds", "namingCategories",
-  "quantityMin", "quantityMax", "quantityObjectSet", "quantityAutoComplete", "quantitySpeakNumbers", "quantityErrorless",
-  "quantityIdleSeconds", "quantityTarget", "quantityObject", "sentenceItemIds", "sentenceOptionCount", "sentenceDifficulty",
-] as const satisfies readonly (keyof SessionExercise)[];
+type PublicExerciseField = Exclude<keyof SessionExercise, "deleted" | "sourceExerciseId">;
+const publicExerciseFields = {
+  id: true, title: true, kind: true, promptId: true, optionIds: true, updatedAt: true, rounds: true, autoPronounce: true, presentation: true,
+  recognitionMode: true, recognitionItemIds: true, recognitionTargetIds: true, recognitionCategories: true, recognitionSyllables: true,
+  distractorCount: true, distractorSource: true, articleItemIds: true, categoryItemIds: true, categoryNames: true, categorySpeakWord: true,
+  categoryShowTargetImage: true, categoryShowSymbols: true, categorySymbolIds: true, namingItemIds: true, namingCategories: true,
+  quantityMin: true, quantityMax: true, quantityObjectSet: true, quantityAutoComplete: true, quantitySpeakNumbers: true, quantityErrorless: true,
+  quantityIdleSeconds: true, quantityTarget: true, quantityObject: true, sentenceItemIds: true, sentenceOptionCount: true, sentenceDifficulty: true,
+} satisfies Record<PublicExerciseField, true>;
 
 export function publicExerciseSnapshot(exercise: SessionExercise) {
-  return Object.fromEntries(publicExerciseFields.map(key => [key, exercise[key]]));
+  return Object.fromEntries((Object.keys(publicExerciseFields) as PublicExerciseField[]).map(key => [key, exercise[key]]));
 }

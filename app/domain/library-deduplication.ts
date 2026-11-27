@@ -72,3 +72,25 @@ export function recoverPendingRemoteUploads<T extends DeduplicableLibraryItem>(r
   const pending = localItems.filter((item) => item.privateUpload && item.remoteImageId && !remoteIds.has(item.id));
   return pending.length ? [...pending, ...remoteItems] : remoteItems;
 }
+
+// The PATCH checks an explicit replacement against the stored source and the
+// final library. A concurrent second photo makes the proposed match ambiguous.
+export function verifyLibraryReplacements(previous: DeduplicableLibraryItem[], next: DeduplicableLibraryItem[], pairs: [string, string][]) {
+  const requested = new Map(pairs);
+  const previousById = new Map(previous.map(item => [item.id, item]));
+  const candidates = next.map(item => {
+    if (!requested.has(item.id)) return item;
+    const old = previousById.get(item.id);
+    if (!old || !item.deleted || !isEmptyPlaceholder(old) || !isEmptyPlaceholder(item) ||
+        !item.category || old.category !== item.category || normalizedWord(old.word) !== normalizedWord(item.word) ||
+        old.contentKind === "sentence" || item.contentKind === "sentence") throw new Error("library_replacement_conflict");
+    // A newly archived emoji placeholder is eligible under the original active-item rule.
+    return old;
+  });
+  const { replacements } = deduplicateLibraryPlaceholders(candidates);
+  const photos = new Map(next.filter(item => !item.deleted && (item.remoteImageId || item.image)).map(item => [item.id, item]));
+  for (const [source, target] of requested) {
+    if (replacements.get(source) !== target || !photos.has(target)) throw new Error("library_replacement_conflict");
+  }
+  return requested;
+}

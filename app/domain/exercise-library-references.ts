@@ -17,3 +17,14 @@ export function remapExerciseReferences<T extends References>(exercise: T, repla
   }
   return changed ? next : exercise;
 }
+
+/** A detached copy is retained for history and no longer belongs to the live program. */
+export function remapProgramExercises<T extends References & { id: string; deleted?: boolean; sequenceId?: string }>(
+  exercises: T[], sequences: { id: string; exerciseIds?: string[]; deleted?: boolean }[], replacements: Map<string, string>,
+) {
+  const members = new Map(sequences.filter(sequence => !sequence.deleted)
+    .map(sequence => [sequence.id, new Set(sequence.exerciseIds)]));
+  return exercises.map(exercise =>
+    exercise.deleted || (exercise.sequenceId && !members.get(exercise.sequenceId)?.has(exercise.id))
+      ? exercise : remapExerciseReferences(exercise, replacements));
+}

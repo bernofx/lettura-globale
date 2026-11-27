@@ -2,7 +2,7 @@ import { containsExerciseCopyMetadata, legacyEditNeedsUpdate } from "../../../do
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { applyStateChange, parseStateChangeRequest } from "../../../domain/state-changes";
+import { applyStateChange, buildStateChange, parseStateChangeRequest } from "../../../domain/state-changes";
 import { authorizeStateTransition } from "../../../domain/state-authorization";
 import { getDb } from "../../../../db";
 import { therapistCredentials, userStates } from "../../../../db/schema";
@@ -68,10 +68,13 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   if (!current) return Response.json({ error: "state_not_initialized" }, { status: 409, headers: { "x-current-revision": "0" } });
   if (current.revision !== change.baseRevision) return Response.json({ error: "revision_conflict", currentRevision: current.revision }, { status: 409 });
 
-  let state: unknown;
-  let currentState: unknown;
-  try { currentState = JSON.parse(current.payload); state = applyStateChange(currentState, change); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
   if (!user.adultProfileId) return Response.json({ error: "adult_authentication_required" }, { status: 403 });
+  let state: Record<string, unknown>;
+  let currentState: Record<string, unknown>;
+  try { currentState = JSON.parse(current.payload); state = applyStateChange(currentState, change); } catch (error) {
+    if (error instanceof Error && error.message === "library_replacement_conflict") return Response.json({ error: error.message }, { status: 409 });
+    return Response.json({ error: "invalid_state_change" }, { status: 400 });
+  }
   const authorization = authorizeStateTransition(currentState, state, user.adultProfileId, {
     // Older offline queues may include automatic cleanup of another adult’s sequence.
     allowSupervisorContentEdits: request.headers.get("x-lg-sequence-content-version") === "1",
@@ -99,6 +102,12 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   const projection = await loadRelationalProjection(database, user.userId);
   const relationalReady = migration?.source_revision === current.revision && migration.source_checksum === await stateChecksum(current.payload) && relationalShadowMatches(currentState, projection, user.userId);
   setPhase("projection");
+  // The caller does not enumerate private copies. Include the derived rows in
+  // the same guarded D1 batch without treating them as user edits.
+  if (relationalReady && change.libraryReplacements) {
+    const exerciseDelta = buildStateChange({ exercises: currentState.exercises }, { exercises: state.exercises }, change.operationId, current.revision)?.collections.exercises;
+    if (exerciseDelta) change.collections.exercises = { ...exerciseDelta, order: change.collections.exercises?.order ?? [] };
+  }
   const relational = relationalReady ? await prepareRelationalChange({
     database, accountId: user.userId, email: user.email, displayName: user.displayName, rawState, state,
     change, sourceRevision: revision, operationId: change.operationId, now,
