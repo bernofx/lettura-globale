@@ -954,7 +954,6 @@ function HomePageContent() {
     setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, deleted: true, updatedAt: new Date().toISOString() } : exercise));
     const updatedAt = new Date().toISOString();
     setSequences((current) => removeExerciseFromOwnedSequences(current, id, therapist?.id, therapist?.role, updatedAt));
-    setSessionPlan((current) => current.filter((exercise) => exercise.id !== id && exercise.sourceExerciseId !== id));
     setPendingExerciseDelete(null);
     notify("Esercizio rimosso; lo storico delle sessioni è stato conservato");
   };

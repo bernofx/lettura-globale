@@ -1,6 +1,6 @@
 # PROGRESS — Lettura Globale
 
-**Aggiornato:** 24 novembre 2026
+**Aggiornato:** 27 novembre 2026
 
 **Fase:** prototipo cloud funzionale pubblico
 
@@ -233,6 +233,8 @@
 - Mancano ancora test end-to-end, accessibilità completa, backup/restore e hardening per il pilot.
 
 ## Prossimi passi
+
+Approvato il 27 novembre 2026: [ADR 0028 — Copie degli esercizi nelle sequenze](docs/adr/0028-copie-esercizi-per-sequenza.md). La proposta distingue autore, modello di origine e ID usato nello storico. Definisce la prima modifica delle sequenze esistenti e i permessi di scrittura del supervisore. Il primo intervento isola il piano preparato dalle modifiche successive, anche durante la ripresa e la navigazione da telefono. Verificati 369 test, typecheck, build, salvataggio Worker/D1 locale e test browser Giochi nei tre stili. Lint con tre avvisi preesistenti sugli elementi img. Seguono persistenza delle copie, permessi ed editor. La semplificazione dei moduli viene dopo.
 
 1. Eseguire QA browser su `Abbina la frase`, pairing QR automatico e primo turno di `Numero quantità` sui browser target.
 2. Approvare gli ADR ancora aperti del piano `docs/PIANO_SESSIONI_GUIDATE_REALTIME.md`.

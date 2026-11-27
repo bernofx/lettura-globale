@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { compileSessionPlan, completesSequenceExercise, type SessionExercise } from "../app/domain/session-compilation.ts";
+import { activityNavigation } from "../app/domain/session-navigation.ts";
+import { parseRecoverableSession, serializeRecoverableSession } from "../app/domain/session-recovery.ts";
 
 const library = [
   { id: "mela", word: "Mela", category: "Cibi", image: "/mela.png", article: "LA" as const },
@@ -95,4 +97,34 @@ test("Trova la parola con più bersagli precisi compila un turno per bersaglio a
   assert.equal(plan.length, 4);
   assert.deepEqual([...new Set(plan.map((turn) => turn.promptId))].sort(), ["gatto", "mela"]);
   assert.ok(plan.every((turn) => turn.sourceExerciseId === "multi" && turn.optionIds.length === 2 && turn.optionIds.includes(turn.promptId ?? "")));
+});
+
+test("modifiche alla sequenza entrano nel prossimo piano, anche dopo ripresa e navigazione remota", () => {
+  const fixed: SessionExercise = { ...base, id: "fixed", title: "Trova mela", promptId: "mela", optionIds: ["mela", "pane"], recognitionMode: "fixed" };
+  const configured = [exercises[1], fixed];
+  const compile = () => compileSessionPlan(configured, library, { articleFor: item => item.article, random: () => 0.5 });
+  const running = compile();
+  const expected = structuredClone(running);
+
+  fixed.title = "Trova pane";
+  fixed.promptId = "pane";
+  fixed.optionIds[0] = "cane";
+  configured.splice(0, 1);
+  configured.push(exercises[3]);
+
+  assert.deepEqual(running, expected);
+  assert.deepEqual(activityNavigation(running, 0), { previous: null, next: 2 });
+  const checkpoint = serializeRecoverableSession({
+    plan: running, runId: "run", therapistId: "adult", childId: "fixture", startedAt: new Date().toISOString(),
+    descriptor: { title: "Sequenza", source: "sequence" }, mode: "teaching", presentation: "images",
+    currentIndex: 1, furthestIndex: 1, completedIndices: [0], isTrial: false, returnView: "session",
+  });
+  const resumed = parseRecoverableSession(checkpoint);
+  assert.deepEqual(resumed?.plan, expected);
+  assert.equal(resumed?.currentIndex, 1);
+
+  const next = compile();
+  assert.deepEqual(next.map(turn => turn.sourceExerciseId ?? turn.id), ["fixed", "naming", "naming"]);
+  assert.equal(next[0].title, "Trova pane");
+  assert.deepEqual(next[0].optionIds, ["cane", "pane"]);
 });

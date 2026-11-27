@@ -31,5 +31,6 @@ Ogni decisione su autenticazione, privacy, retention, provider, licenze o deploy
 | [0024](0024-distribuzione-apk.md) | Distribuzione dell'APK Android fuori dal repository | Proposto, in attesa di approvazione |
 | [0025](0025-giochi-colorare.md) | Colorare nella sezione Giochi | Implementato, in attesa di approvazione su privacy e licenze |
 | [0026](0026-generazione-programmata.md) | Coda per le immagini del catalogo condiviso | Proposto, in attesa di attivazione |
+| [0028](0028-copie-esercizi-per-sequenza.md) | Copie degli esercizi nelle sequenze | Approvato |
 
 “—” indica un ADR privo di una sezione `## Stato` esplicita: lo stato va desunto dal testo e da `PROGRESS.md`.

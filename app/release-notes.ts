@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove illustrazioni in Numero quantità",
   items: [
+    "Quando una sequenza arriva a «Pronti?», i suoi turni sono fissati. Le modifiche successive valgono dal prossimo avvio, anche se riprendi la sessione o la guidi dal telefono.",
     "Colorare: nuove trame da usare con pennello e secchio, in fondo alla tavolozza: pois colorati, brillantini, stelline e lava che si muove piano (ferma se il dispositivo chiede di ridurre il movimento).",
     "Trova la parola: con «Parole precise» puoi scegliere più parole da riconoscere; a ogni turno ne compare una, e i distrattori restano casuali come prima (tutta la libreria, alcune categorie o le parole preferite).",
     "Colorare: colori più grandi e quadrati, strumenti con icone più grandi e un colore ciascuno; lo strumento attivo mostra il colore in uso.",
