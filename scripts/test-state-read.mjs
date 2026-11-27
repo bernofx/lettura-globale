@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { buildLibrarySaveChange } from "../app/domain/library-save-change.ts";
+import { deduplicateLibraryPlaceholders } from "../app/domain/library-deduplication.ts";
+import { remapProgramExercises } from "../app/domain/exercise-library-references.ts";
 import { statePerformanceFixture } from "../tests/fixtures/state-performance.ts";
 
 const require = createRequire(import.meta.resolve("wrangler/package.json"));
@@ -100,9 +103,12 @@ try {
   assert.equal(afterWriteBody.state.attempts.length, 30, "la scrittura granulare non modifica i tentativi");
   const old = state.library[0];
   const photo = { ...old, id: "photo", privateUpload: true, remoteImageId: "media-demo", emoji: undefined };
-  const repair = { schemaVersion: 1, operationId: crypto.randomUUID(), baseRevision: 3, values: {},
-    collections: { library: { upserts: [{ ...old, deleted: true }, photo], removedIds: [], order: [] } },
-    libraryReplacements: [[old.id, photo.id]] };
+  const local = afterWriteBody.state;
+  const { items, replacements } = deduplicateLibraryPlaceholders([...local.library, photo], true);
+  const repair = buildLibrarySaveChange(local, { ...local, library: items,
+    exercises: remapProgramExercises(local.exercises, local.sequences, replacements) }, crypto.randomUUID(), afterWriteBody.revision);
+  assert.deepEqual(repair.libraryReplacements, [[old.id, photo.id]]);
+  assert.equal(repair.collections.exercises, undefined);
   const patch = (body) => mf.dispatchFetch("https://app.example/api/state/changes", { method: "PATCH",
     headers: { cookie: `lg-cloud-session=${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
   const wrong = await patch({ ...repair, libraryReplacements: [[old.id, "word-2"]] });

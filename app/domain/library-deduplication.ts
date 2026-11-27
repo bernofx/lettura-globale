@@ -26,7 +26,7 @@ function isEmptyPlaceholder(item: DeduplicableLibraryItem) {
   return !item.categorySymbolOnly && !item.privateUpload && !item.image && !item.imageKey && !item.remoteImageId && Boolean(item.emoji || placeholderSource);
 }
 
-export function deduplicateLibraryPlaceholders<T extends DeduplicableLibraryItem>(items: T[]) {
+export function deduplicateLibraryPlaceholders<T extends DeduplicableLibraryItem>(items: T[], requireCloudPhoto = false) {
   const activeByWord = new Map<string, T[]>();
   for (const item of items) {
     if (item.deleted) continue;
@@ -53,6 +53,10 @@ export function deduplicateLibraryPlaceholders<T extends DeduplicableLibraryItem
     if (matches.length === 1) replacements.set(item.id, matches[0].id);
   }
 
+  if (requireCloudPhoto) {
+    const available = new Set(items.filter(hasCloudPhoto).map(item => item.id));
+    for (const [source, target] of replacements) if (!available.has(target)) replacements.delete(source);
+  }
   return {
     items: items.map((item) => replacements.has(item.id) && !item.deleted ? { ...item, deleted: true } : item),
     replacements,
@@ -73,24 +77,31 @@ export function recoverPendingRemoteUploads<T extends DeduplicableLibraryItem>(r
   return pending.length ? [...pending, ...remoteItems] : remoteItems;
 }
 
-// The PATCH checks an explicit replacement against the stored source and the
-// final library. A concurrent second photo makes the proposed match ambiguous.
-export function verifyLibraryReplacements(previous: DeduplicableLibraryItem[], next: DeduplicableLibraryItem[], pairs: [string, string][]) {
-  const requested = new Map(pairs);
+function hasCloudPhoto(item: DeduplicableLibraryItem) {
+  return !item.deleted && Boolean(item.remoteImageId || (item.image && !/^(?:data|blob|file):/i.test(item.image)));
+}
+
+// Use the stored source to distinguish a newly archived emoji from a real photo.
+export function availableLibraryReplacements(previous: DeduplicableLibraryItem[], next: DeduplicableLibraryItem[]) {
   const previousById = new Map(previous.map(item => [item.id, item]));
+  const eligible = new Set<string>();
   const candidates = next.map(item => {
-    if (!requested.has(item.id)) return item;
+    if (!item.deleted || !isEmptyPlaceholder(item) || !item.category || item.contentKind === "sentence") return item;
     const old = previousById.get(item.id);
-    if (!old || !item.deleted || !isEmptyPlaceholder(old) || !isEmptyPlaceholder(item) ||
-        !item.category || old.category !== item.category || normalizedWord(old.word) !== normalizedWord(item.word) ||
-        old.contentKind === "sentence" || item.contentKind === "sentence") throw new Error("library_replacement_conflict");
-    // A newly archived emoji placeholder is eligible under the original active-item rule.
+    if (!old || !isEmptyPlaceholder(old) || old.contentKind === "sentence" ||
+        old.category !== item.category || normalizedWord(old.word) !== normalizedWord(item.word)) return item;
+    eligible.add(item.id);
     return old;
   });
-  const { replacements } = deduplicateLibraryPlaceholders(candidates);
-  const photos = new Map(next.filter(item => !item.deleted && (item.remoteImageId || item.image)).map(item => [item.id, item]));
-  for (const [source, target] of requested) {
-    if (replacements.get(source) !== target || !photos.has(target)) throw new Error("library_replacement_conflict");
+  const { replacements } = deduplicateLibraryPlaceholders(candidates, true);
+  for (const id of replacements.keys()) if (!eligible.has(id)) replacements.delete(id);
+  return replacements;
+}
+
+export function verifyLibraryReplacements(previous: DeduplicableLibraryItem[], next: DeduplicableLibraryItem[], pairs: [string, string][]) {
+  const available = availableLibraryReplacements(previous, next);
+  for (const [source, target] of pairs) {
+    if (available.get(source) !== target) throw new Error("library_replacement_conflict");
   }
-  return requested;
+  return new Map(pairs);
 }

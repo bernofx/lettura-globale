@@ -64,7 +64,7 @@ Il GET dello stato, sia da D1 relazionale sia da snapshot, seleziona le copie in
 
 La creazione verifica sullo stato salvato il profilo adulto, la sequenza accessibile e la presenza della copia nella programmazione attiva. L’elenco dei link segue la visibilità del contenuto di origine, compresi i record archiviati. La lettura pubblica per token continua a usare lo snapshot emesso.
 
-Il PATCH accetta `libraryReplacements`, elenco opzionale di coppie [ID segnaposto, ID foto]. Il server verifica il segnaposto precedente, la sua archiviazione e l’unica foto caricata attiva della stessa parola e categoria prima di aggiornare i riferimenti nella stessa revisione. Le copie staccate e i modelli archiviati conservano la configurazione storica. Un’associazione divenuta ambigua restituisce HTTP 409. Il client Libreria verrà collegato dopo il rilascio del lettore del nuovo comando.
+Il PATCH accetta `libraryReplacements`, elenco opzionale di coppie [ID segnaposto, ID foto]. Il server verifica il segnaposto precedente, la sua archiviazione e l’unica foto caricata attiva della stessa parola e categoria prima di aggiornare i riferimenti nella stessa revisione. Le copie staccate e i modelli archiviati conservano la configurazione storica. Un’associazione divenuta ambigua restituisce HTTP 409. La Libreria invia la coppia esplicita quando la foto è disponibile in cloud. Il salvataggio separa le modifiche manuali dai riferimenti derivati. Se durante la disconnessione compare una seconda foto equivalente, il client conserva entrambe le foto e la scelta del segnaposto presente in cloud.
 
 ## Verifiche di accettazione e ordine delle PR
 

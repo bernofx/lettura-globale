@@ -3,13 +3,30 @@ type References = {
   categoryItemIds?: string[]; recognitionItemIds?: string[]; recognitionTargetIds?: string[]; namingItemIds?: string[]; sentenceItemIds?: string[];
 };
 
+const listKeys = ["optionIds", "articleItemIds", "categoryItemIds", "recognitionItemIds", "recognitionTargetIds", "namingItemIds", "sentenceItemIds"] as const;
+
+export function exerciseLibraryIds(exercise: References) {
+  return [...(exercise.promptId ? [exercise.promptId] : []), ...listKeys.flatMap(key => exercise[key] ?? [])];
+}
+
+// Keep manual exercise edits independent from the substitution command, so a
+// conflicting photo choice can be dropped without undoing those edits.
+export function withoutDerivedReferences<T extends References>(before: T, derived: T, edited: T) {
+  const result = { ...edited };
+  for (const key of ["promptId", ...listKeys] as const) {
+    if (before[key] !== derived[key] && JSON.stringify(edited[key]) === JSON.stringify(derived[key])) {
+      Object.assign(result, { [key]: before[key] });
+    }
+  }
+  return result;
+}
+
 /** Only remap explicit IDs; never change random/fixed mode, filters or history. */
 export function remapExerciseReferences<T extends References>(exercise: T, replacements: Map<string, string>): T {
-  const keys = ["optionIds", "articleItemIds", "categoryItemIds", "recognitionItemIds", "recognitionTargetIds", "namingItemIds", "sentenceItemIds"] as const;
   const next = { ...exercise };
   let changed = false;
   if (exercise.promptId && replacements.has(exercise.promptId)) { next.promptId = replacements.get(exercise.promptId)!; changed = true; }
-  for (const key of keys) {
+  for (const key of listKeys) {
     const ids = exercise[key];
     if (!ids?.some((id) => replacements.has(id))) continue;
     next[key] = [...new Set(ids.map((id) => replacements.get(id) ?? id))];
