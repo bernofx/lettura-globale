@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Se avvii una sequenza mentre un altro adulto la modifica, il salvataggio dell’ultimo utilizzo conserva la nuova programmazione anche al rientro online.",
     "Il cloud è pronto a salvare una configurazione per singola sequenza, conservando il modello originale e gli esercizi già usati nello storico.",
     "Quando una foto caricata sostituisce un segnaposto della stessa parola e categoria, la Libreria aggiorna anche le copie degli esercizi nelle sequenze attive. Se la foto è ancora solo sul dispositivo, la sostituzione attende il caricamento.",
     "Nei link condivisi trovi la configurazione salvata nella sequenza. Il pannello dei link mostra quelli relativi ai contenuti che puoi consultare.",

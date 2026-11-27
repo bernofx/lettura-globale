@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recoverPendingRemoteUploads } from "../../domain/library-deduplication";
 import { retryOperation } from "../../domain/retry";
-import { buildStateChange, type StateChangeRequest } from "../../domain/state-changes";
-import { buildLibrarySaveChange, rebaseLibrarySaveChange } from "../../domain/library-save-change";
+import { buildStateChange, parseStateChangeRequest, type StateChangeRequest } from "../../domain/state-changes";
+import { buildCloudSaveChange, rebaseCloudSaveChange, replayEditsAfterSave } from "../../domain/cloud-save-change";
 import { THERAPIST_SESSION_STORAGE_KEY } from "../../domain/therapist-session";
 import { appendSaveJournal } from "../../domain/save-journal";
 import { hydrateSoundPreferences } from "../../domain/sound-preferences";
@@ -40,7 +40,7 @@ type CloudSyncOptions = {
 export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId, logoutState, sessionActive, sessionReady, notify }: CloudSyncOptions) {
   const {
     therapists, children, activeChildId, activeSequenceId, library, setLibrary, exercises, sequences, attempts, helps,
-    sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, applyBackendState,
+    sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle, setCategorySymbols, allLocalDataLoaded, localBootstrapSnapshot, currentSnapshot, applyBackendState,
   } = data;
   const [progressReferences, setProgressReferences] = useStoredState<ProgressReferences | null>("lg-progress-references", null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
@@ -54,6 +54,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const lastStateReadTag = useRef("");
   const lastStateReadAdultId = useRef<string | null>(null);
   const lastSyncedBackendState = useRef<BackendState | null>(null);
+  const reconciledSave = useRef<{ requested: BackendState; confirmed: BackendState } | null>(null);
   const localFallbackBaseline = useRef<BackendState | null>(null);
   const backendSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const backendPendingWrites = useRef(0);
@@ -64,10 +65,10 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const lastResumeCheck = useRef(0);
 
   const fallBackToLocal = useCallback(() => {
-    localFallbackBaseline.current = backendStateForStorage(localBootstrapSnapshot.current);
+    localFallbackBaseline.current = currentSnapshot();
     backendHydrating.current = false;
     setBackendStatus("local");
-  }, [localBootstrapSnapshot]);
+  }, [currentSnapshot]);
 
   useEffect(() => {
     const resume = (event?: PageTransitionEvent) => {
@@ -100,7 +101,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady || !navigator.onLine || backendStatus === "syncing" || backendSaveTimer.current !== null) return;
     const baseline = lastSyncedBackendState.current;
     if (!baseline) return;
-    const local = backendStateForStorage(localBootstrapSnapshot.current);
+    const local = currentSnapshot();
     if (buildStateChange(baseline, local, crypto.randomUUID(), backendRevision.current)) return;
     let cancelled = false;
     const refresh = async () => {
@@ -113,7 +114,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       const result = await response.json() as CloudStateRead;
       if (cancelled || !result.state || result.revision < backendRevision.current) return;
       const confirmed = lastSyncedBackendState.current;
-      if (confirmed && buildStateChange(confirmed, backendStateForStorage(localBootstrapSnapshot.current), crypto.randomUUID(), backendRevision.current)) return;
+      if (confirmed && buildStateChange(confirmed, currentSnapshot(), crypto.randomUUID(), backendRevision.current)) return;
       lastStateReadTag.current = response.headers.get("etag") ?? "";
       lastStateReadAdultId.current = loggedInTherapistId;
       if (result.revision === backendRevision.current && !scopeChanged) return;
@@ -136,7 +137,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       setBackendStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, setProgressReferences, localBootstrapSnapshot]);
+  }, [backendRefreshKey, backendInitialized, backendStatus, loggedInTherapistId, logoutState, notify, sessionActive, sessionReady, applyBackendState, setProgressReferences, currentSnapshot]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || !backendInitialized || sessionActive || sessionReady) return;
@@ -182,7 +183,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         let recoveredPendingSave = false;
         if (pendingSave) {
           try {
-            const restored = rebaseLibrarySaveChange(savedBaseline, pendingSave.change, crypto.randomUUID(), result.revision);
+            const restored = rebaseCloudSaveChange(savedBaseline, pendingSave.change, crypto.randomUUID(), result.revision);
             restoredState = restored.state as BackendState;
             if (restored.replacementConflict) notify("La Libreria è cambiata. Controlla la foto prima di sostituire il segnaposto.", 7000);
             restoredState = discardUnauthorizedNewSequences(savedBaseline, restoredState, loggedInTherapistId);
@@ -247,28 +248,34 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
   const settleBackendSaveStatus = useCallback(() => {
     const baseline = lastSyncedBackendState.current;
     if (!baseline || !loggedInTherapistId || logoutState !== "idle") return;
-    const current = backendStateForStorage(localBootstrapSnapshot.current);
+    const current = currentSnapshot();
     const dirty = Boolean(buildStateChange(baseline, current, crypto.randomUUID(), backendRevision.current));
     if (!cloudSaveCanSettle(backendPendingWrites.current, backendSaveTimer.current !== null, dirty)) return;
     clearPendingCloudSave();
     rejectedWrite.current = null;
     lastBackendSaveError.current = "";
     setBackendStatus((status) => status === "syncing" || status === "error" ? "ready" : status);
-  }, [loggedInTherapistId, logoutState, localBootstrapSnapshot]);
+  }, [loggedInTherapistId, logoutState, currentSnapshot]);
 
   const enqueueBackendSave = useCallback((snapshot: BackendState) => {
     backendPendingWrites.current += 1;
     const requestedSnapshot = snapshot;
+    const baselineAtEnqueue = lastSyncedBackendState.current;
+    const localAtEnqueue = currentSnapshot();
     let attemptedOperationId = "";
     let attemptedRevision = backendRevision.current;
     let skippedRejectedWrite = false;
     const task = backendSaveQueue.current.catch(() => undefined).then(async () => {
         const previous = lastSyncedBackendState.current;
         if (!previous) throw new Error("missing_sync_baseline");
+        const prior = reconciledSave.current;
+        if (previous !== baselineAtEnqueue && prior?.confirmed === previous) {
+          snapshot = replayEditsAfterSave(prior.requested, snapshot, previous, backendRevision.current);
+        }
         snapshot = discardUnauthorizedNewSequences(previous, snapshot, loggedInTherapistId);
         const operationId = crypto.randomUUID();
         attemptedRevision = backendRevision.current;
-        const change = buildLibrarySaveChange(previous, snapshot, operationId, backendRevision.current);
+        const change = buildCloudSaveChange(previous, snapshot, operationId, backendRevision.current);
         if (!change) return;
         const content = writeContent(change);
         const rejected = rejectedWrite.current;
@@ -283,7 +290,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         if (granularWritesUnavailable.current && !change.libraryReplacements) {
           response = await fetchWithTimeout("/api/state", { method: "PUT", headers: { "content-type": "application/json", "x-base-revision": String(backendRevision.current) }, body: JSON.stringify(snapshot) }, 6500);
         } else {
-          const body = JSON.stringify(change);
+          const body = JSON.stringify(parseStateChangeRequest(change));
           response = await retryOperation(async () => {
             const result = await fetchWithTimeout("/api/state/changes", { method: "PATCH", headers: { "content-type": "application/json" }, body }, 6500);
             if (result.status >= 500) throw await backendResponseError(result, "backend_save_failed");
@@ -302,7 +309,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
           const latest = await latestResponse.json() as CloudStateRead;
           if (!latest.state || latest.revision < 1) throw new Error("backend_conflict_state_missing");
           setProgressReferences(latest.progressReferences ?? null);
-          const rebased = rebaseLibrarySaveChange(latest.state, change, crypto.randomUUID(), latest.revision);
+          const rebased = rebaseCloudSaveChange(latest.state, change, crypto.randomUUID(), latest.revision);
           if (rebased.replacementConflict) notify("La Libreria è cambiata. Controlla la foto prima di sostituire il segnaposto.", 7000);
           attemptedRevision = latest.revision;
           appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_rebased", operationId, revision: latest.revision, changedSequences: change.collections.sequences?.upserts.length ?? 0 });
@@ -329,15 +336,19 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         backendRevision.current = revision;
         lastSyncedBackendState.current = syncedSnapshot;
         appendSaveJournal(localStorage, { at: new Date().toISOString(), event: "save_succeeded", operationId, revision, httpStatus: response.status, changedSequences: change.collections.sequences?.upserts.length ?? 0, sequenceCount: syncedSnapshot.sequences.length });
+        let visibleSnapshot = currentSnapshot();
+        reconciledSave.current = null;
         if (syncedSnapshot !== requestedSnapshot) {
+          reconciledSave.current = { requested: requestedSnapshot, confirmed: syncedSnapshot };
+          visibleSnapshot = lastStateReadAdultId.current === loggedInTherapistId
+            ? discardUnauthorizedNewSequences(syncedSnapshot, replayEditsAfterSave(localAtEnqueue, visibleSnapshot, syncedSnapshot, revision), loggedInTherapistId)
+            : syncedSnapshot;
           backendHydrating.current = true;
-          applyBackendState(syncedSnapshot);
+          applyBackendState(visibleSnapshot);
           backendHydrating.current = false;
         }
-        const currentSnapshot = syncedSnapshot !== requestedSnapshot
-          ? syncedSnapshot
-          : backendStateForStorage(localBootstrapSnapshot.current);
-        const stillDirty = Boolean(buildStateChange(syncedSnapshot, currentSnapshot, crypto.randomUUID(), revision));
+
+        const stillDirty = Boolean(buildStateChange(syncedSnapshot, visibleSnapshot, crypto.randomUUID(), revision));
         if (stillDirty || backendPendingWrites.current > 1 || backendSaveTimer.current !== null) setBackendStatus("syncing");
         else {
           clearPendingCloudSave();
@@ -353,20 +364,20 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       });
     backendSaveQueue.current = task;
     return task;
-  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, setProgressReferences, localBootstrapSnapshot, notify]);
+  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, setProgressReferences, currentSnapshot, notify]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;
     const snapshot = backendStateForStorage({ schemaVersion: 1, therapists, children, activeChildId, activeSequenceId, library, exercises, sequences, attempts, helps, sessionHistory, appearance, soundPreferences, categorySymbols, tracingOrderRequired, interfaceStyle });
     if (!backendInitialized) {
       if (!localFallbackBaseline.current) return;
-      const localChange = buildLibrarySaveChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
+      const localChange = buildCloudSaveChange(localFallbackBaseline.current, snapshot, crypto.randomUUID(), 1);
       if (localChange) storePendingCloudSave(localChange);
       return;
     }
     const baseline = lastSyncedBackendState.current;
     if (!baseline) return;
-    const pendingChange = buildLibrarySaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current);
+    const pendingChange = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current);
     if (!pendingChange) {
       const idleTimer = window.setTimeout(settleBackendSaveStatus, 0);
       return () => window.clearTimeout(idleTimer);
@@ -417,11 +428,10 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     if (backendSaveTimer.current !== null) window.clearTimeout(backendSaveTimer.current);
     backendSaveTimer.current = null;
   }, []);
-  const currentSnapshot = useCallback(() => backendStateForStorage(localBootstrapSnapshot.current), [localBootstrapSnapshot]);
   /** Change between the last confirmed cloud revision and `snapshot` (current local state by default). */
   const pendingChange = useCallback((snapshot: BackendState = currentSnapshot()) => {
     const baseline = lastSyncedBackendState.current;
-    return baseline ? buildLibrarySaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current) : null;
+    return baseline ? buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current) : null;
   }, [currentSnapshot]);
   const hasBaseline = useCallback(() => Boolean(lastSyncedBackendState.current), []);
   /** True when a confirmed cloud baseline exists and the local state matches it. */
@@ -446,7 +456,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
     if (!backendInitialized || backendStatus === "local" || !navigator.onLine) {
       const baseline = lastSyncedBackendState.current ?? localFallbackBaseline.current;
       if (baseline) {
-        const change = buildLibrarySaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current || 1);
+        const change = buildCloudSaveChange(baseline, snapshot, crypto.randomUUID(), backendRevision.current || 1);
         if (change) storePendingCloudSave(change);
       }
       return "local" as const;
