@@ -2,7 +2,6 @@ import { hydrateInterfaceStyle } from "../domain/appearance";
 import { normalizeLearningCategory } from "../domain/activity-generation";
 import { type CategorySymbols } from "../domain/category-images";
 import { articleFor } from "../domain/article-classification";
-import { remapExerciseReferences } from "../domain/exercise-library-references";
 import { discardForeignNewSequences, legacySequenceOwnerId } from "../domain/sequence-access";
 import { addOfficialCatalog, type OfficialCatalogEntry } from "../domain/scheduled-catalog";
 import { hydrateSyllables } from "../domain/syllabification";
@@ -50,10 +49,6 @@ export function hydrateExercises(items: Exercise[]) {
     recognitionCategories: exercise.recognitionCategories?.map(normalizeLearningCategory),
     namingCategories: exercise.namingCategories?.map(normalizeLearningCategory),
   }));
-}
-
-export function remapExerciseLibraryIds(exercise: Exercise, replacements: Map<string, string>): Exercise {
-  return remapExerciseReferences(exercise, replacements);
 }
 
 export function hydrateSequences(items: (Omit<Sequence, "therapistId"> & { therapistId?: string; ownerAdultId?: string })[]) {

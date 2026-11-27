@@ -3,6 +3,7 @@ import { type CategorySymbols } from "../../domain/category-images";
 import { seedDefaultCategorySymbols } from "../../domain/category-symbol-catalog";
 import { OFFICIAL_CATALOG_URL, type OfficialCatalogEntry } from "../../domain/scheduled-catalog";
 import { fetchWithTimeout } from "../../shared/cloud-client";
+import { remapProgramExercises } from "../../domain/exercise-library-references";
 import { deduplicateLibraryPlaceholders } from "../../domain/library-deduplication";
 import { type SessionHistoryRecord } from "../../domain/session-history";
 import { type AppearanceSettings, defaultAppearance, hydrateAppearance, defaultInterfaceStyle, hydrateInterfaceStyle, type InterfaceStyle } from "../../domain/appearance";
@@ -10,7 +11,7 @@ import { defaultSoundPreferences, hydrateSoundPreferences, type SoundPreferences
 import { useStoredState } from "../../shared/hooks";
 import { readLibraryImage, storeLibraryImage } from "../../shared/media-storage";
 import { initialAdministrator, initialChildren, initialExercises, initialSequences, initialTherapists, stockItems } from "../../shared/seed-data";
-import { hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, mergeOfficialLibrary, remapExerciseLibraryIds } from "../../shared/state-hydration";
+import { hydrateExercises, hydrateLibrary, hydrateSequences, libraryForStorage, mergeById, mergeOfficialLibrary } from "../../shared/state-hydration";
 import { type Attempt, type BackendState, type ChildProfile, type Exercise, type HelpEvent, type LibraryItem, type Sequence, type Therapist } from "../../shared/types";
 
 type ApplyBackendStateOptions = {
@@ -113,13 +114,13 @@ export function useAppData(notify: (message: string, duration?: number) => void)
   }, [allLocalDataLoaded]);
 
   useEffect(() => {
-    if (!libraryLoaded || !exercisesLoaded) return;
-    const deduplicated = deduplicateLibraryPlaceholders(library);
+    if (!libraryLoaded || !exercisesLoaded || !sequencesLoaded) return;
+    const deduplicated = deduplicateLibraryPlaceholders(library, true);
     if (!deduplicated.replacements.size) return;
     if (deduplicated.items.some((item, index) => item !== library[index])) setLibrary(deduplicated.items);
-    const repaired = exercises.map((exercise) => remapExerciseLibraryIds(exercise, deduplicated.replacements));
+    const repaired = remapProgramExercises(exercises, sequences, deduplicated.replacements);
     if (repaired.some((exercise, index) => exercise !== exercises[index])) setExercises(repaired);
-  }, [library, exercises, libraryLoaded, exercisesLoaded, setLibrary, setExercises]);
+  }, [library, exercises, sequences, libraryLoaded, exercisesLoaded, sequencesLoaded, setLibrary, setExercises]);
 
   const applyBackendState = useCallback((state: BackendState, options: ApplyBackendStateOptions = {}) => {
     setTherapists(mergeById(state.therapists ?? [], [initialAdministrator]));
