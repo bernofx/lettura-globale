@@ -1,12 +1,13 @@
 import { COLORING_HEIGHT, COLORING_WIDTH, detailStrokes, type ColoringPage } from "../../domain/coloring-pages";
 
 export type ColoringTool = "brush" | "crayon" | "fill";
-import type { ColoringArea, ColoringPoint, ColoringStroke } from "../../domain/coloring-drawings";
+import type { ColoringArea, ColoringPoint, ColoringStroke, ColoringTexture } from "../../domain/coloring-drawings";
+import { animatedTextures, textureLayers } from "./coloring-textures";
 export type { ColoringPoint } from "../../domain/coloring-drawings";
 type Bounds = { left: number; top: number; right: number; bottom: number };
 /** Raster cache of an area's strokes at the current device resolution. */
 type MarkCache = { context: CanvasRenderingContext2D; bounds: Bounds; key: string };
-type PaintedArea = { fill?: string; strokes: ColoringStroke[]; cache?: MarkCache };
+type PaintedArea = { fill?: string; fillTexture?: ColoringTexture; strokes: ColoringStroke[]; cache?: MarkCache };
 
 const outlineColor = "#312d43";
 const backgroundIndex = -1;
@@ -34,6 +35,8 @@ export class ColoringCanvas {
   private readonly dots: Path2D;
   private readonly lines: Path2D;
   private readonly paint = new Map<number, PaintedArea>();
+  /** Animation clock in seconds for lava and glitter; 0 keeps them still. */
+  time = 0;
 
   constructor(page: ColoringPage, areas: ColoringArea[] = []) {
     this.id = page.id;
@@ -42,7 +45,7 @@ export class ColoringCanvas {
     const strokes = detailStrokes(page.details);
     this.dots = new Path2D(strokes.dots);
     this.lines = new Path2D(strokes.lines);
-    for (const { index, fill, strokes } of areas) this.paint.set(index, { fill, strokes: structuredClone(strokes) });
+    for (const { index, fill, fillTexture, strokes } of areas) this.paint.set(index, { fill, fillTexture, strokes: structuredClone(strokes) });
   }
 
   areaAt(context: CanvasRenderingContext2D, point: ColoringPoint): number {
@@ -52,28 +55,39 @@ export class ColoringCanvas {
     return backgroundIndex;
   }
 
-  fill(index: number, color: string) {
+  fill(index: number, color: string, texture?: ColoringTexture) {
     // A fill covers the area's previous marks: drop them and their cache.
     this.releaseCache(this.paint.get(index));
-    this.paint.set(index, { fill: color, strokes: [] });
+    this.paint.set(index, { fill: color, ...(texture ? { fillTexture: texture } : {}), strokes: [] });
   }
 
-  stroke(index: number, from: ColoringPoint, to: ColoringPoint, color: string, tool: "brush" | "crayon", frame: ColoringFrame) {
+  /** True when a lava or glitter paint is visible, so the game keeps animating. */
+  hasAnimation() {
+    for (const area of this.paint.values()) {
+      if (area.fillTexture && animatedTextures.has(area.fillTexture)) return true;
+      if (area.strokes.some((stroke) => stroke.texture && animatedTextures.has(stroke.texture))) return true;
+    }
+    return false;
+  }
+
+  stroke(index: number, from: ColoringPoint, to: ColoringPoint, color: string, tool: "brush" | "crayon", frame: ColoringFrame, paintTexture?: ColoringTexture) {
+    // Textures belong to the brush; the crayon keeps its own grain in the base colour.
+    const texture = tool === "brush" ? paintTexture : undefined;
     const area = this.paint.get(index) ?? { strokes: [] };
     this.paint.set(index, area);
     const last = area.strokes.at(-1);
     const end = last?.points.at(-1);
     const isDot = from.x === to.x && from.y === to.y;
-    if (!isDot && last && last.tool === tool && last.color === color && end && end.x === from.x && end.y === from.y) last.points.push(to);
-    else area.strokes.push({ tool, color, points: isDot ? [from] : [from, to] });
+    if (!isDot && last && last.tool === tool && last.color === color && last.texture === texture && end && end.x === from.x && end.y === from.y) last.points.push(to);
+    else area.strokes.push({ tool, color, ...(texture ? { texture } : {}), points: isDot ? [from] : [from, to] });
     // Draw just the new segment into a cache that is already valid for this frame;
     // otherwise the next render rebuilds the cache from the vectors.
-    if (area.cache?.key === frameKey(frame)) this.drawStroke(area.cache.context, index, { tool, color, points: isDot ? [from] : [from, to] });
+    if (area.cache?.key === frameKey(frame)) this.drawStroke(area.cache.context, index, { tool, color, ...(texture ? { texture } : {}), points: isDot ? [from] : [from, to] });
   }
 
   snapshot(): ColoringArea[] {
-    return Array.from(this.paint, ([index, { fill, strokes }]) => ({
-      index, fill, strokes: strokes.map(stroke => ({
+    return Array.from(this.paint, ([index, { fill, fillTexture, strokes }]) => ({
+      index, fill, ...(fillTexture ? { fillTexture } : {}), strokes: strokes.map(stroke => ({
         ...stroke,
         points: stroke.points.map(({ x, y }) => ({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 })),
       })),
@@ -96,18 +110,24 @@ export class ColoringCanvas {
     const { scale, left, top } = frame;
     const background = this.paint.get(backgroundIndex);
     context.clearRect(0, 0, width, height);
-    if (background?.fill) {
+    if (background?.fill && !background.fillTexture) {
       context.fillStyle = background.fill;
       context.fillRect(0, 0, width, height);
     }
     context.save();
     context.setTransform(scale, 0, 0, scale, -left * scale, -top * scale);
+    if (background?.fill && background.fillTexture) {
+      this.paintLayers(context, background.fillTexture, () => context.fillRect(frame.left, frame.top, frame.right - frame.left, frame.bottom - frame.top));
+    }
     if (background?.strokes.length) this.drawMarks(context, backgroundIndex, background, frame);
     context.lineJoin = context.lineCap = "round";
     for (const [index, path] of this.areas.entries()) {
       const area = this.paint.get(index);
-      context.fillStyle = area?.fill ?? this.areaFills[index] ?? "#ffffff";
-      context.fill(path);
+      if (area?.fillTexture) this.paintLayers(context, area.fillTexture, () => context.fill(path));
+      else {
+        context.fillStyle = area?.fill ?? this.areaFills[index] ?? "#ffffff";
+        context.fill(path);
+      }
       if (area?.strokes.length) this.drawMarks(context, index, area, frame);
       context.strokeStyle = outlineColor;
       context.lineWidth = 6;
@@ -128,7 +148,24 @@ export class ColoringCanvas {
     area.cache = undefined;
   }
 
+  /** Paints every layer of a texture with `draw` (a fill or a stroke), keeping the context state. */
+  private paintLayers(context: CanvasRenderingContext2D, texture: ColoringTexture, draw: () => void) {
+    const alpha = context.globalAlpha;
+    for (const layer of textureLayers(context, texture, this.time)) {
+      context.fillStyle = context.strokeStyle = layer.style;
+      context.globalAlpha = alpha * layer.alpha;
+      draw();
+    }
+    context.globalAlpha = alpha;
+  }
+
   private drawMarks(context: CanvasRenderingContext2D, index: number, area: PaintedArea, frame: ColoringFrame) {
+    // Moving paints are replayed every frame instead of being frozen into the cache.
+    if (area.strokes.some((stroke) => stroke.texture && animatedTextures.has(stroke.texture))) {
+      this.releaseCache(area);
+      for (const record of area.strokes) this.drawStroke(context, index, record);
+      return;
+    }
     const cache = this.cacheFor(index, area, frame);
     if (cache) {
       const { left, top, right, bottom } = cache.bounds;
@@ -160,11 +197,17 @@ export class ColoringCanvas {
   private drawStroke(context: CanvasRenderingContext2D, index: number, record: ColoringStroke) {
     context.save();
     if (index !== backgroundIndex) context.clip(this.areas[index]);
-    context.strokeStyle = context.fillStyle = record.color;
     context.lineCap = "round";
     const { points } = record;
-    if (points.length === 1) this.mark(context, record.tool, points[0], points[0]);
-    for (let point = 1; point < points.length; point++) this.mark(context, record.tool, points[point - 1], points[point]);
+    const draw = () => {
+      if (points.length === 1) this.mark(context, record.tool, points[0], points[0]);
+      for (let point = 1; point < points.length; point++) this.mark(context, record.tool, points[point - 1], points[point]);
+    };
+    if (record.texture && record.tool === "brush") this.paintLayers(context, record.texture, draw);
+    else {
+      context.strokeStyle = context.fillStyle = record.color;
+      draw();
+    }
     context.restore();
   }
 

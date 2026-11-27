@@ -15,6 +15,8 @@ export type RandomRecognitionConfig = {
   rounds: number;
   distractorCount: 1 | 2 | 3 | 4;
   fixedPromptId?: string;
+  /** Chosen targets, cycled in shuffled order; distractors behave as with a single fixed target. */
+  fixedPromptIds?: string[];
   distractorSource?: "mixed" | "same-category";
   allowedIds?: string[];
   categories?: string[];
@@ -35,6 +37,12 @@ const learningCategoryAliases: Record<string, string> = {
 
 export function normalizeLearningCategory(category: string) {
   return learningCategoryAliases[category] ?? category;
+}
+
+/** Chosen target words of a random-mode exercise: the explicit list, else the single legacy `promptId`. */
+export function recognitionTargetsFor(exercise: { promptId?: string; recognitionTargetIds?: string[] }) {
+  const targets = (exercise.recognitionTargetIds ?? []).filter((id) => typeof id === "string" && id);
+  return targets.length ? [...new Set(targets)] : exercise.promptId ? [exercise.promptId] : [];
 }
 
 export function recognitionModeFor(exercise: { recognitionMode?: "fixed" | "random" }) {
@@ -70,16 +78,19 @@ function promptOrder(candidates: ActivityCandidate[], rounds: number, random: ()
 export function createRandomRecognitionRounds(candidates: ActivityCandidate[], config: RandomRecognitionConfig, random: () => number = Math.random): RecognitionRound[] {
   const allowed = config.allowedIds?.length ? new Set(config.allowedIds) : null;
   const categories = config.categories?.length ? new Set(config.categories) : null;
-  const fixedPrompt = config.fixedPromptId ? candidates.find((item) => item.id === config.fixedPromptId) : undefined;
+  const targetIds = [...new Set([...(config.fixedPromptIds ?? []), ...(config.fixedPromptId ? [config.fixedPromptId] : [])])];
+  const fixedPrompts = targetIds.flatMap((id) => candidates.filter((item) => item.id === id));
+  const fixedPrompt = fixedPrompts[0];
+  const targetSet = new Set(targetIds);
   // Sentence scenes are not single words: they enter a recognition round only
   // when the adult selected them explicitly (fixed target or chosen items).
-  const isExplicit = (item: ActivityCandidate) => item.id === config.fixedPromptId || Boolean(allowed?.has(item.id));
+  const isExplicit = (item: ActivityCandidate) => targetSet.has(item.id) || Boolean(allowed?.has(item.id));
   const compatiblePool = candidates.filter((item) => (item.contentKind !== "sentence" || isExplicit(item)) && (!categories || categories.has(item.category)) && matchesSyllableFilter(item, config.syllables));
   // With a fixed target, selected IDs are preferred distractors rather than a
   // hard requirement: random distractors can always be completed from the
   // compatible library. With a random target they remain a true pool filter.
   const pool = fixedPrompt ? compatiblePool : compatiblePool.filter((item) => !allowed || allowed.has(item.id));
-  const promptPool = fixedPrompt ? [fixedPrompt] : config.distractorSource === "same-category"
+  const promptPool = fixedPrompt ? fixedPrompts : config.distractorSource === "same-category"
     ? pool.filter((prompt) => pool.filter((item) => item.id !== prompt.id && item.category === prompt.category).length >= config.distractorCount)
     : pool;
   if (promptPool.length < 1) return [];

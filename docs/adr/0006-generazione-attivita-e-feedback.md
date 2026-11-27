@@ -45,3 +45,9 @@ non cambia la registrazione dei tentativi. La voce nativa Android resta sul
 bridge esistente; nessuna nuova APK, migrazione, preferenza o dato salvato.
 
 La generazione casuale non richiede scritture aggiuntive sul backend: D1 conserva soltanto la configurazione e gli eventi già previsti. Le statistiche distinguono riconoscimento, articolo e classificazione per categoria. Le categorie della libreria diventano dati didattici e devono quindi essere curate dall'adulto.
+
+## Aggiornamento: più bersagli precisi in «Trova la parola» (novembre 2026)
+
+Con «Distrattori casuali» l’adulto può scegliere una o più parole precise da riconoscere (prima era una sola). A ogni turno ne compare una, a rotazione e in ordine mescolato per ciclo, senza ripetizioni consecutive. I distrattori seguono le regole già in uso per il bersaglio fisso: prima le parole indicate come preferite, poi la libreria compatibile con categorie e sillabe scelte; ogni bersaglio deve avere abbastanza distrattori compatibili, altrimenti la configurazione non si salva e indica quali parole mancano.
+
+Persistenza retrocompatibile, senza migrazione: il campo `recognitionTargetIds` dello stato è proiettato in D1 come più righe `exercise_items` con ruolo `prompt` (già ammesso dal vincolo `CHECK` di `0004_relational_data.sql`), ordinate per `position`; la lettura le riordina per posizione perché il caricamento non usa `ORDER BY`. `promptId` resta il primo bersaglio, quindi una versione precedente dell’app vede un esercizio a bersaglio singolo e continua a funzionare; se però lo salva di nuovo, conserva solo il primo bersaglio. I link condivisi e la sostituzione dei riferimenti in Libreria includono tutti i bersagli. Test: generazione e compilazione dei turni, round trip relazionale con righe in ordine inverso, ruoli entro il vincolo distribuito ed esercizi storici a bersaglio singolo invariati.

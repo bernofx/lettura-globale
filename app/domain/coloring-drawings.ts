@@ -2,8 +2,15 @@ export const COLORING_DRAWINGS_URL = "/api/coloring-drawings";
 export const MAX_DRAWING_BYTES = 1_500_000;
 
 export type ColoringPoint = { x: number; y: number };
-export type ColoringStroke = { tool: "brush" | "crayon"; color: string; points: ColoringPoint[] };
-export type ColoringArea = { index: number; fill?: string; strokes: ColoringStroke[] };
+/** Playful paints with fixed colours; `color`/`fill` keep their base colour for older app versions. */
+export const coloringTextures = ["dots", "glitter", "stars", "lava"] as const;
+export type ColoringTexture = (typeof coloringTextures)[number];
+export type ColoringStroke = { tool: "brush" | "crayon"; color: string; texture?: ColoringTexture; points: ColoringPoint[] };
+export type ColoringArea = { index: number; fill?: string; fillTexture?: ColoringTexture; strokes: ColoringStroke[] };
+
+export function isColoringTexture(value: unknown): value is ColoringTexture {
+  return typeof value === "string" && (coloringTextures as readonly string[]).includes(value);
+}
 export type ColoringDrawing = {
   version: 1;
   editedAt: number;
@@ -26,6 +33,7 @@ function isPoint(value: unknown): value is ColoringPoint {
 
 function isStroke(value: unknown): value is ColoringStroke {
   return isRecord(value) && (value.tool === "brush" || value.tool === "crayon") && isColor(value.color) &&
+    (value.texture === undefined || (value.tool === "brush" && isColoringTexture(value.texture))) &&
     Array.isArray(value.points) && value.points.length > 0 && value.points.every(isPoint);
 }
 
@@ -39,9 +47,10 @@ export function parseColoringDrawing(value: unknown, areaCount: number): Colorin
   for (const area of value.areas) {
     if (!isRecord(area) || typeof area.index !== "number" || !Number.isInteger(area.index) ||
       area.index < -1 || area.index >= areaCount || seen.has(area.index) ||
-      (area.fill !== undefined && !isColor(area.fill)) || !Array.isArray(area.strokes) || !area.strokes.every(isStroke)) return null;
+      (area.fill !== undefined && !isColor(area.fill)) || (area.fillTexture !== undefined && (area.fill === undefined || !isColoringTexture(area.fillTexture))) ||
+      !Array.isArray(area.strokes) || !area.strokes.every(isStroke)) return null;
     seen.add(area.index);
-    areas.push({ index: area.index, fill: area.fill, strokes: area.strokes });
+    areas.push({ index: area.index, fill: area.fill, ...(area.fillTexture ? { fillTexture: area.fillTexture as ColoringTexture } : {}), strokes: area.strokes as ColoringStroke[] });
   }
   return { version: 1, editedAt: value.editedAt, operation: value.operation, areas };
 }
