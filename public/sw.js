@@ -1,4 +1,4 @@
-const CACHE_NAME = "lettura-globale-v108";
+const CACHE_NAME = "lettura-globale-v109";
 const APP_SHELL = [
   "/", "/manifest.webmanifest", "/lettura-globale-icon-v2.png",
   "/images/quantity/candy.webp", "/images/quantity/ladybug.webp", "/images/quantity/stone.webp",
