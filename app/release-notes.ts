@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Il cloud è pronto ad aggiornare i riferimenti degli esercizi quando un segnaposto viene sostituito dalla foto della stessa parola e categoria.",
     "Nei link condivisi trovi la configurazione salvata nella sequenza. Il pannello dei link mostra quelli relativi ai contenuti che puoi consultare.",
     "Progressi e CSV riconoscono il tipo di attività anche quando un esito visibile proviene dalla copia di un esercizio in una sequenza riservata a un altro adulto.",
     "Le sequenze delle prime versioni con proprietario implicito possono essere salvate dall’amministratore mantenendo la stessa titolarità.",

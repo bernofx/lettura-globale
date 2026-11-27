@@ -1,4 +1,8 @@
 import { hydrateInterfaceStyle, isInterfaceStyle } from "./appearance.ts";
+import { verifyLibraryReplacements } from "./library-deduplication.ts";
+import { remapProgramExercises } from "./exercise-library-references.ts";
+import type { Exercise, LibraryItem, Sequence } from "../shared/types";
+
 export const STATE_COLLECTIONS = [
   "therapists", "children", "library", "exercises", "sequences", "attempts", "helps", "sessionHistory",
 ] as const;
@@ -20,6 +24,7 @@ export type StateChangeRequest = {
   baseRevision: number;
   collections: Partial<Record<StateCollectionName, CollectionChange>>;
   values: Partial<Record<StateValueName, unknown>>;
+  libraryReplacements?: [string, string][];
 };
 
 function document(value: unknown): Record<string, unknown> {
@@ -122,8 +127,13 @@ export function parseStateChangeRequest(value: unknown): StateChangeRequest {
     const symbols = document(rawValues.categorySymbols);
     if (Object.entries(symbols).some(([name, id]) => !name.trim() || name.length > 200 || typeof id !== "string" || !id || id.length > 200)) throw new Error("invalid_category_symbols");
   }
-  if (!Object.keys(collections).length && !Object.keys(rawValues).length) throw new Error("empty_state_change");
-  return { schemaVersion: 1, operationId: request.operationId, baseRevision: request.baseRevision as number, collections, values: rawValues };
+  const pairs = request.libraryReplacements;
+  if (pairs !== undefined && (!Array.isArray(pairs) || !pairs.length || pairs.some(pair =>
+    !Array.isArray(pair) || pair.length !== 2 || pair.some(id => typeof id !== "string" || !id) || pair[0] === pair[1]) ||
+    new Set(pairs.map(pair => pair[0])).size !== pairs.length)) throw new Error("invalid_library_replacements");
+  if (!Object.keys(collections).length && !Object.keys(rawValues).length && !pairs) throw new Error("empty_state_change");
+  return { schemaVersion: 1, operationId: request.operationId, baseRevision: request.baseRevision as number, collections, values: rawValues,
+    ...(pairs ? { libraryReplacements: pairs as [string, string][] } : {}) };
 }
 
 export function applyStateChange(stateValue: unknown, requestValue: unknown) {
@@ -144,6 +154,10 @@ export function applyStateChange(stateValue: unknown, requestValue: unknown) {
   for (const [key, value] of Object.entries(request.values)) {
     if (value === null && (key === "activeSequenceId" || key === "appearance" || key === "soundPreferences" || key === "categorySymbols")) delete next[key];
     else next[key] = value;
+  }
+  if (request.libraryReplacements) {
+    const replacements = verifyLibraryReplacements((state.library ?? []) as LibraryItem[], (next.library ?? []) as LibraryItem[], request.libraryReplacements);
+    next.exercises = remapProgramExercises((next.exercises ?? []) as Exercise[], (next.sequences ?? []) as Sequence[], replacements);
   }
   return next;
 }
@@ -175,6 +189,7 @@ export function rebaseStateChange(latestStateValue: unknown, requestValue: unkno
     baseRevision,
     collections,
     values: request.values,
+    ...(request.libraryReplacements ? { libraryReplacements: request.libraryReplacements } : {}),
   };
   return { change: rebased, state: applyStateChange(latestState, rebased) };
 }

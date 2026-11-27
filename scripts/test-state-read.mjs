@@ -30,7 +30,7 @@ try {
   const state = statePerformanceFixture(30);
   state.therapists.push({ id: "adult-other", firstName: "Other", lastName: "", email: "other@example.test", role: "Terapista", childIds: ["child-other"] });
   state.children.push({ id: "child-other", firstName: "Other", lastName: "", birthYear: "", notes: "", avatarColor: "#fff" });
-  const privateCopy = { ...state.exercises[0], id: "copy-other", title: "Configurazione privata", kind: "articles",
+  const privateCopy = { ...state.exercises[0], id: "copy-other", title: "Configurazione privata", kind: "articles", articleItemIds: ["word-0", "word-2"],
     ownerAdultId: "adult", sequenceId: "other-sequence", templateExerciseId: "exercise" };
   state.exercises.push(privateCopy);
   state.sequences.push({ id: "other-sequence", title: "Altra sequenza", therapistId: "adult-other", exerciseIds: [privateCopy.id] });
@@ -98,6 +98,30 @@ try {
   assert.equal(afterWriteBody.dataSource, "relational");
   assert.equal(afterWriteBody.state.helps.length, 1);
   assert.equal(afterWriteBody.state.attempts.length, 30, "la scrittura granulare non modifica i tentativi");
+  const old = state.library[0];
+  const photo = { ...old, id: "photo", privateUpload: true, remoteImageId: "media-demo", emoji: undefined };
+  const repair = { schemaVersion: 1, operationId: crypto.randomUUID(), baseRevision: 3, values: {},
+    collections: { library: { upserts: [{ ...old, deleted: true }, photo], removedIds: [], order: [] } },
+    libraryReplacements: [[old.id, photo.id]] };
+  const patch = (body) => mf.dispatchFetch("https://app.example/api/state/changes", { method: "PATCH",
+    headers: { cookie: `lg-cloud-session=${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const wrong = await patch({ ...repair, libraryReplacements: [[old.id, "word-2"]] });
+  assert.equal(wrong.status, 409);
+  assert.equal((await wrong.json()).error, "library_replacement_conflict");
+  const repaired = await patch(repair);
+  assert.equal(repaired.status, 200);
+  assert.equal((await repaired.json()).writeMode, "direct");
+  assert.equal((await (await patch(repair)).json()).idempotent, true);
+  const ownerRead = await (await read(otherToken)).json();
+  assert.equal(ownerRead.dataSource, "relational");
+  assert.deepEqual(ownerRead.state.exercises.find(exercise => exercise.id === privateCopy.id).articleItemIds, ["photo", "word-2"]);
+  const visibleRead = await read(token);
+  nextTag = visibleRead.headers.get("etag");
+  const visible = await visibleRead.json();
+  assert.equal(visible.revision, 4);
+  assert.equal(visible.state.exercises[0].promptId, photo.id);
+  assert.deepEqual(visible.state.sessionHistory, afterWriteBody.state.sessionHistory);
+  assert.deepEqual(visible.state.attempts, afterWriteBody.state.attempts);
   // A missing relational leaf would break a full read: 304 must only read auth + revision.
   await db.prepare("DROP TABLE session_item_help_labels").run();
   assert.equal((await read(token, nextTag)).status, 304);
@@ -109,7 +133,7 @@ try {
   assert.deepEqual(fallbackView.state.exercises.map(exercise => exercise.id), ["exercise"]);
   assert.deepEqual(fallbackView.progressReferences, expectedReferences);
   const stored = JSON.parse(await db.prepare("SELECT payload FROM user_states WHERE user_id = ?").bind(account).first("payload"));
-  assert.deepEqual(stored.exercises.find(exercise => exercise.id === privateCopy.id), privateCopy);
+  assert.deepEqual(stored.exercises.find(exercise => exercise.id === privateCopy.id), { ...privateCopy, promptId: photo.id, optionIds: ["photo", ...privateCopy.optionIds.slice(1)], articleItemIds: ["photo", "word-2"] });
   assert.equal(stored.progressReferences, undefined);
   console.log("PASS: API completa, dati relazionali, 304 leggero, ruoli isolati, autenticazione, revisioni, scritture idempotenti e fallback riparabile.");
 } finally { await mf.dispose(); }
