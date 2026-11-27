@@ -1,3 +1,4 @@
+import { INITIAL_ADMINISTRATOR_ID } from "../domain/sequence-access";
 import { addScheduledCatalog } from "../domain/scheduled-catalog";
 import { categorySymbolCatalog } from "../domain/category-symbol-catalog";
 import { countSyllables } from "../domain/syllabification";
@@ -156,7 +157,7 @@ export const initialExercises: Exercise[] = [initialRandomRecognitionExercise, i
 
 export const initialSequences: Sequence[] = [{ id: "seq-prime", title: "Prime parole", exerciseIds: [initialRandomRecognitionExercise.id, initialArticleExercise.id, initialWordCategoryExercise.id], therapistId: "admin-giuseppe" }];
 
-export const initialAdministrator: Therapist = { id: "admin-giuseppe", firstName: "Giuseppe", lastName: "Bernasconi", email: "giuseppe.bernasconi@letturaglobale.demo", role: "Amministratore", pinHash: "a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972", childIds: ["child-luca", "child-sara"] };
+export const initialAdministrator: Therapist = { id: INITIAL_ADMINISTRATOR_ID, firstName: "Giuseppe", lastName: "Bernasconi", email: "giuseppe.bernasconi@letturaglobale.demo", role: "Amministratore", pinHash: "a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972", childIds: ["child-luca", "child-sara"] };
 
 export const initialTherapists: Therapist[] = [
   initialAdministrator,

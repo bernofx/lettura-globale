@@ -1,3 +1,4 @@
+import { INITIAL_ADMINISTRATOR_ID } from "../app/domain/sequence-access.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { authorizeStateTransition } from "../app/domain/state-authorization.ts";
@@ -76,4 +77,18 @@ test("il supervisore cambia solo le voci delle sequenze attive con il protocollo
   assert.equal(authorizeStateTransition(archived, { ...archived, sequences: [updated] }, "supervisor",
     { allowSupervisorContentEdits: true }).allowed, false);
   assert.equal(authorizeStateTransition(previous, { ...previous, activeChildId: "child-b" }, "supervisor").allowed, false);
+});
+
+test("solo un amministratore può esplicitare il proprietario già implicito delle sequenze storiche", () => {
+  for (const historical of [{ id: "s" }, { id: "s", ownerAdultId: "adult-b" }]) {
+    const previous = { ...state, sequences: [historical] };
+    const owner = historical.ownerAdultId ?? INITIAL_ADMINISTRATOR_ID;
+    const saved = { ...previous, sequences: [{ id: "s", therapistId: owner }] };
+    assert.equal(authorizeStateTransition(previous, saved, "admin").allowed, true);
+    assert.equal(authorizeStateTransition(previous, saved, "adult-a").allowed, false);
+    for (const other of [{ id: "s", therapistId: "other" }, { id: "s", ownerAdultId: "other" }]) {
+      assert.equal(authorizeStateTransition(previous, { ...previous, sequences: [other] }, "admin").allowed, false);
+    }
+    assert.equal(authorizeStateTransition(saved, previous, "admin").allowed, false);
+  }
 });

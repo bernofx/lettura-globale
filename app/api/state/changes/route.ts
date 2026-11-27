@@ -1,4 +1,4 @@
-import { containsExerciseCopyMetadata } from "../../../domain/exercise-copy-rollout";
+import { containsExerciseCopyMetadata, legacyEditNeedsUpdate } from "../../../domain/exercise-copy-rollout";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
@@ -53,8 +53,6 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
   let change;
   try { change = parseStateChangeRequest(JSON.parse(rawRequest)); } catch { return Response.json({ error: "invalid_state_change" }, { status: 400 }); }
 
-  if (containsExerciseCopyMetadata(change.collections.exercises?.upserts)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
-
   const requestChecksum = await stateChecksum(rawRequest);
   setPhase("operation_lookup");
   const prior = await database.prepare("SELECT result_revision, request_checksum FROM state_operations WHERE account_id = ? AND operation_id = ?")
@@ -79,6 +77,8 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
     allowSupervisorContentEdits: request.headers.get("x-lg-sequence-content-version") === "1",
   });
   if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason, diagnosticId }, { status: 403 });
+  if (legacyEditNeedsUpdate(currentState, change)) return Response.json({ error: "exercise_editor_update_required" }, { status: 412 });
+  if (containsExerciseCopyMetadata(change.collections.exercises?.upserts)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
   const rawState = JSON.stringify(state);
   if (new TextEncoder().encode(rawState).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
 

@@ -1,3 +1,5 @@
+import { legacySequenceOwnerId } from "./sequence-access.ts";
+
 type Entity = Record<string, unknown> & { id: string };
 type StateDocument = Record<string, unknown>;
 
@@ -47,7 +49,13 @@ export function authorizeStateTransition(previousValue: unknown, nextValue: unkn
   const sequences = collectionTransition(previous, next, "sequences");
   for (const sequence of sequences.before) {
     const updated = sequences.afterById.get(sequence.id);
-    if (updated && sequence.therapistId !== updated.therapistId) return { allowed: false, reason: "invalid_sequence_owner" };
+    if (!updated) continue;
+    const previousOwner = sequence.therapistId || legacySequenceOwnerId(sequence.ownerAdultId);
+    const nextOwner = updated.therapistId || legacySequenceOwnerId(updated.ownerAdultId);
+    if (previousOwner !== nextOwner) return { allowed: false, reason: "invalid_sequence_owner" };
+    if (sequence.therapistId === updated.therapistId) continue;
+    // Only an administrator may materialize the already implied owner, and never clear it.
+    if (sequence.therapistId || !updated.therapistId || adult.role !== "Amministratore") return { allowed: false, reason: "invalid_sequence_owner" };
   }
   if (adult.role === "Amministratore") return { allowed: true };
 

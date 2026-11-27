@@ -302,7 +302,9 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
         }
         if (!response.ok) {
           const error = await backendResponseError(response, "backend_save_failed");
-          if (error.status === 403 && error.code === "state_change_forbidden") {
+          const needsUpdate = error.status === 412 && error.code === "exercise_editor_update_required";
+          if (needsUpdate) notify("Per salvare queste modifiche agli esercizi, aggiorna l’app. La bozza resta su questo dispositivo.", 7000);
+          if (needsUpdate || (error.status === 403 && error.code === "state_change_forbidden")) {
             rejectedWrite.current = { profileId: loggedInTherapistId, content, error };
           }
           throw error;
@@ -337,7 +339,7 @@ export function useCloudSync({ data, loggedInTherapistId, setLoggedInTherapistId
       });
     backendSaveQueue.current = task;
     return task;
-  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, localBootstrapSnapshot]);
+  }, [loggedInTherapistId, settleBackendSaveStatus, applyBackendState, localBootstrapSnapshot, notify]);
 
   useEffect(() => {
     if (!loggedInTherapistId || logoutState !== "idle" || backendHydrating.current) return;

@@ -1,3 +1,9 @@
+export const INITIAL_ADMINISTRATOR_ID = "admin-giuseppe";
+
+export function legacySequenceOwnerId(ownerAdultId: unknown) {
+  return typeof ownerAdultId === "string" && ownerAdultId ? ownerAdultId : INITIAL_ADMINISTRATOR_ID;
+}
+
 export function canViewAllSequences(role: string | undefined) {
   const normalizedRole = role?.trim().toLocaleLowerCase("it-IT") ?? "";
   return normalizedRole === "amministratore" || normalizedRole === "supervisore";

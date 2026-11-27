@@ -3,11 +3,11 @@ import { normalizeLearningCategory } from "../domain/activity-generation";
 import { type CategorySymbols } from "../domain/category-images";
 import { articleFor } from "../domain/article-classification";
 import { remapExerciseReferences } from "../domain/exercise-library-references";
-import { discardForeignNewSequences } from "../domain/sequence-access";
+import { discardForeignNewSequences, legacySequenceOwnerId } from "../domain/sequence-access";
 import { addOfficialCatalog, type OfficialCatalogEntry } from "../domain/scheduled-catalog";
 import { hydrateSyllables } from "../domain/syllabification";
 import { compileSessionPlan } from "../domain/session-compilation";
-import { initialAdministrator, initialExercises, stockItems } from "./seed-data";
+import { initialExercises, stockItems } from "./seed-data";
 import { type BackendState, type Exercise, type LibraryItem, type Sequence } from "./types";
 
 export function mergeById<T extends { id: string }>(saved: T[], seeded: T[]) {
@@ -56,10 +56,10 @@ export function remapExerciseLibraryIds(exercise: Exercise, replacements: Map<st
   return remapExerciseReferences(exercise, replacements);
 }
 
-export function hydrateSequences(items: Sequence[]) {
+export function hydrateSequences(items: (Omit<Sequence, "therapistId"> & { therapistId?: string; ownerAdultId?: string })[]) {
   return items.map((sequence) => ({
     ...sequence,
-    therapistId: sequence.therapistId || initialAdministrator.id,
+    therapistId: sequence.therapistId || legacySequenceOwnerId(sequence.ownerAdultId),
   }));
 }
 

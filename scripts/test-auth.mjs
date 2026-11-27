@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hashPinForStorage } from "../app/domain/pin-credentials.ts";
+import { checkLegacyExerciseWrites } from "./test-legacy-exercise-writes.mjs";
 import { checkExerciseCopyMigration } from "./test-exercise-copy-storage.mjs";
 import { buildStateChange } from "../app/domain/state-changes.ts";
 import { createHash, pbkdf2Sync } from "node:crypto";
@@ -559,6 +560,7 @@ try {
   assert.equal(imageApiCalls.length, 2, "search, preview and publication do not invoke OpenAI");
   console.log("PASS: Openverse import checks source, license and exact preview and publishes with credits without spending OpenAI budget.");
 
+  await checkLegacyExerciseWrites({ db, account, request, adminCookie, read });
   console.log("PASS: production 100000 cap, old hash rejected without rate-limit increment, admin cloud reset and login with the same PIN.");
   console.log("PASS: login PBKDF2, refresh, logout revocato, cambio adulto, PIN errato e vista isolata verificati su Worker/D1 locali.");
 } finally { await mf.dispose(); }
