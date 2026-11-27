@@ -99,8 +99,6 @@ export async function PUT(request: Request) {
   if ("tracingOrderRequired" in state && typeof state.tracingOrderRequired !== "boolean") return Response.json({ error: "invalid_tracing_order" }, { status: 400 });
   if ("interfaceStyle" in state && !isInterfaceStyle(state.interfaceStyle)) return Response.json({ error: "invalid_interface_style" }, { status: 400 });
 
-  if (containsExerciseCopyMetadata((state as { exercises?: unknown }).exercises)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
-
   const now = Date.now();
   const db = getDb();
   const therapists = (state as { therapists?: Array<{ id?: string; email?: string; firstName?: string; lastName?: string; pinHash?: string }> }).therapists ?? [];
@@ -136,9 +134,11 @@ export async function PUT(request: Request) {
       if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
     }
     if (adultRoleInState(currentState, user.adultProfileId) !== "Amministratore") return Response.json({ error: "full_state_replacement_forbidden" }, { status: 403 });
+    if (containsExerciseCopyMetadata(currentState.exercises)) return Response.json({ error: "exercise_editor_update_required" }, { status: 412 });
     const authorization = authorizeStateTransition(currentState, state, user.adultProfileId);
     if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason }, { status: 403 });
   }
+  if (containsExerciseCopyMetadata((state as { exercises?: unknown }).exercises)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
   const revision = baseRevision + 1;
   const stateExists = "EXISTS (SELECT 1 FROM user_states WHERE user_id = ? AND revision = ? AND payload = ?)";
   const statements = [

@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Sequenze e sessioni in corso",
   items: [
+    "Le sequenze delle prime versioni con proprietario implicito possono essere salvate dall’amministratore mantenendo la stessa titolarità.",
     "Il cloud conserva il proprietario originale quando viene aggiornata una sequenza.",
     "Quando una sequenza arriva a «Pronti?», i suoi turni sono fissati. Le modifiche successive valgono dal prossimo avvio, anche se riprendi la sessione o la guidi dal telefono.",
     "Colorare: nuove trame da usare con pennello e secchio, in fondo alla tavolozza: pois colorati, brillantini, stelline e lava che si muove piano (ferma se il dispositivo chiede di ridurre il movimento).",
