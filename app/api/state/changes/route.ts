@@ -1,4 +1,5 @@
 import { containsExerciseCopyMetadata, legacyEditNeedsUpdate } from "../../../domain/exercise-copy-rollout";
+import { validateExerciseCopyWrite } from "../../../domain/exercise-copy-writes";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../../chatgpt-auth";
@@ -75,13 +76,23 @@ async function applyPatch(request: Request, diagnosticId: string, setPhase: (pha
     if (error instanceof Error && error.message === "library_replacement_conflict") return Response.json({ error: error.message }, { status: 409 });
     return Response.json({ error: "invalid_state_change" }, { status: 400 });
   }
+  const copyEditor = request.headers.get("x-lg-exercise-copy-version") === "1";
   const authorization = authorizeStateTransition(currentState, state, user.adultProfileId, {
     // Older offline queues may include automatic cleanup of another adult’s sequence.
-    allowSupervisorContentEdits: request.headers.get("x-lg-sequence-content-version") === "1",
+    allowSupervisorContentEdits: copyEditor || request.headers.get("x-lg-sequence-content-version") === "1",
   });
   if (!authorization.allowed) return Response.json({ error: "state_change_forbidden", reason: authorization.reason, diagnosticId }, { status: 403 });
-  if (legacyEditNeedsUpdate(currentState, change)) return Response.json({ error: "exercise_editor_update_required" }, { status: 412 });
-  if (containsExerciseCopyMetadata(change.collections.exercises?.upserts)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
+  if (copyEditor) {
+    const reason = validateExerciseCopyWrite(currentState, state, change, user.adultProfileId);
+    if (reason) return Response.json({ error: "state_change_forbidden", reason, diagnosticId }, { status: 403 });
+    if (change.collections.exercises?.upserts.some(exercise => exercise.sequenceId != null)) {
+      const columns = await database.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('exercises') WHERE name IN ('sequence_id', 'template_exercise_id')").first<number>("n");
+      if (columns !== 2) return Response.json({ error: "exercise_copy_migration_required", diagnosticId }, { status: 503 });
+    }
+  } else {
+    if (legacyEditNeedsUpdate(currentState, change)) return Response.json({ error: "exercise_editor_update_required" }, { status: 412 });
+    if (containsExerciseCopyMetadata(change.collections.exercises?.upserts)) return Response.json({ error: "exercise_copies_not_enabled" }, { status: 422 });
+  }
   const rawState = JSON.stringify(state);
   if (new TextEncoder().encode(rawState).byteLength > MAX_STATE_BYTES) return Response.json({ error: "state_too_large" }, { status: 413 });
 
