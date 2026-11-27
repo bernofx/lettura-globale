@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Nuove illustrazioni in Numero quantità",
   items: [
+    "Colorare: nuove trame da usare con pennello e secchio, in fondo alla tavolozza: pois colorati, brillantini, stelline e lava che si muove piano (ferma se il dispositivo chiede di ridurre il movimento).",
     "Trova la parola: con «Parole precise» puoi scegliere più parole da riconoscere; a ogni turno ne compare una, e i distrattori restano casuali come prima (tutta la libreria, alcune categorie o le parole preferite).",
     "Colorare: colori più grandi e quadrati, strumenti con icone più grandi e un colore ciascuno; lo strumento attivo mostra il colore in uso.",
     "Stili Studio e Giocoso completati in tutta l’app: campi, filtri, schede delle impostazioni, profili, finestre e Avvio rapido seguono lo stile scelto; in Studio le sequenze della Sessione sono schede rettangolari. Nella finestra di un nuovo esercizio le etichette dei campi hanno tutte la stessa dimensione.",

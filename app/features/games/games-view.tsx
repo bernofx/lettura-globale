@@ -4,7 +4,8 @@ import { ArrowLeft, Check, Music2, Paintbrush, PaintBucket, Pencil, Play, Rotate
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { COLORING_HEIGHT, COLORING_WIDTH, coloringPages, type ColoringPage } from "../../domain/coloring-pages";
 import type { TracingSet } from "../../domain/tracing-glyphs";
-import type { ColoringArea } from "../../domain/coloring-drawings";
+import type { ColoringArea, ColoringTexture } from "../../domain/coloring-drawings";
+import { textureSwatches } from "./coloring-textures";
 import type { ColoringPreviews, ColoringStorage } from "./coloring-storage";
 import type { PuzzleImage } from "../../domain/puzzle-library";
 import type { RewardMusicPlayer } from "../../domain/reward-soundtrack";
@@ -34,6 +35,12 @@ const colors = [
   ["Marrone", "#875237"], ["Grigio", "#9697a3"], ["Nero", "#272633"],
   ["Bianco", "#ffffff"],
 ] as const;
+
+/** A palette value is a hex colour or `texture:<name>`; textures carry a fixed base colour. */
+function paintFor(value: string): { color: string; texture?: ColoringTexture } {
+  const texture = textureSwatches.find((item) => `texture:${item.id}` === value);
+  return texture ? { color: texture.base, texture: texture.id } : { color: value };
+}
 
 const games = [
   { id: "coloring", title: "Colorare", thumbnail: <DrawingThumbnail page={coloringPages[0]} /> },
@@ -197,6 +204,7 @@ type Stroke = {
   point: ColoringPoint;
   tool: "brush" | "crayon";
   color: string;
+  texture?: ColoringTexture;
 };
 
 function pointOnDrawing(event: PointerEvent<HTMLCanvasElement>, rotated: boolean, frame: ReturnType<typeof coloringFrame>): ColoringPoint {
@@ -283,6 +291,25 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     };
   }, [painting]);
 
+  // Lava and glitter move slowly while the game is visible; "reduce motion" keeps them still.
+  useEffect(() => {
+    const surface = canvas.current;
+    const context = surface?.getContext("2d");
+    if (!surface || !context) return;
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      frame = requestAnimationFrame(tick);
+      if (still?.matches || document.visibilityState !== "visible" || now - last < 33 || !painting.hasAnimation()) return;
+      last = now;
+      painting.time = now / 1000;
+      painting.render(context);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(frame); painting.time = 0; };
+  }, [painting]);
+
   function start(event: PointerEvent<HTMLCanvasElement>) {
     if (event.button !== 0 || stroke.current) return;
     const context = event.currentTarget.getContext("2d");
@@ -291,13 +318,14 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     const point = pointOnDrawing(event, rotated.current, frame);
     const area = painting.areaAt(context, point);
 
+    const paint = paintFor(color);
     if (tool === "fill") {
-      painting.fill(area, color);
+      painting.fill(area, paint.color, paint.texture);
       onSave(page.id, painting.snapshot());
     } else {
       event.currentTarget.setPointerCapture(event.pointerId);
-      stroke.current = { pointerId: event.pointerId, area, point, tool, color };
-      painting.stroke(area, point, point, color, tool, frame);
+      stroke.current = { pointerId: event.pointerId, area, point, tool, color: paint.color, texture: paint.texture };
+      painting.stroke(area, point, point, paint.color, tool, frame, paint.texture);
     }
     painting.render(context);
   }
@@ -309,7 +337,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
     if (!context) return;
     const frame = coloringFrame(context.canvas.width, context.canvas.height);
     const point = pointOnDrawing(event, rotated.current, frame);
-    painting.stroke(current.area, current.point, point, current.color, current.tool, frame);
+    painting.stroke(current.area, current.point, point, current.color, current.tool, frame, current.texture);
     current.point = point;
     painting.render(context);
   }
@@ -390,7 +418,7 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
             {tools.map(({ id, label, icon: Icon }) => (
               <button key={id} type="button" data-tool={id} aria-label={label} title={label} aria-pressed={tool === id} onClick={() => setTool(id)}>
                 <Icon size={30} strokeWidth={2.2} aria-hidden="true" />
-                {tool === id && <i className="coloring-tool-color" style={{ backgroundColor: color }} aria-hidden="true" />}
+                {tool === id && <i className={`coloring-tool-color ${paintFor(color).texture && id !== "crayon" ? `coloring-texture texture-${paintFor(color).texture}` : ""}`} style={{ backgroundColor: paintFor(color).color }} aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -401,6 +429,14 @@ function ColoringGame({ page, painting, soundVolume, musicEnabled, onToggleMusic
               <button key={value} type="button" aria-label={label} title={label} aria-pressed={color === value} onClick={() => setColor(value)}>
                 <span className="coloring-swatch" style={{ backgroundColor: value }} aria-hidden="true">
                   {color === value && <Check size={20} strokeWidth={3} aria-hidden="true" />}
+                </span>
+              </button>
+            ))}
+            <span className="coloring-palette-divider" aria-hidden="true" />
+            {textureSwatches.map(({ id, label }) => (
+              <button key={id} type="button" aria-label={label} title={label} aria-pressed={color === `texture:${id}`} onClick={() => setColor(`texture:${id}`)}>
+                <span className={`coloring-swatch coloring-texture texture-${id}`} aria-hidden="true">
+                  {color === `texture:${id}` && <Check size={20} strokeWidth={3} aria-hidden="true" />}
                 </span>
               </button>
             ))}
