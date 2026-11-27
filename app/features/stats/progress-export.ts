@@ -1,9 +1,10 @@
 import { androidBridge } from "../../domain/android-bridge";
 import type { SessionHistoryRecord } from "../../domain/session-history";
 import { buildExcelProgressCsv } from "../../domain/progress-csv";
-import { type Attempt, type Exercise, type LibraryItem } from "../../shared/types";
+import { type Attempt, type LibraryItem } from "../../shared/types";
+import type { ProgressExercise } from "../../domain/progress-data";
 
-export function downloadProgressCsv(attempts: Attempt[], exercises: Exercise[], library: LibraryItem[], histories: SessionHistoryRecord[]) {
+export function downloadProgressCsv(attempts: Attempt[], exercises: ProgressExercise[], library: LibraryItem[], histories: SessionHistoryRecord[]) {
   const blob = new Blob([buildExcelProgressCsv(attempts, { exercises, library, histories })], { type: "text/csv;charset=utf-16le" });
   const native = androidBridge();
   if (native) {

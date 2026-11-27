@@ -8,7 +8,7 @@ import { therapistCredentials, userStates } from "../../../db/schema";
 import { loadRelationalProjection, persistRelationalShadow, relationalMigrationInfo, relationalShadowMatches, repairRelationalShadow, stateChecksum } from "../../../db/relational-state";
 import { rebuildLegacyState, relationalParityReport } from "../../domain/relational-state";
 import { authorizeStateTransition } from "../../domain/state-authorization";
-import { adultRoleInState, stateVisibleToAdult } from "../../domain/state-visibility";
+import { adultRoleInState, stateViewForAdult } from "../../domain/state-visibility";
 import { stateReadHeaders, stateReadMatches, stateReadTag } from "../../domain/state-read";
 
 const MAX_STATE_BYTES = 4_000_000;
@@ -33,6 +33,10 @@ export async function GET(request: Request) {
 
   try {
     const state = JSON.parse(row.payload) as unknown;
+    const exercises = (state as { exercises?: { sequenceId?: string }[] })?.exercises;
+    if (!user.adultProfileId && Array.isArray(exercises) && exercises.some(exercise => exercise?.sequenceId)) {
+      return Response.json({ error: "adult_authentication_required" }, { status: 401, headers: stateReadHeaders() });
+    }
     let responseState = state;
     let relationalStatus = "pending";
     let dataSource = "snapshot";
@@ -73,8 +77,9 @@ export async function GET(request: Request) {
       console.error("relational_shadow_repair_failed", { revision: row.revision, sqliteCode: sqliteCode ?? "unknown" });
       relationalStatus = "pending";
     }
-    if (user.adultProfileId) responseState = stateVisibleToAdult(responseState, user.adultProfileId);
-    return Response.json({ state: responseState, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders(relationalStatus === "ready" ? await stateReadTag(user.userId, user.adultProfileId, row.revision) : undefined) });
+    const view = user.adultProfileId ? stateViewForAdult(responseState, user.adultProfileId) : { state: responseState };
+    if (!view) return Response.json({ error: "adult_authentication_required" }, { status: 401, headers: stateReadHeaders() });
+    return Response.json({ ...view, revision: row.revision, relationalStatus, dataSource, user: { email: user.email, name: user.displayName } }, { headers: stateReadHeaders(relationalStatus === "ready" ? await stateReadTag(user.userId, user.adultProfileId, row.revision) : undefined) });
   } catch {
     return Response.json({ error: "invalid_saved_state" }, { status: 500, headers: stateReadHeaders() });
   }

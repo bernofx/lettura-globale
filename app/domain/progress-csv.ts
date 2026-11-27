@@ -1,4 +1,4 @@
-import { progressAttemptLookup, type ProgressHistory } from "./progress-data.ts";
+import { progressAttemptLookup, type ProgressHistory, type ProgressExercise } from "./progress-data.ts";
 
 export type ProgressCsvAttempt = {
   id?: string;
@@ -14,12 +14,7 @@ export type ProgressCsvAttempt = {
   mode: "teaching" | "test";
 };
 
-export type ProgressCsvExercise = {
-  id: string;
-  title: string;
-  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
-  promptId?: string;
-};
+export type ProgressCsvExercise = ProgressExercise;
 
 export type ProgressCsvLibraryItem = { id: string; word: string };
 export type ProgressCsvContext = { exercises?: ProgressCsvExercise[]; library?: ProgressCsvLibraryItem[]; histories?: ProgressHistory[] };

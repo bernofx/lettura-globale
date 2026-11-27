@@ -30,13 +30,23 @@ try {
   const state = statePerformanceFixture(30);
   state.therapists.push({ id: "adult-other", firstName: "Other", lastName: "", email: "other@example.test", role: "Terapista", childIds: ["child-other"] });
   state.children.push({ id: "child-other", firstName: "Other", lastName: "", birthYear: "", notes: "", avatarColor: "#fff" });
+  const privateCopy = { ...state.exercises[0], id: "copy-other", title: "Configurazione privata", kind: "articles",
+    ownerAdultId: "adult", sequenceId: "other-sequence", templateExerciseId: "exercise" };
+  state.exercises.push(privateCopy);
+  state.sequences.push({ id: "other-sequence", title: "Altra sequenza", therapistId: "adult-other", exerciseIds: [privateCopy.id] });
+  state.attempts[0].exerciseId = privateCopy.id;
   await db.prepare("INSERT INTO user_states (user_id,email,payload,schema_version,revision,created_at,updated_at) VALUES (?,?,?,1,1,?,?)")
     .bind(account, "demo@example.test", JSON.stringify(state), now, now).run();
-  for (const [key, adult] of [[token, "adult"], [otherToken, "adult-other"]]) {
+  for (const [key, adult] of [[token, "adult"], [otherToken, "adult-other"], ["account-only", null], ["missing-adult", "removed"]]) {
     await db.prepare("INSERT INTO auth_sessions (token_hash,user_id,email,display_name,expires_at,created_at,adult_profile_id) VALUES (?,?,?,?,?,?,?)")
       .bind(createHash("sha256").update(key).digest("hex"), account, "demo@example.test", "Demo", now + 60000, now, adult).run();
   }
   const read = (key, tag) => mf.dispatchFetch("https://app.example/api/state", { headers: { ...(key ? { cookie: `lg-cloud-session=${key}` } : {}), ...(tag ? { "if-none-match": tag } : {}) } });
+  for (const key of ["account-only", "missing-adult"]) {
+    const denied = await read(key);
+    assert.equal(denied.status, 401);
+    assert.equal((await denied.json()).error, "adult_authentication_required");
+  }
   const first = await read(token);
   assert.equal(first.status, 200);
   const body = await first.json();
@@ -44,6 +54,9 @@ try {
   assert.equal(body.dataSource, "relational");
   assert.deepEqual(body.state.children.map((child) => child.id), ["child"]);
   assert.equal(body.state.attempts.length, 30);
+  const expectedReferences = { adultProfileId: "adult", exercises: [{ id: privateCopy.id, kind: privateCopy.kind }] };
+  assert.deepEqual(body.state.exercises.map(exercise => exercise.id), ["exercise"]);
+  assert.deepEqual(body.progressReferences, expectedReferences);
   const tag = first.headers.get("etag");
   assert.ok(tag);
   const unchanged = await read(token, tag);
@@ -53,7 +66,10 @@ try {
   const differentAdult = await read(otherToken, tag);
   assert.equal(differentAdult.status, 200, "nessun 304 fra adulti diversi alla stessa revisione");
   assert.notEqual(differentAdult.headers.get("etag"), tag);
-  assert.deepEqual((await differentAdult.json()).state.children.map((child) => child.id), ["child-other"]);
+  const ownerView = await differentAdult.json();
+  assert.deepEqual(ownerView.state.children.map((child) => child.id), ["child-other"]);
+  assert.equal(ownerView.state.exercises.find(exercise => exercise.id === privateCopy.id).sequenceId, privateCopy.sequenceId);
+  assert.equal(ownerView.progressReferences, undefined);
   assert.equal((await read(null, tag)).status, 401, "un validatore non sostituisce l'autenticazione");
   state.children[0].firstName = "Updated";
   await db.prepare("UPDATE user_states SET payload = ?, revision = 2 WHERE user_id = ?").bind(JSON.stringify(state), account).run();
@@ -88,6 +104,12 @@ try {
   const fallback = await read(token);
   assert.equal(fallback.status, 200);
   assert.equal(fallback.headers.get("etag"), null, "un fallback pending non blocca i futuri tentativi di riparazione");
-  assert.equal((await fallback.json()).relationalStatus, "pending");
+  const fallbackView = await fallback.json();
+  assert.equal(fallbackView.relationalStatus, "pending");
+  assert.deepEqual(fallbackView.state.exercises.map(exercise => exercise.id), ["exercise"]);
+  assert.deepEqual(fallbackView.progressReferences, expectedReferences);
+  const stored = JSON.parse(await db.prepare("SELECT payload FROM user_states WHERE user_id = ?").bind(account).first("payload"));
+  assert.deepEqual(stored.exercises.find(exercise => exercise.id === privateCopy.id), privateCopy);
+  assert.equal(stored.progressReferences, undefined);
   console.log("PASS: API completa, dati relazionali, 304 leggero, ruoli isolati, autenticazione, revisioni, scritture idempotenti e fallback riparabile.");
 } finally { await mf.dispose(); }

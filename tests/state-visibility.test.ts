@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stateVisibleToAdult } from "../app/domain/state-visibility.ts";
+import { buildWordProgress } from "../app/domain/progress-data.ts";
+import { buildProgressCsv } from "../app/domain/progress-csv.ts";
+import { stateViewForAdult } from "../app/domain/state-visibility.ts";
 
 const state = {
   schemaVersion: 1,
@@ -22,7 +24,7 @@ const state = {
 };
 
 test("un terapista riceve solo bambini, sequenze e storici autorizzati", () => {
-  const visible = stateVisibleToAdult(state, "therapist-1") as typeof state;
+  const visible = stateViewForAdult(state, "therapist-1")?.state as typeof state;
   assert.deepEqual(visible.children.map((item) => item.id), ["child-1"]);
   assert.deepEqual(visible.sequences.map((item) => item.id), ["s1"]);
   assert.deepEqual(visible.attempts.map((item) => item.id), ["a1"]);
@@ -35,5 +37,38 @@ test("un terapista riceve solo bambini, sequenze e storici autorizzati", () => {
 });
 
 test("l'amministratore riceve lo stato completo senza copie inutili", () => {
-  assert.equal(stateVisibleToAdult(state, "admin"), state);
+  assert.equal(stateViewForAdult(state, "admin")?.state, state);
+});
+
+test("le copie seguono la sequenza e gli esiti visibili espongono soltanto il tipo per Progressi e CSV", () => {
+  const model = { id: "model", title: "Modello", kind: "naming" as const, ownerAdultId: "therapist-2" };
+  const exercises = [
+    model,
+    { ...model, id: "own", sequenceId: "s1" },
+    { ...model, id: "private", title: "Titolo privato", sequenceId: "s2", templateExerciseId: "model", promptId: "private-target" },
+    { ...model, id: "unused", sequenceId: "s2" },
+  ];
+  const event = { id: "a", exerciseId: "private", wordId: "word", childId: "child-1", answerId: "word",
+    createdAt: "2026-01-01", firstAttempt: true, correct: true, mode: "test" as const };
+  const source = { ...state, exercises, activeSequenceId: "s2", attempts: [event, { ...event, id: "b", exerciseId: "unused", childId: "child-2" }],
+    therapists: [...state.therapists, { id: "supervisor", role: "Supervisore" }, { id: "parent", role: "Genitore" }] };
+  const view = stateViewForAdult(source, "therapist-1")!;
+  const visible = view.state as typeof source;
+  assert.deepEqual(visible.exercises.map(item => item.id), ["model", "own"]);
+  assert.equal(visible.activeSequenceId, undefined);
+  assert.deepEqual(view.progressReferences, { adultProfileId: "therapist-1", exercises: [{ id: "private", kind: "naming" }] });
+  const progress = { exercises: [...visible.exercises, ...view.progressReferences!.exercises], histories: [],
+    library: [{ id: "word", word: "Gatto", category: "Animali" }] };
+  const table = buildWordProgress({ ...progress, attempts: visible.attempts, helps: [], mode: "test" });
+  assert.equal(table.rows[0].scores.naming.correct, 1);
+  assert.match(buildProgressCsv(visible.attempts, progress), /"private";"private";"Mix and vary";"Gatto"/);
+  for (const profile of ["admin", "supervisor", "therapist-2"]) {
+    const other = stateViewForAdult(source, profile)!;
+    assert.ok((other.state as typeof source).exercises.some(exercise => exercise.id === "private"));
+    assert.equal(other.progressReferences, undefined);
+  }
+  const parent = stateViewForAdult(source, "parent")!;
+  assert.deepEqual((parent.state as typeof source).exercises, [model]);
+  assert.equal(parent.progressReferences, undefined);
+  assert.equal(stateViewForAdult(source, "removed-profile"), null);
 });
