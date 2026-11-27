@@ -45,7 +45,7 @@ try {
     .bind(createHash("sha256").update(token).digest("hex"), account, "demo@example.test", "Demo", now + 600000, now, "adult").run();
   const cookie = `lg-cloud-session=${token}`;
   const request = (path, init) => mf.dispatchFetch(`https://app.example${path}`, init);
-  const share = (revision, id = "sequence", kind = "sequence") => request("/api/shared-launch", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ kind, id, revision }) });
+  const share = (revision, id = "sequence", kind = "sequence", sessionCookie = cookie) => request("/api/shared-launch", { method: "POST", headers: { cookie: sessionCookie, "content-type": "application/json" }, body: JSON.stringify({ kind, id, revision }) });
   const read = () => request("/api/state", { headers: { cookie } });
   assert.equal((await read()).status, 200);
   const first = await share(1);
@@ -141,5 +141,60 @@ try {
   const invalidShare = await share(invalidRevision, "invalid", "exercise");
   assert.equal(invalidShare.status, 422);
   assert.equal((await invalidShare.json()).error, "incomplete_exercise");
+  const copyRevision = invalidRevision + 1;
+  const copy = { ...fixed, id: "copy", title: "La mia copia", ownerAdultId: "adult", templateExerciseId: fixed.id,
+    sequenceId: "private-sequence", promptId: "mela", optionIds: ["mela", "gatto"], internalNote: "privato" };
+  const owningSequence = { id: copy.sequenceId, title: "Sequenza privata", therapistId: "owner", exerciseIds: [copy.id, quantity.id, copy.id] };
+  const copyState = { ...state, exercises: [...state.exercises, copy],
+    sequences: [...state.sequences, owningSequence, { ...owningSequence, id: "mismatched" }],
+    therapists: [...state.therapists, { id: "owner", role: "Terapista" }, { id: "other", role: "Genitore" }, { id: "supervisor", role: "Supervisore" }] };
+  const saveFixture = (revision) => db.prepare("UPDATE user_states SET payload=?,revision=? WHERE user_id=?")
+    .bind(JSON.stringify(copyState), revision, account).run();
+  await saveFixture(copyRevision);
+  async function adultCookie(id) {
+    const key = crypto.randomUUID();
+    await db.prepare("INSERT INTO auth_sessions (token_hash,user_id,email,display_name,expires_at,created_at,adult_profile_id) VALUES (?,?,?,?,?,?,?)")
+      .bind(createHash("sha256").update(key).digest("hex"), account, "demo@example.test", "Demo", now + 600000, now, id).run();
+    return `lg-cloud-session=${key}`;
+  }
+  const owner = await adultCookie("owner"), other = await adultCookie("other"), supervisor = await adultCookie("supervisor");
+  const shareCopy = (sessionCookie, revision = copyRevision) => share(revision, copy.id, "exercise", sessionCookie);
+  const shareSequence = (sessionCookie) => share(copyRevision, owningSequence.id, "sequence", sessionCookie);
+  const list = async (sessionCookie) => (await (await request("/api/shared-launch", { headers: { cookie: sessionCookie } })).json()).links;
+  assert.equal((await shareCopy(other)).status, 404);
+  assert.equal((await shareSequence(other)).status, 404);
+  assert.equal((await shareCopy(await adultCookie(null))).status, 401);
+  assert.equal((await shareCopy(await adultCookie("removed"))).status, 401);
+  assert.equal((await share(copyRevision, "mismatched", "sequence")).status, 422);
+  assert.equal((await share(copyRevision, quantity.id, "exercise", other)).status, 201);
+  const copyLink = await shareCopy(owner);
+  assert.equal(copyLink.status, 201);
+  const copyToken = (await copyLink.json()).token;
+  assert.equal((await shareCopy(cookie)).status, 201);
+  const sequenceLink = await shareSequence(supervisor);
+  assert.equal(sequenceLink.status, 201);
+  const sequenceToken = (await sequenceLink.json()).token;
+  const preview = async (token) => (await request(`/api/shared-launch/${token}`)).json();
+  const sharedCopy = (await preview(copyToken)).exercises[0];
+  assert.equal(sharedCopy.promptId, "mela");
+  for (const key of ["ownerAdultId", "templateExerciseId", "sequenceId", "internalNote"]) assert.equal(Object.hasOwn(sharedCopy, key), false);
+  const sharedSequence = await preview(sequenceToken);
+  assert.deepEqual(sharedSequence.exercises.map(item => item.id), owningSequence.exerciseIds);
+  assert.deepEqual(sharedSequence.exercises[0], sharedCopy);
+  assert.deepEqual(sharedSequence.library.map(item => item.id).sort(), ["gatto", "mela"]);
+  assert.equal(sharedSequence.library.find(item => item.id === "mela").license, "CC0");
+  assert.equal((await list(other)).some(link => link.token === copyToken || link.token === sequenceToken), false);
+  assert.ok((await list(owner)).some(link => link.token === copyToken));
+  owningSequence.exerciseIds = [quantity.id];
+  copy.promptId = "gatto";
+  copyState.library = copyState.library.filter(item => item.id !== "mela");
+  await saveFixture(copyRevision + 1);
+  assert.equal((await shareCopy(owner, copyRevision + 1)).status, 404);
+  assert.deepEqual((await preview(copyToken)).exercises[0], sharedCopy);
+  assert.deepEqual(await preview(sequenceToken), sharedSequence);
+  assert.deepEqual(await preview(firstToken), firstPayload);
+  assert.equal((await request(`/api/shared-launch/${copyToken}`, { method: "DELETE", headers: { cookie: owner } })).status, 200);
+  assert.equal((await request(`/api/shared-launch/${copyToken}`)).status, 404);
+  console.log("PASS: copy and sequence sharing, per-profile listing, public fields, effective settings, immutable previews and revocation.");
   console.log("PASS: flush/revision contract, unique placeholder repair, random settings, exercise removal, public access, invalid-content rejection and immutable old links.");
 } finally { await mf.dispose(); }

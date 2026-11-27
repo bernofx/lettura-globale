@@ -62,6 +62,8 @@ Il GET dello stato, sia da D1 relazionale sia da snapshot, seleziona le copie in
 - Un link già emesso continua a leggere il suo snapshot. Per i nuovi link autorizzare sul server la creazione anche per una copia singola, risolvere la configurazione effettiva e gli asset necessari alla revisione confermata. Serializzare i soli campi pubblici, escludendo autore, provenienza e ID della sequenza privata dai record esercizio. Prova pubblica senza registrazione di esiti, con la scadenza e la revoca esistenti. [Creazione del link](../../app/api/shared-launch/route.ts)
 - Sostituire la foto mantenendo l’ID Libreria aggiorna l’asset usato, secondo il comportamento della libreria condivisa. Quando cambia l’ID dell’elemento, usare la stessa mappa esplicita per modelli e copie attive, compresi i bersagli multipli, le frasi e i pool. Una riparazione tecnica di riferimenti fuori dalla vista deve essere validata dal server sull’account, limitata alla sostituzione equivalente autorizzata. Evitare che il client debba risalvare copie altrui. Conservare modalità casuali, filtri, ordine e snapshot di storico/link. [Rimappatura esistente](../../app/domain/exercise-library-references.ts)
 
+La creazione verifica sullo stato salvato il profilo adulto, la sequenza accessibile e la presenza della copia nella programmazione attiva. L’elenco dei link segue la visibilità del contenuto di origine, compresi i record archiviati. La lettura pubblica per token continua a usare lo snapshot emesso.
+
 ## Verifiche di accettazione e ordine delle PR
 
 Usare esclusivamente fixture sintetiche con due terapisti, un supervisore e un amministratore.

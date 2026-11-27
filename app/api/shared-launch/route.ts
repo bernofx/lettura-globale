@@ -1,51 +1,32 @@
 import { env } from "cloudflare:workers";
 import { mergeOfficialLibrary } from "../../shared/state-hydration";
 import { readOfficialCatalog } from "../../server/official-catalog";
-import type { LibraryItem } from "../../shared/types";
-import { snapshotCategorySymbols, type CategorySymbols } from "../../domain/category-images";
+import type { BackendState, Exercise } from "../../shared/types";
+import { snapshotCategorySymbols } from "../../domain/category-images";
 import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { sharedLaunches, userStates } from "../../../db/schema";
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { matchesSyllableFilter, type SyllableFilter } from "../../domain/syllabification";
+import { matchesSyllableFilter } from "../../domain/syllabification";
 import { hasArtwork } from "../../domain/library-availability";
 import { isWordCategoryContent, wordCategoryNames } from "../../domain/word-category-content";
 import { sharedLaunchExpiresAt } from "../../domain/shared-launch-policy";
 import { deduplicateLibraryPlaceholders } from "../../domain/library-deduplication";
 import { remapExerciseReferences } from "../../domain/exercise-library-references";
 import { validateSharedExercises } from "../../domain/shared-preview-validation";
-import type { SessionExercise } from "../../domain/session-compilation";
+import { publicExerciseSnapshot, shareableContent } from "../../domain/shared-launch-content";
 
 type LaunchKind = "exercise" | "sequence";
-type SharedExercise = Record<string, unknown> & {
-  id?: string;
-  kind?: "recognition" | "articles" | "word-categories" | "naming" | "number-quantity" | "sentence-matching";
-  deleted?: boolean;
-  promptId?: string;
-  optionIds?: string[];
-  articleItemIds?: string[];
-  categoryItemIds?: string[];
-  categoryNames?: string[];
-  recognitionMode?: "fixed" | "random";
-  recognitionItemIds?: string[];
-  recognitionTargetIds?: string[];
-  recognitionCategories?: string[];
-  recognitionSyllables?: SyllableFilter;
-  namingItemIds?: string[];
-  namingCategories?: string[];
-  sentenceItemIds?: string[];
-};
-type StoredState = {
-  categorySymbols?: CategorySymbols;
-  library?: Array<Record<string, unknown> & { id?: string; category?: string; syllableCount?: number; image?: unknown; emoji?: unknown; deleted?: boolean }>;
-  exercises?: SharedExercise[];
-  sequences?: Array<{ id?: string; title?: string; exerciseIds?: string[]; deleted?: boolean }>;
-};
 
 export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "authentication_required" }, { status: 401 });
-  const rows = await getDb().select({
+  const db = getDb();
+  const row = (await db.select({ payload: userStates.payload }).from(userStates).where(eq(userStates.userId, user.userId)).limit(1))[0];
+  if (!row) return Response.json({ links: [] });
+  const content = shareableContent(JSON.parse(row.payload), user.adultProfileId);
+  if (!content) return Response.json({ error: "adult_authentication_required" }, { status: 401 });
+  const rows = await db.select({
     token: sharedLaunches.token,
     kind: sharedLaunches.kind,
     contentId: sharedLaunches.contentId,
@@ -57,7 +38,9 @@ export async function GET() {
     isNull(sharedLaunches.revokedAt),
     gt(sharedLaunches.expiresAt, Date.now()),
   ));
-  return Response.json({ links: rows.map(({ payload, ...row }) => {
+  const visible = content.seesAllSequences ? rows : rows.filter(row => row.kind === "sequence"
+    ? content.sequences.has(row.contentId) : content.exercises.has(row.contentId));
+  return Response.json({ links: visible.map(({ payload, ...row }) => {
     let title = row.kind === "sequence" ? "Sequenza condivisa" : "Esercizio condiviso";
     try { title = String((JSON.parse(payload) as { title?: unknown }).title ?? title); } catch { /* keep the safe fallback */ }
     return { ...row, title };
@@ -70,7 +53,7 @@ export async function POST(request: Request) {
 
   let input: { kind?: LaunchKind; id?: string; revision?: number };
   try { input = await request.json(); } catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
-  if ((input.kind !== "exercise" && input.kind !== "sequence") || !input.id?.trim()) return Response.json({ error: "invalid_launch" }, { status: 400 });
+  if ((input.kind !== "exercise" && input.kind !== "sequence") || (typeof input.id !== "string" || !input.id.trim())) return Response.json({ error: "invalid_launch" }, { status: 400 });
   if (input.revision !== undefined && (!Number.isSafeInteger(input.revision) || input.revision < 1)) return Response.json({ error: "invalid_revision" }, { status: 400 });
 
   const db = getDb();
@@ -78,18 +61,32 @@ export async function POST(request: Request) {
   if (!row) return Response.json({ error: "content_not_found" }, { status: 404 });
   if (input.revision !== undefined && input.revision !== row.revision) return Response.json({ error: "share_revision_conflict" }, { status: 409 });
 
-  let state: StoredState;
-  try { state = JSON.parse(row.payload) as StoredState; } catch { return Response.json({ error: "invalid_saved_state" }, { status: 500 }); }
-  const exercises = (state.exercises ?? []).filter((exercise) => !exercise.deleted);
-  const sequence = input.kind === "sequence" ? (state.sequences ?? []).find((item) => item.id === input.id && !item.deleted) : undefined;
-  const selectedExercises = input.kind === "exercise"
-    ? exercises.filter((exercise) => exercise.id === input.id)
-    : (sequence?.exerciseIds ?? []).map((id) => exercises.find((exercise) => exercise.id === id)).filter((exercise): exercise is NonNullable<typeof exercise> => Boolean(exercise));
-  if (!selectedExercises.length) return Response.json({ error: "content_not_found" }, { status: 404 });
-
-  if (input.kind === "sequence" && selectedExercises.length !== sequence?.exerciseIds?.length) return Response.json({ error: "incomplete_exercise" }, { status: 422 });
+  let state: BackendState;
+  try { state = JSON.parse(row.payload) as BackendState; } catch { return Response.json({ error: "invalid_saved_state" }, { status: 500 }); }
+  const content = shareableContent(state, user.adultProfileId);
+  if (!content) return Response.json({ error: "adult_authentication_required" }, { status: 401 });
+  let sequence;
+  const selectedExercises: Exercise[] = [];
+  if (input.kind === "sequence") {
+    sequence = content.sequences.get(input.id);
+    if (!sequence || sequence.deleted || !sequence.exerciseIds?.length) return Response.json({ error: "content_not_found" }, { status: 404 });
+    for (const id of sequence.exerciseIds) {
+      const exercise = content.exercises.get(id);
+      if (!exercise || exercise.deleted || (exercise.sequenceId && exercise.sequenceId !== sequence.id)) {
+        return Response.json({ error: "incomplete_exercise" }, { status: 422 });
+      }
+      selectedExercises.push(exercise);
+    }
+  } else {
+    const exercise = content.exercises.get(input.id);
+    const parent = exercise?.sequenceId ? content.sequences.get(exercise.sequenceId) : undefined;
+    if (!exercise || exercise.deleted || (exercise.sequenceId && (parent?.deleted || !parent?.exerciseIds?.includes(exercise.id)))) {
+      return Response.json({ error: "content_not_found" }, { status: 404 });
+    }
+    selectedExercises.push(exercise);
+  }
   const official = env.DB ? await readOfficialCatalog(env.DB) : [];
-  const library = mergeOfficialLibrary((state.library ?? []) as LibraryItem[], official);
+  const library = mergeOfficialLibrary(state.library ?? [], official);
   const repaired = deduplicateLibraryPlaceholders(library);
   for (let index = 0; index < selectedExercises.length; index++) selectedExercises[index] = remapExerciseReferences(selectedExercises[index], repaired.replacements);
   const availableLibrary = repaired.items.filter((item) => !item.deleted);
@@ -135,14 +132,14 @@ export async function POST(request: Request) {
   }
 
   const sharedLibrary = availableLibrary.filter((item) => item.id && referencedIds.has(item.id));
-  const issue = validateSharedExercises(selectedExercises as SessionExercise[], sharedLibrary);
+  const issue = validateSharedExercises(selectedExercises, sharedLibrary);
   if (issue) return Response.json({ error: "incomplete_exercise", exerciseId: issue.exerciseId, reason: issue.code }, { status: 422 });
   const token = crypto.randomUUID();
   const payload = JSON.stringify({
     schemaVersion: 1,
     kind: input.kind,
     title: sequence?.title ?? String(selectedExercises[0].title ?? "Anteprima esercizio"),
-    exercises: selectedExercises,
+    exercises: selectedExercises.map(publicExerciseSnapshot),
     library: sharedLibrary,
   });
   const now = Date.now();
