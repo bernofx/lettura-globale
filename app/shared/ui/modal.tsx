@@ -48,7 +48,7 @@ export function Modal({ labelledBy, className, onClose, closeButton = false, tra
         onCloseRef.current();
       }
       if (event.key !== "Tab" || !trapFocus || !panel.current) return;
-      const controls = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")]
+      const controls = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, summary, a[href], [tabindex]")]
         .filter((node) => node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length > 0);
       const active = document.activeElement;
       const edge = event.shiftKey ? controls[0] : controls.at(-1);

@@ -352,3 +352,24 @@ html[data-style="playful"] .modal-close { border-radius: 50%; }
 .sequence-draft-comparison { min-width: 0; overflow-wrap: anywhere; }
 .sequence-draft-comparison summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
 .sequence-draft-comparison h3 { margin-block: .75rem .25rem; }
+
+.exercise-builder .recognition-modes { grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); }
+.exercise-builder .recognition-modes button { display: block; min-height: 48px; font-weight: 700; text-align: center; }
+.builder-advanced { margin-block: 16px; padding-inline: 12px; border: 1px solid var(--line); border-radius: var(--panel-radius, 12px); }
+.builder-advanced > summary { min-height: 44px; padding-block: 10px; color: var(--ink); font-weight: 700; cursor: pointer; }
+.builder-advanced > summary small { display: block; margin-inline-start: 1rem; color: var(--muted); font-weight: normal; overflow-wrap: anywhere; }
+.builder-advanced > div { padding-bottom: 12px; }
+.builder-switches { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 8px; }
+.exercise-builder .builder-summary { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.exercise-builder :is(button, select, input:not([type=checkbox]), .check-line, .category-options label) { min-height: 44px; }
+.exercise-builder button { min-width: 44px; }
+.exercise-builder :focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
+.builder-switches .check-line { align-items: center; margin: 0; cursor: pointer; }
+.builder-switches input[role=switch] { appearance: none; width: 36px; height: 22px; padding: 2px; border: 1px solid currentColor; border-radius: 12px; background: var(--muted); color: var(--ink); }
+.builder-switches input[role=switch]::after { content: ""; display: block; height: 16px; width: 16px; border-radius: 50%; background: white; }
+.builder-switches input[role=switch]:checked { background: var(--violet); }
+.builder-switches input[role=switch]:checked::after { transform: translateX(14px); }
+@media (forced-colors: active) {
+  .builder-switches input[role=switch] { appearance: auto; }
+  .builder-switches input[role=switch]::after { display: none; }
+}

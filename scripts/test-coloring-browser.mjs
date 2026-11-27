@@ -20,6 +20,7 @@ const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Gio
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
 let stateRevision = 1;
 let copyEditorReady = false;
+let legacyBootstrap = false;
 let concurrentExerciseUpdate = false;
 const pending = new Map();
 let id = 0;
@@ -135,7 +136,7 @@ socket.addEventListener("message", event => {
         const change = JSON.parse(request.postData);
         const next = applyStateChange(state, change);
         const header = Object.entries(request.headers).find(([name]) => name.toLowerCase() === "x-lg-exercise-copy-version");
-        const reason = header?.[1] === "1" ? validateExerciseCopyWrite(state, next, change, therapist.id) : "missing_copy_protocol";
+        const reason = header?.[1] === "1" ? validateExerciseCopyWrite(state, next, change, therapist.id) : legacyBootstrap ? null : "missing_copy_protocol";
         if (!reason) { Object.assign(state, next); stateRevision++; }
         void send("Fetch.fulfillRequest", { requestId, responseCode: reason ? 403 : 200,
           responseHeaders: [{ name: "Content-Type", value: "application/json" }],
@@ -160,7 +161,7 @@ socket.addEventListener("message", event => {
       if (typeof values.tracingOrderRequired === "boolean") state.tracingOrderRequired = values.tracingOrderRequired;
       stateRevision++;
     }
-    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: stateRevision, copyEditorReady, seedLegacyModels: !copyEditorReady };
+    const body = request.url === `${origin}/api/app-version` ? { version: availableVersion } : { state, revision: stateRevision, copyEditorReady, seedLegacyModels: legacyBootstrap || !copyEditorReady };
     void send("Fetch.fulfillRequest", {
       requestId, responseCode: 200,
       responseHeaders: [{ name: "Content-Type", value: "application/json" }],
@@ -1117,7 +1118,7 @@ try {
   await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
   await wait("document.querySelector('[aria-label=\"Modifica Conteggio demo\"]')");
   await button("Modifica Conteggio demo");
-  const titleField = "document.querySelector('#exercise-builder-title').parentElement.querySelector('label input')";
+  const titleField = "document.querySelector('#exercise-title')";
   await evaluate(`${titleField}.focus(); ${titleField}.select()`);
   await send("Input.insertText", { text: "Bozza demo" });
   await wait(`${titleField}.value === 'Bozza demo'`);
@@ -1318,6 +1319,62 @@ try {
   assert.deepEqual([repeated.title, repeated.templateExerciseId], ["Modello aggiornato", a]);
   assert.notEqual(repeated.id, copyId);
   console.log("PASS Matita: avviso, distacco pigro del solo passo ripetuto, copia stabile, autore e duplicazione dal catalogo.");
+  await viewport(320, 800);
+  const editors = await evaluate("[...document.querySelectorAll('.new-exercise-actions button')].map(el => el.textContent)");
+  assert.equal(editors.length, 6);
+  for (const name of editors) {
+    await button(name);
+    await wait("document.querySelector('.exercise-builder .builder-advanced')");
+    assert.ok(await evaluate("!document.querySelector('.builder-advanced').open && !!document.querySelector('#exercise-title').value"));
+    for (const style of ["classic", "studio", "playful"]) {
+      await evaluate(`document.documentElement.dataset.style = ${JSON.stringify(style)}`);
+      assert.ok(await evaluate(`(() => {
+        const panel = document.querySelector('.exercise-builder');
+        const details = panel.querySelector('details');
+        details.open = true;
+        const targets = [...panel.querySelectorAll('button, select, summary, .check-line, .category-options label')].filter(el => el.getClientRects().length);
+        return panel.scrollWidth <= panel.clientWidth + 1 && targets.every(el => el.getBoundingClientRect().height >= 44);
+      })()`), name + " su mobile in " + style);
+    }
+    if (name === "Trova la parola") {
+      for (const mode of ["Parole scelte", "Tutto a mano", "A caso"]) {
+        await button(mode);
+        await wait(`document.querySelector('.recognition-modes [aria-pressed=true]').textContent === ${JSON.stringify(mode)}`);
+        const summary = await evaluate("document.querySelector('.builder-summary').textContent");
+        assert.ok(summary.includes(mode === "A caso" ? "bersagli casuali" : mode === "Tutto a mano" ? "1 turno" : "da scegliere"));
+      }
+      await evaluate("document.querySelector('.builder-advanced').open = true");
+      await evaluate("[...document.querySelectorAll('.builder-advanced label')].find(el => el.textContent.includes('Solo dalla stessa categoria')).click()");
+      await wait("document.querySelector('.builder-summary').textContent.includes('della stessa categoria')");
+    }
+    await button("Annulla");
+  }
+  console.log("PASS Moduli: sei editor nei tre stili a 320 px, tre modalità, riepilogo e opzioni avanzate.");
+  // A migrated synthetic account that still has a legacy catalog must be able to bootstrap its missing models.
+  state.exercises = [editable];
+  state.sequences = [{ ...sequence, exerciseIds: [editable.id] }];
+  legacyBootstrap = true;
+  stateRevision++;
+  await send("Page.reload");
+  for (let i = 0; i < 80 && !state.exercises.some(item => item.id === "ex-mela"); i++) await delay(100);
+  assert.ok(state.exercises.some(item => item.id === "ex-mela"), "Il primo PATCH legacy include i modelli iniziali mancanti");
+  assert.deepEqual(state.sequences[0].exerciseIds, [editable.id]);
+  await send("Page.reload");
+  await wait("document.querySelector('.cloud-indicator.cloud-status-ready')");
+  await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
+  await wait("document.querySelector('.sequence-step-edit')");
+  console.log("PASS Account storico: il PATCH iniziale salva i modelli mancanti e al successivo accesso la matita è attiva.");
+  for (const [id, mode] of [["ex-mela", "Tutto a mano"], ["ex-recognition-random", "A caso"]]) {
+    const original = structuredClone(state.exercises.find(item => item.id === id));
+    await button("Modifica " + original.title);
+    await wait(`document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === ${JSON.stringify(mode)}`);
+    assert.equal(await evaluate("document.querySelector('#exercise-title').value"), original.title);
+    await button("Salva esercizio");
+    await wait("!document.querySelector('.exercise-builder')");
+    await delay(750);
+    assert.deepEqual(state.exercises.find(item => item.id === id), original);
+  }
+  console.log("PASS Modelli storici: modalità e titolo vengono riletti e il salvataggio a vuoto conserva i valori originali.");
 } finally {
   socket.close();
 }

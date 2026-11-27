@@ -19,7 +19,7 @@ export function FullTextItemPicker({ items, selectedIds, onChange, multiple, pre
   };
   return <div className="fulltext-picker">
     {selected.length > 0 && <div className="fulltext-selection" aria-label="Elementi selezionati">{selected.map((item) => <button type="button" key={item.id} onClick={() => multiple && choose(item.id)} className={!multiple ? "single" : ""} title={multiple ? `Rimuovi ${item.word}` : item.word}>{presentation === "images" && <span><Artwork item={item} compact /></span>}<strong>{item.word}</strong>{multiple && <X />}</button>)}</div>}
-    <label className="search-box fulltext-search"><Search /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" /></label>
+    <label className="search-box fulltext-search"><Search /><input type="search" aria-label={placeholder} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoComplete="off" /></label>
     {tokens.length > 0 && <div className="fulltext-results" role="listbox">{results.length ? results.map((item) => { const chosen = selectedIds.includes(item.id); return <button type="button" role="option" aria-selected={chosen} key={item.id} onClick={() => choose(item.id)} disabled={!chosen && Boolean(max && selectedIds.length >= max)}>{presentation === "images" && <span><Artwork item={item} compact /></span>}<span><strong>{item.word}</strong><small>{item.category}{item.syllabification ? ` · ${item.syllabification}` : ""}</small></span>{chosen ? <Check /> : <Plus />}</button>; }) : <p>Nessun risultato per “{query.trim()}”.</p>}</div>}
   </div>;
 }

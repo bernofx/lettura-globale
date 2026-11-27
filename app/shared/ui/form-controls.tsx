@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 /** Checkbox with a bold title and a short explanation underneath. */
-export function CheckLine({ checked, onChange, title, detail, className, disabled }: { checked: boolean; onChange: (checked: boolean) => void; title: ReactNode; detail?: ReactNode; className?: string; disabled?: boolean }) {
+export function CheckLine({ checked, onChange, title, detail, className, disabled, role }: { checked: boolean; onChange: (checked: boolean) => void; title: ReactNode; detail?: ReactNode; className?: string; disabled?: boolean; role?: "switch" }) {
   return <label className={["check-line", className].filter(Boolean).join(" ")}>
-    <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    <input type="checkbox" role={role} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     <span><strong>{title}</strong>{detail && <small>{detail}</small>}</span>
   </label>;
 }
