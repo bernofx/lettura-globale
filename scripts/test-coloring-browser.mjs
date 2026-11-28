@@ -1341,6 +1341,18 @@ try {
         await press("A caso");
         await atStep(2);
         await fits();
+        if (style === "classic") {
+          await evaluate("document.querySelector('.recognition-wizard summary').click()");
+          await fits();
+          await evaluate("document.querySelector('.recognition-wizard input[type=search]').focus()");
+          await send("Input.insertText", {text: "gatto"});
+          await wait("document.querySelector('.recognition-wizard [role=option]')");
+          await evaluate("document.querySelector('.recognition-wizard [role=option]').click()");
+          await press("Stessa categoria del bersaglio");
+          await atStep(2);
+          assert.ok(await evaluate("document.querySelector('.recognition-wizard [role=alert]').textContent.includes('compatibili') && document.querySelector('.exercise-builder .primary-button').disabled"));
+          await evaluate("document.querySelector('.fulltext-selection button').click()");
+        }
         await press("Stessa categoria del bersaglio");
         await atStep(3);
         await fits();
@@ -1412,12 +1424,11 @@ try {
     await button("Modifica " + original.title);
     await wait(`document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === ${JSON.stringify(mode)}`);
     if (mode === "A caso") {
-      await button("A caso");
-      await button("A caso tra le parole disponibili");
-    } else {
       await button("Avanti");
       await wait("document.querySelector('.recognition-wizard')?.dataset.step === '2'");
       await button("Avanti");
+    } else {
+      await button("Opzioni");
     }
     await wait("document.querySelector('#exercise-title')");
     assert.equal(await evaluate("document.querySelector('#exercise-title').value"), original.title);

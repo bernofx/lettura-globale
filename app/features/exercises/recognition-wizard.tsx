@@ -77,25 +77,30 @@ export function RecognitionWizard({ exercise, library, editNotice, onClose, onSa
   const targets = targetIds.flatMap(id => words.filter(item => item.id === id));
   const alternatives = manualIds.filter(id => !targetIds.includes(id));
   const compatible = words.filter(item => (!activeCategories.length || activeCategories.includes(item.category)) && matchesSyllableFilter(item, syllables));
-  const pool = availableForRecognition(compatible, presentation).filter(item =>
-    (item.contentKind !== "sentence" || allowedIds.includes(item.id) || (chosen && targetIds.includes(item.id))) &&
-    (chosen || !allowedIds.length || allowedIds.includes(item.id)));
-  const shortTarget = chosen && targets.find(target => pool.filter(item =>
-    item.id !== target.id && (source === "mixed" || item.category === target.category)).length < count);
   const targetReady = targetSource === "random" || (chosen ? targets.length > 0 : targetCategories.length > 0);
-  const alternativesReady = alternatives.length === count;
-  const missingArt = presentation === "images" && chosen && words.some(item =>
-    (targetIds.includes(item.id) || (manual && alternatives.includes(item.id))) && !hasArtwork(item));
-  let problem = "";
-  if (!targetReady) problem = "Torna alle parole e scegli almeno un bersaglio o una categoria.";
-  else if (missingArt) problem = "Una parola scelta è senza immagine. Disattiva le immagini nelle risposte o cambia la selezione.";
-  else if (manual && !alternativesReady) problem = "Seleziona il numero indicato di distrattori.";
-  else if (!manual && (shortTarget || pool.length < count + (chosen ? 0 : 1) || (!chosen && source === "same-category" && !hasSameCategoryDistractors(pool, count)))) {
-    problem = `Servono ${count} distrattori compatibili${shortTarget ? " per " + shortTarget.word : ""}. Riduci il numero o modifica i filtri.`;
+  function configurationProblem(origin: AlternativeSource, display: Presentation): string {
+    if (!targetReady) return "Scegli almeno un bersaglio o una categoria al primo passo.";
+    if (display === "images" && chosen && words.some(item =>
+      (targetIds.includes(item.id) || (origin === "manual" && alternatives.includes(item.id))) && !hasArtwork(item))) {
+      return "Una parola scelta è senza immagine. Usa le risposte in parole o cambia la selezione.";
+    }
+    if (origin === "manual") return alternatives.length === count ? "" : "Seleziona il numero indicato di distrattori.";
+    const pool = availableForRecognition(compatible, display).filter(item =>
+      (item.contentKind !== "sentence" || allowedIds.includes(item.id) || (chosen && targetIds.includes(item.id))) &&
+      (chosen || !allowedIds.length || allowedIds.includes(item.id)));
+    const shortTarget = chosen && targets.find(target => pool.filter(item =>
+      item.id !== target.id && (origin === "mixed" || item.category === target.category)).length < count);
+    if (shortTarget || pool.length < count + (chosen ? 0 : 1) || (!chosen && origin === "same-category" && !hasSameCategoryDistractors(pool, count))) {
+      return `Servono ${count} distrattori compatibili${shortTarget ? " per " + shortTarget.word : ""}. Riduci il numero o modifica i filtri.`;
+    }
+    return "";
   }
-  const names = targets.map(item => item.word.toLocaleLowerCase("it"));
+  const selectedOrigin = manual ? "manual" : source;
+  const problem = configurationProblem(selectedOrigin, presentation);
+  const names = targets.map(item => item.word);
   const targetLabel = chosen ? names.join(", ") : targetSource === "categories" ? targetCategories.join(", ") : "casuali";
-  const suggestedTitle = chosen ? `Trova ${names.slice(0, 3).join(", ") || "la parola"}${names.length > 3 ? " e altre " + (names.length - 3) : ""}` : "Trova la parola · casuale";
+  const prefix = targets.some(item => item.contentKind === "sentence") ? "Trova la parola · " : "Trova ";
+  const suggestedTitle = chosen && names.length ? prefix + names.slice(0, 3).join(", ") + (names.length > 3 ? " e altre " + (names.length - 3) : "") : chosen ? "Trova la parola" : "Trova la parola · casuale";
   const distractorLabel = manual ? "a mano" : source === "same-category" ? "della stessa categoria" : "dal gruppo disponibile";
   const totalRounds = manual ? 1 : rounds;
   const turnSummary = `${totalRounds} ${totalRounds === 1 ? "turno" : "turni"} · Bersagli: ${targetLabel} · ${count} ${count === 1 ? "distrattore" : "distrattori"} ${distractorLabel}`;
@@ -112,16 +117,25 @@ export function RecognitionWizard({ exercise, library, editNotice, onClose, onSa
   };
   const selectAlternative = (value: AlternativeSource) => {
     setAlternativeSource(value);
-    if (value !== "manual") setStep(3);
+    if (value !== "manual" && !configurationProblem(value, presentation)) setStep(3);
   };
-  const next = step === 1 && targetSource !== "random" ? () => setStep(2) : step === 2 && manual ? () => setStep(3) : undefined;
+  const next = step < 3 ? () => setStep(step + 1) : undefined;
   const poolPicker = <FullTextItemPicker items={compatible.filter(item => !chosen || !targetIds.includes(item.id))}
     selectedIds={allowedIds} onChange={chosen ? setPreferredIds : setPoolIds} multiple presentation={presentation}
     placeholder={chosen ? "Cerca un distrattore preferito…" : "Cerca le parole del gruppo…"} />;
   return <BuilderModal exercise={exercise} editNotice={editNotice} onClose={onClose} onSave={onSave} heading="Trova la parola"
     title={title} onTitleChange={setTitle} titlePlaceholder={suggestedTitle} build={build} saveDisabled={Boolean(problem)} summary={summary}
-    navigation={{ step, back: () => setStep(step - 1), next, canContinue: step === 1 ? targetReady : alternativesReady }}>
+    navigation={{ step, back: () => setStep(step - 1), next, canContinue: step === 1 ? targetReady : !problem }}>
     <div className="recognition-wizard" data-step={step}>
+      <ol className="recognition-progress" aria-label="Passi della configurazione">
+        {["Parole", "Distrattori", "Opzioni"].map((label, index) => {
+          const destination = index + 1;
+          return <li key={label} aria-current={step === destination ? "step" : undefined}>
+            {exercise ? <button type="button" onClick={() => setStep(destination)}
+              disabled={destination === 2 && !targetReady || destination === 3 && Boolean(problem)}>{label}</button> : <span>{label}</span>}
+          </li>;
+        })}
+      </ol>
       <h3 ref={heading} tabIndex={-1}><small>Passo {step} di 3</small>{stepNames[step - 1]}</h3>
       {step === 1 && <>
         <Choices label="Quali parole deve trovare?" selected={targetSource} values={[["random", "A caso"], ["categories", "Categorie selezionate"], ["chosen", "Le scelgo io"]]}
@@ -133,13 +147,6 @@ export function RecognitionWizard({ exercise, library, editNotice, onClose, onSa
         <Choices compact label="Numero di distrattori" selected={count} values={counts.map(n => [n, String(n)] as const)} onSelect={n => {
           setCount(n); if (n === 4 && manual) setAlternativeSource("mixed");
         }} />
-        {!manual && <details className="builder-advanced" key={targetSource}>
-          <summary>Filtri facoltativi <small>{chosen ? "Categorie e distrattori preferiti" : "Limita bersagli e distrattori a parole specifiche"}</small></summary>
-          <div>{chosen && <Categories options={categories} selected={alternativeCategories} onChange={setAlternativeCategories} />}
-            {poolPicker}
-            {chosen && <p className="field-note">Con distrattori casuali, il gioco completa le alternative mancanti con parole compatibili.</p>}
-          </div>
-        </details>}
         <Choices<AlternativeSource> label="Origine dei distrattori" selected={manual ? "manual" : source}
           values={[["mixed", "A caso tra le parole disponibili"], ["same-category", "Stessa categoria del bersaglio"],
             ...(canChooseManually && count <= 3 ? [["manual", "Li scelgo io"]] as const : [])]} onSelect={selectAlternative} />
@@ -148,11 +155,23 @@ export function RecognitionWizard({ exercise, library, editNotice, onClose, onSa
           <FullTextItemPicker items={words.filter(item => !targetIds.includes(item.id))} selectedIds={alternatives}
             onChange={setManualIds} multiple presentation={presentation} placeholder="Cerca le alternative…" max={count} />
         </>}
+        {problem && <div>
+          <p className="wizard-error" role="alert">{problem}</p>
+          {presentation === "images" && !configurationProblem(selectedOrigin, "words") &&
+            <button type="button" className="secondary-button" onClick={() => setPresentation("words")}>Usa risposte in parole</button>}
+        </div>}
+        {!manual && <details className="builder-advanced" key={targetSource}>
+          <summary>Filtri facoltativi <small>{syllables === "all" ? "Parole e sillabe" : `Sillabe: ${syllables}`}</small></summary>
+          <div>{chosen && <Categories options={categories} selected={alternativeCategories} onChange={setAlternativeCategories} />}
+            <Choices<SyllableFilter> compact label="Numero di sillabe" selected={syllables} values={[["all","Tutte"],["2","2"],["3","3"],["2-3","2 o 3"],["4+","4 o più"]]} onSelect={setSyllables} />
+            {poolPicker}
+            {chosen && <p className="field-note">Con distrattori casuali, il gioco completa le alternative mancanti con parole compatibili.</p>}
+          </div>
+        </details>}
       </>}
       {step === 3 && <>
         {manual ? <p className="field-note">Un turno con bersaglio e alternative scelti a mano.</p> :
-          <><label>Numero di turni<NumericField min={1} max={50} value={rounds} onValueChange={setRounds} /></label>
-            <Choices<SyllableFilter> compact label="Numero di sillabe" selected={syllables} values={[["all","Tutte"],["2","2"],["3","3"],["2-3","2 o 3"],["4+","4 o più"]]} onSelect={setSyllables} /></>}
+          <label>Numero di turni<NumericField min={1} max={50} value={rounds} onValueChange={setRounds} /></label>}
         <div className="builder-switches">
           <CheckLine role="switch" checked={presentation === "images"} onChange={show => setPresentation(show ? "images" : "words")} title="Mostra le immagini nelle risposte" />
           <CheckLine role="switch" checked={autoPronounce} onChange={setAutoPronounce} title="Pronuncia il bersaglio all’inizio del turno" />
