@@ -6,6 +6,10 @@
 
 **Target:** Cloudflare Workers + D1 + R2, distribuito automaticamente da GitHub
 
+## In approvazione
+
+- Grande e Piccolo. L’[ADR 0029](docs/adr/0029-grande-e-piccolo.md) propone la configurazione, i turni e la rappresentazione compatibile con i vincoli storici D1.
+
 ## Completato
 
 - [x] Anteprima condivisa: a fine esercizio o con Chiudi il token non viene più riletto (prima l’anteprima ripartiva all’infinito). Chi non è collegato vede «Anteprima completata» con «Ricomincia»; un adulto collegato torna alla propria app. Regressione nel test browser.
