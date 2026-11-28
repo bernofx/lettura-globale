@@ -370,3 +370,10 @@ html[data-style="playful"] .modal-close { border-radius: 50%; }
   .builder-switches input[role=switch] { appearance: auto; }
   .builder-switches input[role=switch]::after { display: none; }
 }
+
+/* Giocoso: the prepared sequences cycle through the navigation colours. */
+html[data-style="playful"] .sequence-choice-list > button > span { background: var(--violet); color: #ffffff; }
+html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 2) > span { background: #ff8a5c; color: var(--ink); }
+html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 3) > span { background: #2fae74; color: var(--ink); }
+html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 4) > span { background: #4f6fe0; color: #ffffff; }
+html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 5) > span { background: #a64278; color: #ffffff; }
