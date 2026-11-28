@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEve
 import { dropIndex } from "../../domain/reorder";
 import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
-type OrderItem = { id: string; title: string };
+type OrderItem = { id: string; title: string; detail?: string; custom?: boolean };
 type Drag = {
   ids: string[];
   from: number;
@@ -110,7 +110,10 @@ export function SequenceOrderList({ items, onMove, onEdit, onRemove }: { items: 
           <GripVertical aria-hidden="true" />
         </button>
         <span>{String(index + 1).padStart(2, "0")}</span>
-        <strong>{item.title}</strong>
+        <div className="sequence-step-copy">
+          <strong>{item.title}</strong>
+          {(item.detail || item.custom) && <small>{item.custom && <span className="sequence-step-custom">Personalizzato</span>}{item.detail}</small>}
+        </div>
         <div className="sequence-step-actions">
           {onEdit && <button type="button" className="sequence-step-edit" onClick={() => onEdit(item.id)} aria-label={`Modifica il passo ${index + 1}: ${item.title}`}><Pencil aria-hidden="true" /></button>}
           <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X aria-hidden="true" /></button>

@@ -509,7 +509,10 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .sequence-position-field { display: grid; gap: 8px; font-weight: 700; }
 .sequence-position-field select { width: 100%; min-height: 44px; padding-left: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); }
 .sequence-order-list .sequence-drag-handle:disabled { opacity: .45; cursor: default; }
-.sequence-order-list article > strong { min-width: 0; overflow-wrap: anywhere; }
+.sequence-order-list .sequence-step-copy { display: grid; gap: 2px; min-width: 0; }
+.sequence-order-list .sequence-step-copy strong { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.sequence-order-list .sequence-step-copy small { color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.sequence-step-custom { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 99px; background: var(--lavender); color: var(--violet-dark); font-weight: 800; }
 
 .sequence-order-fieldset { border: 0; min-inline-size: 0; padding: 0; margin: 0; }
 .sequence-order-fieldset:disabled button, .sequence-actions button:disabled { opacity: .55; cursor: not-allowed; }
