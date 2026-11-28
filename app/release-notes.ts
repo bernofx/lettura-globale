@@ -3,7 +3,7 @@ export const RELEASE_NOTES = {
   title: "Configurazione degli esercizi",
   items: [
     "In Sessione le sequenze preparate hanno lo stesso aspetto di Avvio rapido: icona, titolo e numero di esercizi allineati a sinistra. Nello stile Giocoso ogni sequenza ha un colore diverso.",
-    "In Trova la parola scegli Parole scelte, A caso o Tutto a mano. Nei sei moduli trovi le impostazioni aggiuntive in Opzioni avanzate e il riepilogo accanto a Salva.",
+    "Trova la parola si configura in tre passi: scegli i bersagli, poi i distrattori e infine immagini, voce e turni. Con Avanti confermi le scelte già impostate. Per cambiare solo titolo o voce in un esercizio salvato puoi aprire direttamente Opzioni.",
     "Dove è attiva la gestione delle copie, la matita accanto a un passo modifica solo quella sequenza. Le copie mantengono le impostazioni anche quando il modello viene aggiornato.",
     "Nel catalogo puoi filtrare i modelli per autore. Se un esercizio compare due volte nella sequenza, puoi spostare o rimuovere la singola riga.",
     "Quando due adulti cambiano i passi di una sequenza, le modifiche indipendenti si combinano. Se gli ordini sono incompatibili, li ritrovi in Esercizi → Bozze da verificare.",

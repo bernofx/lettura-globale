@@ -377,3 +377,25 @@ html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 2) > sp
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 3) > span { background: #2fae74; color: var(--ink); }
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 4) > span { background: #4f6fe0; color: #ffffff; }
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 5) > span { background: #a64278; color: #ffffff; }
+
+.recognition-wizard { display: grid; gap: 16px; min-width: 0; }
+.recognition-wizard h3 { display: grid; gap: 4px; margin: 0; font-size: 1.25rem; font-weight: 750; }
+.recognition-wizard h3 small { color: var(--muted); font-size: .875rem; }
+.recognition-choices { padding: 0; margin: 0; min-width: 0; border: 0; }
+.recognition-choices legend { font-weight: 700; }
+.recognition-wizard .recognition-modes { margin: 8px 0 0; }
+.recognition-wizard .builder-mode button { white-space: normal; overflow-wrap: anywhere; }
+.recognition-wizard .builder-advanced { margin: 0; min-width: 0; }
+.recognition-wizard .builder-switches { min-width: 0; }
+
+.recognition-progress { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0; }
+.recognition-progress li { min-width: 0; border-top: 4px solid var(--line); text-align: center; color: var(--muted); }
+.recognition-progress li[aria-current="step"] { border-color: var(--violet); color: var(--ink); font-weight: 700; }
+.recognition-progress :is(button, span) { display: grid; place-items: center; width: 100%; padding: 5px 0; font: inherit; font-size: .875rem; }
+.recognition-progress button { min-height: 44px; color: inherit; background: transparent; border: 0; cursor: pointer; text-decoration: underline; }
+.recognition-progress button:disabled { cursor: default; text-decoration: none; }
+.recognition-wizard .compact-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 5px; }
+.recognition-wizard .compact-choices button { min-width: 0; padding: 4px; }
+@media (max-width: 600px) {
+  .recognition-wizard .recognition-modes:not(.compact-choices) { grid-template-columns: 1fr; }
+}
