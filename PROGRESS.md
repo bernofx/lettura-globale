@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Sessione: le sequenze preparate usano la card di Avvio rapido (icona, titolo, esercizi e autore allineati, freccia) al posto delle nuvolette. Nel Giocoso le icone ruotano sui colori della navigazione. Singolare «1 esercizio». Verificato a 390 e 1280 px nei tre stili.
 - [x] Obiettivo 2 — I sei moduli esercizio condividono opzioni avanzate richiudibili, titolo automatico modificabile e riepilogo prima del salvataggio. In Trova la parola una scelta tra tre modalità mantiene la configurazione esistente.
 
 - [x] ADR 0028, attivazione nell’editor dopo conferma delle colonne 0020 dal Worker. La matita isola la singola occorrenza al primo salvataggio effettivo. Aggiunta dal catalogo, creazione, duplicazione e avvio rapido assegnano una copia per passo. Il supervisore modifica il contenuto delle sequenze visibili. Le code precedenti mantengono il loro protocollo. La migrazione dell’ambiente resta a carico del gestore.
