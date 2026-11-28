@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Configurazione degli esercizi",
   items: [
+    "Chi prova un esercizio condiviso, alla fine o toccando Chiudi, vede «Anteprima completata» e può ricominciare: l’anteprima non riparte più da sola.",
     "In Trova la parola puoi scegliere «Un gruppo di parole»: bersagli e distrattori ruotano solo tra le parole che indichi. Il riepilogo dell’occhio lo descrive.",
     "In Esercizi, l’occhio accanto a ogni passo della sequenza mostra come è configurato: bersagli, turni e distrattori, e se il passo è personalizzato per quella sequenza.",
     "In Sessione le sequenze preparate hanno lo stesso aspetto di Avvio rapido: icona, titolo e numero di esercizi allineati a sinistra. Nello stile Giocoso ogni sequenza ha un colore diverso.",

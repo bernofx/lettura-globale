@@ -529,3 +529,4 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 /* On phones the eye leads to the editor too, so the row keeps room for the title. */
 @media (max-width: 600px) { .sequence-order-list .sequence-step-view + .sequence-step-edit { display: none; } }
 .exercise-copy > p::first-letter { text-transform: uppercase; }
+.public-preview-done .primary-button { margin-top: 16px; }

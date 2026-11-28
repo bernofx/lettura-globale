@@ -14,6 +14,10 @@ export function PublicPreviewError() {
   return <main className="auth-page public-preview-error"><section className="login-card"><div className="auth-icon"><AlertTriangle /></div><span className="eyebrow">ANTEPRIMA</span><h1>Link non disponibile</h1><p>Questa anteprima è incompleta, scaduta o non disponibile. Chiedi a chi l’ha creata di controllare gli esercizi e generare un nuovo link.</p><button className="primary-button large" onClick={() => { window.history.replaceState({}, "", "/"); window.location.reload(); }}>Torna alla home</button></section></main>;
 }
 
+export function PublicPreviewDone({ onRestart }: { onRestart: () => void }) {
+  return <main className="auth-page public-preview-error public-preview-done"><section className="login-card"><div className="auth-icon"><Check /></div><span className="eyebrow">ANTEPRIMA</span><h1>Anteprima completata</h1><p>Hai terminato gli esercizi condivisi. Puoi chiudere questa pagina oppure ricominciare dall’inizio.</p><button className="primary-button large" onClick={onRestart}><RefreshCw />Ricomincia</button></section></main>;
+}
+
 export function PublicLanding({ onLogin }: { onLogin: () => void }) {
   return <main className="auth-page public-landing"><section className="auth-brand"><span className="brand-mark brand-logo large" aria-hidden="true" /><span>Lettura <strong>Globale</strong></span><h1>Imparare a leggere, una parola alla volta.</h1><p>Attività visive semplici e personalizzabili per accompagnare bambini, terapisti e famiglie.</p></section><section className="login-card welcome-card"><div className="auth-icon"><BookOpenCheck /></div><span className="eyebrow">AREA RISERVATA</span><h2>Pronto per iniziare?</h2><p>Accedi con il tuo profilo adulto per aprire il pannello, scegliere il bambino e avviare gli esercizi.</p><button className="primary-button large" onClick={onLogin}><KeyRound />Accedi al pannello</button><div className="welcome-points"><span><Check />Lettura globale con immagini e parole</span><span><Check />Esercizi IL / LA</span><span><Check />Progressi e aiuti registrati</span></div></section></main>;
 }
