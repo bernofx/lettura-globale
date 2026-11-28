@@ -1270,11 +1270,17 @@ try {
   for (const style of ["classic", "studio", "playful"]) {
     await evaluate(`document.documentElement.dataset.style = ${JSON.stringify(style)}`);
     await wait(`(() => {
-      const row = document.querySelector('.sequence-step-edit').closest('article');
-      const target = row.querySelector('.sequence-step-edit').getBoundingClientRect();
-      return row.scrollWidth <= row.clientWidth + 1 && target.width >= 44 && target.height >= 44;
+      const row = document.querySelector('.sequence-step-view').closest('article');
+      const target = row.querySelector('.sequence-step-view').getBoundingClientRect();
+      // On phones the pencil lives in the configuration dialog opened by the eye.
+      return row.scrollWidth <= row.clientWidth + 1 && target.width >= 44 && target.height >= 44 && !row.querySelector('.sequence-step-edit').checkVisibility();
     })()`);
   }
+  await button("Configurazione del passo 2: Primo");
+  await wait("document.querySelector('.sequence-step-config li')");
+  assert.ok(await evaluate("[...document.querySelectorAll('.modal button')].some(b => b.textContent.trim() === 'Modifica il passo')"));
+  await button("Chiudi");
+  await wait("!document.querySelector('.sequence-step-config')");
   await button("Modifica il passo 2: Primo");
   await wait("document.querySelector('#exercise-builder-title').closest('.modal').textContent.includes('Altra prova')");
   await button("Salva esercizio");
@@ -1344,14 +1350,8 @@ try {
         if (style === "classic") {
           await evaluate("document.querySelector('.recognition-wizard summary').click()");
           await fits();
-          await evaluate("document.querySelector('.recognition-wizard input[type=search]').focus()");
-          await send("Input.insertText", {text: "gatto"});
-          await wait("document.querySelector('.recognition-wizard [role=option]')");
-          await evaluate("document.querySelector('.recognition-wizard [role=option]').click()");
-          await press("Stessa categoria del bersaglio");
-          await atStep(2);
-          assert.ok(await evaluate("document.querySelector('.recognition-wizard [role=alert]').textContent.includes('compatibili') && document.querySelector('.exercise-builder .primary-button').disabled"));
-          await evaluate("document.querySelector('.fulltext-selection button').click()");
+          // With random targets the word group is chosen at step 1 ("Un gruppo di parole"), not among the filters.
+          assert.equal(await evaluate("document.querySelector('.recognition-wizard input[type=search]')"), null);
         }
         await press("Stessa categoria del bersaglio");
         await atStep(3);
@@ -1456,6 +1456,34 @@ try {
   await wait("document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === 'Categorie selezionate'");
   assert.equal(await evaluate("document.querySelector('.filter-chips [aria-pressed=true]').textContent"), "Animali");
   console.log("PASS Procedura guidata: salvataggio e riapertura delle categorie con lo stesso gruppo di distrattori.");
+  // A closed group: targets and distractors rotate among the chosen words only.
+  await button("Trova la parola");
+  await button("Un gruppo di parole");
+  assert.ok(await evaluate("[...document.querySelectorAll('.exercise-builder button')].find(b => b.textContent.trim() === 'Avanti').disabled"));
+  for (const query of ["gatto", "cane", "mela"]) {
+    await evaluate("document.querySelector('.recognition-wizard input[type=search]').focus()");
+    await evaluate("document.querySelector('.recognition-wizard input[type=search]').select()");
+    await send("Input.insertText", { text: query });
+    await wait("document.querySelector('.recognition-wizard [role=option]:not([aria-selected=true])')");
+    await evaluate("document.querySelector('.recognition-wizard [role=option]:not([aria-selected=true])').click()");
+  }
+  await button("Avanti");
+  await wait("document.querySelector('.recognition-wizard')?.dataset.step === '2'");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.compact-choices')][0] && [...[...document.querySelectorAll('.compact-choices')][0].querySelectorAll('button')].map(b => b.textContent)"), ["1", "2"]);
+  await button("A caso tra le parole del gruppo");
+  await wait("document.querySelector('#exercise-title')");
+  await evaluate("document.querySelector('#exercise-title').focus(); document.querySelector('#exercise-title').select()");
+  await send("Input.insertText", { text: "Gruppo wizard demo" });
+  await button("Salva esercizio");
+  for (let i=0; i<80 && !state.exercises.some(item => item.title === "Gruppo wizard demo"); i++) await delay(100);
+  const groupModel = state.exercises.find(item => !item.sequenceId && item.title === "Gruppo wizard demo");
+  assert.ok(groupModel);
+  assert.deepEqual([groupModel.recognitionMode, groupModel.promptId, groupModel.recognitionTargetIds, groupModel.recognitionItemIds.length, groupModel.distractorCount],
+    ["random", "", undefined, 3, 2]);
+  await button("Modifica Gruppo wizard demo");
+  await wait("document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === 'Un gruppo di parole'");
+  await button("Annulla");
+  console.log("PASS Procedura guidata: un gruppo di parole limita bersagli e distrattori e viene riaperto con la stessa scelta.");
 } finally {
   socket.close();
 }

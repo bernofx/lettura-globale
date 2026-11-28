@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Configurazione degli esercizi",
   items: [
+    "In Trova la parola puoi scegliere «Un gruppo di parole»: bersagli e distrattori ruotano solo tra le parole che indichi. Il riepilogo dell’occhio lo descrive.",
     "In Esercizi, l’occhio accanto a ogni passo della sequenza mostra come è configurato: bersagli, turni e distrattori, e se il passo è personalizzato per quella sequenza.",
     "In Sessione le sequenze preparate hanno lo stesso aspetto di Avvio rapido: icona, titolo e numero di esercizi allineati a sinistra. Nello stile Giocoso ogni sequenza ha un colore diverso.",
     "Trova la parola si configura in tre passi: scegli i bersagli, poi i distrattori e infine immagini, voce e turni. Con Avanti confermi le scelte già impostate. Per cambiare solo titolo o voce in un esercizio salvato puoi aprire direttamente Opzioni.",
