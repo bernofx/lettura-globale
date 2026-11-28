@@ -58,7 +58,7 @@ import { SequenceTransition, SessionView } from "./features/session/session-view
 import { SessionPlanContext } from "./features/session/session-chrome";
 import { AppearanceView } from "./features/settings/appearance-view";
 import { SaveJournalDialog } from "./features/settings/save-journal-dialog";
-import { ChildChooser, LoadingScreen, PublicLanding, PublicPreviewError, TherapistLogin } from "./features/shell/auth-screens";
+import { ChildChooser, LoadingScreen, PublicLanding, PublicPreviewDone, PublicPreviewError, TherapistLogin } from "./features/shell/auth-screens";
 import { appViews, SettingsTabs, Sidebar, Topbar } from "./features/shell/navigation";
 import { StatsView } from "./features/stats/stats-view";
 import { preloadArtwork } from "./shared/artwork";
@@ -148,6 +148,8 @@ function HomePageContent() {
   const [sessionIsTrial, setSessionIsTrial] = useUpdateState("root:sessionIsTrial", false);
   const [pendingSharedLaunch, setPendingSharedLaunch] = useState<SharedLaunch | null>(null);
   const [pendingSharedPreviewToken, setPendingSharedPreviewToken] = useState<string | null>(null);
+  // A finished or closed public preview must not reload itself from the remembered token.
+  const [finishedSharedPreviewToken, setFinishedSharedPreviewToken] = useState<string | null>(null);
   const [sharedPreview, setSharedPreview] = useUpdateState<SharedPreviewPayload | null>("root:sharedPreview", null);
   const [sharedPreviewStatus, setSharedPreviewStatus] = useUpdateState<"idle" | "loading" | "ready" | "error">("root:sharedPreviewStatus", "idle");
   const [answerState, setAnswerState] = useUpdateState<"idle" | "wrong" | "correct">("root:answerState", "idle");
@@ -746,7 +748,14 @@ function HomePageContent() {
     setSharedPreview(null);
     setAnswerState("idle");
     setWrongAnswerId(null);
-    if (shared) { window.history.replaceState({ lgView: "home" }, "", window.location.pathname); setView("home"); return; }
+    if (shared) {
+      window.history.replaceState({ lgView: "home" }, "", window.location.pathname);
+      setFinishedSharedPreviewToken(pendingSharedPreviewToken);
+      setPendingSharedPreviewToken(null);
+      setSharedPreviewStatus("idle");
+      setView("home");
+      return;
+    }
     if (exitModalMarker) {
       if (!trial) setSessionWizardKey((current) => current + 1);
       setView(trial ? returnView : "session");
@@ -1049,6 +1058,11 @@ function HomePageContent() {
   if (!sessionChecked || (pendingSharedPreviewToken && (sharedPreviewStatus === "idle" || sharedPreviewStatus === "loading"))) return <LoadingScreen label={pendingSharedPreviewToken ? "Caricamento anteprima…" : "Caricamento dati…"} stalled={localLoadSlow} />;
   if (logoutState !== "idle") return <LoadingScreen label={logoutState === "failed" ? "Disconnessione non confermata. Controlla la rete e riprova." : "Salvataggio e disconnessione..."} stalled={logoutState === "failed"} onRetry={() => { void logout(); }} />;
   if (pendingSharedPreviewToken && sharedPreviewStatus === "error") return <PublicPreviewError />;
+  if (finishedSharedPreviewToken && !therapist) return <PublicPreviewDone onRestart={() => {
+    window.history.replaceState({}, "", buildSharedPreviewUrl(window.location.origin, finishedSharedPreviewToken));
+    setPendingSharedPreviewToken(finishedSharedPreviewToken);
+    setFinishedSharedPreviewToken(null);
+  }} />;
   if (sessionFromSharedLink && sharedPreview && sessionActive) {
     const previewChild: ChildProfile = { id: "preview", firstName: "Anteprima", lastName: "", birthYear: "", notes: "", avatarColor: "#7568d9" };
     return <AudioVolumeContext.Provider value={{ volume: effectiveSoundVolume, setVolume: changeSoundVolume }}><main className="public-preview-shell">{awaitingNextExercise ? <SequenceTransition title={sessionExercises[sessionIndex]?.title ?? "Esercizio"} onContinue={() => setAwaitingNextExercise(false)} /> : <SessionPlanContext.Provider value={{ plan: sessionExercises, completed: completedSessionIndices }}><SessionView active complete={false} fromSharedLink isTrial={false} mode={sessionMode} setMode={setSessionMode} presentation={currentPresentation} setPresentation={setSessionPresentation} sequences={[]} therapists={[]} showSequenceOwners={false} activeChild={previewChild} childProfiles={[]} onSelectChild={() => undefined} onStartSequence={() => undefined} onStartQuick={() => undefined} quickCanBeSaved={false} onSaveQuick={() => undefined} completionComment="" onSaveCompletionComment={() => undefined} onCloseComplete={() => undefined} onExit={closeActiveSession} currentIndex={sessionIndex} total={sessionExercises.length} canPrevious={sessionIndex > 0} canForward={sessionIndex < sessionFurthestIndex} onPrevious={() => navigateReachedExercise(-1)} onForward={() => navigateReachedExercise(1)} exercise={currentExercise} prompt={promptItem} library={sessionLibrary} answerState={answerState} wrongAnswerId={wrongAnswerId} onChoose={chooseAnswer} onClassificationAttempt={recordClassificationAttempt} onClassificationComplete={nextExercise} onHelp={addHelp} onNext={nextExercise} soundEffects={soundEffects} onToggleSound={() => setSoundEffects((current) => !current)} /></SessionPlanContext.Provider>}{toast && <div className={sessionActive ? "toast toast-in-session" : "toast"} role="status"><Check size={18} />{toast}</div>}</main></AudioVolumeContext.Provider>;

@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Anteprima condivisa: a fine esercizio o con Chiudi il token non viene più riletto (prima l’anteprima ripartiva all’infinito). Chi non è collegato vede «Anteprima completata» con «Ricomincia»; un adulto collegato torna alla propria app. Regressione nel test browser.
 - [x] Trova la parola: quarta scelta «Un gruppo di parole» al primo passo (stesso salvataggio di bersagli casuali con `recognitionItemIds`, nessuna migrazione). I distrattori si limitano a parole del gruppo − 1; i modelli storici con parole fisse si riaprono con questa scelta. Corretto il test browser della matita su telefono (#93).
 - [x] Riepilogo di Trova la parola: indica se le parole scelte sono il gruppo di bersagli e distrattori (bersagli casuali) o distrattori preferiti (bersagli scelti), il numero di distrattori per turno e la pronuncia.
 - [x] Ordine della sequenza: l’occhio accanto a ogni passo apre la configurazione in sola lettura (stessa funzione del catalogo, `app/domain/exercise-summary.ts`, con test), indica se il passo è personalizzato e porta alla modifica. Su telefono la matita è nella finestra, per lasciare spazio al titolo. Verificato a 390 e 1280 px nei tre stili.

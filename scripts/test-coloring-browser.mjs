@@ -17,6 +17,9 @@ await new Promise((resolve, reject) => {
 });
 
 const therapist = { id: "adult-coloring-demo", firstName: "Demo", lastName: "Giochi", email: "games@example.test", role: "Terapista", childIds: [] };
+const sharedPreviewFixture = { schemaVersion: 1, kind: "exercise", title: "Anteprima demo",
+  library: [{ id: "cane", word: "cane", category: "Animali", article: "IL", emoji: "🐕" }, { id: "mela", word: "mela", category: "Cibi", article: "LA", emoji: "🍎" }],
+  exercises: [{ id: "preview-demo", kind: "recognition", title: "Anteprima demo", recognitionMode: "fixed", promptId: "cane", optionIds: ["cane", "mela"], presentation: "images", rounds: 1 }] };
 const state = { schemaVersion: 1, therapists: [therapist], children: [], library: [], exercises: [], sequences: [], attempts: [], helps: [], sessionHistory: [] };
 let stateRevision = 1;
 let copyEditorReady = false;
@@ -59,6 +62,11 @@ socket.addEventListener("message", event => {
       return;
     }
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/shared-launch/")) {
+      void send("Fetch.fulfillRequest", { requestId, responseCode: 200, responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+        body: Buffer.from(JSON.stringify(sharedPreviewFixture)).toString("base64") });
+      return;
+    }
     if (url.pathname === drawingsPath) {
       const drawingId = url.searchParams.get("drawing");
       const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
@@ -300,7 +308,7 @@ try {
   await send("Page.enable");
   await send("Network.enable");
   await send("Network.setBypassServiceWorker", { bypass: true });
-  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }, { urlPattern: `${origin}${puzzlePath}*` }, { urlPattern: `${origin}${drawingsPath}*` }] });
+  await send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/api/state*` }, { urlPattern: `${origin}/api/shared-launch/*` }, { urlPattern: `${origin}/api/app-version` }, { urlPattern: `${origin}${gameSoundtrackPath}*` }, { urlPattern: `${origin}${puzzlePath}*` }, { urlPattern: `${origin}${drawingsPath}*` }] });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
     window.testMusic = { starts: 0, stops: 0 };
@@ -1484,6 +1492,24 @@ try {
   await wait("document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === 'Un gruppo di parole'");
   await button("Annulla");
   console.log("PASS Procedura guidata: un gruppo di parole limita bersagli e distrattori e viene riaperto con la stessa scelta.");
+  // Finishing or closing a shared preview must not reopen it from the remembered link.
+  // Here an adult is signed in, so the app returns to the profile choice; visitors see
+  // the "Anteprima completata" screen with "Ricomincia" instead.
+  const previewUrl = `${origin}/?preview=dddddddd-dddd-4ddd-8ddd-dddddddddddd`;
+  const previewStaysClosed = async message => {
+    await wait("!location.search.includes('preview=') && !document.querySelector('.public-preview-shell')");
+    await delay(2500);
+    assert.ok(await evaluate("!document.querySelector('.public-preview-shell') && !location.search.includes('preview=')"), message);
+  };
+  await send("Page.navigate", { url: previewUrl });
+  await wait("document.querySelector('.public-preview-shell .answer-card[aria-label*=\"cane\" i]')");
+  await evaluate("document.querySelector('.answer-card[aria-label*=\"cane\" i]').click()");
+  await previewStaysClosed("the finished preview does not restart");
+  await send("Page.navigate", { url: previewUrl });
+  await wait("document.querySelector('.public-preview-shell .answer-card')");
+  await evaluate("[...document.querySelectorAll('.public-preview-shell button')].find(b => b.textContent.trim() === 'Chiudi').click()");
+  await previewStaysClosed("closing the preview does not restart it");
+  console.log("PASS Anteprima condivisa: a fine esercizio o con Chiudi l'anteprima non riparte da sola.");
 } finally {
   socket.close();
 }
