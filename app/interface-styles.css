@@ -377,3 +377,19 @@ html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 2) > sp
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 3) > span { background: #2fae74; color: var(--ink); }
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 4) > span { background: #4f6fe0; color: #ffffff; }
 html[data-style="playful"] .sequence-choice-list > button:nth-child(5n + 5) > span { background: #a64278; color: #ffffff; }
+
+.recognition-wizard { display: grid; gap: 16px; min-width: 0; }
+.recognition-wizard h3 { display: grid; gap: 4px; margin-bottom: 0; }
+.recognition-wizard h3 small { color: var(--muted); font-size: .8rem; }
+.recognition-choices { padding: 0; margin: 0; min-width: 0; border: 0; }
+.recognition-choices legend { font-weight: 700; }
+.recognition-wizard .recognition-modes { margin: 8px 0 0; }
+.recognition-wizard .builder-mode button { white-space: normal; overflow-wrap: anywhere; }
+.recognition-wizard .builder-advanced { margin: 0; min-width: 0; }
+.recognition-wizard .builder-switches { min-width: 0; }
+
+.recognition-wizard .compact-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.recognition-wizard .compact-choices button { flex: 1 1 auto; padding: 8px 12px; }
+@media (max-width: 600px) {
+  .recognition-wizard .recognition-modes:not(.compact-choices) { grid-template-columns: 1fr; }
+}

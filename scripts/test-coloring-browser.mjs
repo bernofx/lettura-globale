@@ -1324,6 +1324,60 @@ try {
   assert.equal(editors.length, 6);
   for (const name of editors) {
     await button(name);
+    if (name === "Trova la parola") {
+      const press = text => evaluate(`[...document.querySelectorAll('.exercise-builder button')].find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
+      const atStep = n => wait(`document.querySelector('.recognition-wizard[data-step="${n}"]')`);
+      const fits = async () => assert.ok(await evaluate(`(() => {
+        const panel = document.querySelector('.exercise-builder');
+        return panel.scrollWidth <= panel.clientWidth + 1 && [...panel.querySelectorAll('button')].filter(b => b.checkVisibility()).every(b => {
+          const box = b.getBoundingClientRect();
+          return box.height >= 44 && box.width >= 44 && box.left >= 0 && box.right <= innerWidth + 1;
+        });
+      })()`));
+      for (const style of ["classic", "studio", "playful"]) {
+        await evaluate(`document.documentElement.dataset.style = ${JSON.stringify(style)}`);
+        await atStep(1);
+        await fits();
+        await press("A caso");
+        await atStep(2);
+        await fits();
+        await press("Stessa categoria del bersaglio");
+        await atStep(3);
+        await fits();
+        assert.ok(await evaluate("document.querySelector('.builder-summary').textContent.includes('della stessa categoria')"));
+        await press("Indietro");
+        await press("Indietro");
+      }
+      await press("Categorie selezionate");
+      assert.ok(await evaluate("document.querySelector('.exercise-builder .primary-button').disabled"));
+      await press("Animali");
+      await press("Avanti");
+      await atStep(2);
+      await press("Indietro");
+      assert.ok(await evaluate("document.querySelector('.filter-chips [aria-pressed=true]').textContent === 'Animali'"));
+      await press("Le scelgo io");
+      assert.ok(await evaluate("document.querySelector('.exercise-builder .primary-button').disabled"));
+      await evaluate("document.querySelector('.recognition-wizard input[type=search]').focus()");
+      await send("Input.insertText", {text: "gatto"});
+      await wait("document.querySelector('.recognition-wizard [role=option]')");
+      await evaluate("document.querySelector('.recognition-wizard [role=option]').click()");
+      await press("Avanti");
+      await press("1");
+      await press("Li scelgo io");
+      await atStep(2);
+      assert.ok(await evaluate("document.querySelector('.exercise-builder .primary-button').disabled"));
+      await evaluate("document.querySelector('.recognition-wizard input[type=search]').focus()");
+      await send("Input.insertText", {text: "cane"});
+      await wait("document.querySelector('.recognition-wizard [role=option]')");
+      await evaluate("document.querySelector('.recognition-wizard [role=option]').click()");
+      await press("Avanti");
+      await atStep(3);
+      assert.ok(await evaluate("document.querySelector('.builder-summary').textContent.includes('1 turno')"));
+      await press("Indietro");
+      await press("Indietro");
+      await press("Annulla");
+      continue;
+    }
     await wait("document.querySelector('.exercise-builder .builder-advanced')");
     assert.ok(await evaluate("!document.querySelector('.builder-advanced').open && !!document.querySelector('#exercise-title').value"));
     for (const style of ["classic", "studio", "playful"]) {
@@ -1335,17 +1389,6 @@ try {
         const targets = [...panel.querySelectorAll('button, select, summary, .check-line, .category-options label')].filter(el => el.getClientRects().length);
         return panel.scrollWidth <= panel.clientWidth + 1 && targets.every(el => el.getBoundingClientRect().height >= 44);
       })()`), name + " su mobile in " + style);
-    }
-    if (name === "Trova la parola") {
-      for (const mode of ["Parole scelte", "Tutto a mano", "A caso"]) {
-        await button(mode);
-        await wait(`document.querySelector('.recognition-modes [aria-pressed=true]').textContent === ${JSON.stringify(mode)}`);
-        const summary = await evaluate("document.querySelector('.builder-summary').textContent");
-        assert.ok(summary.includes(mode === "A caso" ? "bersagli casuali" : mode === "Tutto a mano" ? "1 turno" : "da scegliere"));
-      }
-      await evaluate("document.querySelector('.builder-advanced').open = true");
-      await evaluate("[...document.querySelectorAll('.builder-advanced label')].find(el => el.textContent.includes('Solo dalla stessa categoria')).click()");
-      await wait("document.querySelector('.builder-summary').textContent.includes('della stessa categoria')");
     }
     await button("Annulla");
   }
@@ -1364,10 +1407,19 @@ try {
   await evaluate("document.querySelector('.nav-item[data-area=exercises]').click()");
   await wait("document.querySelector('.sequence-step-edit')");
   console.log("PASS Account storico: il PATCH iniziale salva i modelli mancanti e al successivo accesso la matita è attiva.");
-  for (const [id, mode] of [["ex-mela", "Tutto a mano"], ["ex-recognition-random", "A caso"]]) {
+  for (const [id, mode] of [["ex-mela", "Le scelgo io"], ["ex-recognition-random", "A caso"]]) {
     const original = structuredClone(state.exercises.find(item => item.id === id));
     await button("Modifica " + original.title);
     await wait(`document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === ${JSON.stringify(mode)}`);
+    if (mode === "A caso") {
+      await button("A caso");
+      await button("A caso tra le parole disponibili");
+    } else {
+      await button("Avanti");
+      await wait("document.querySelector('.recognition-wizard')?.dataset.step === '2'");
+      await button("Avanti");
+    }
+    await wait("document.querySelector('#exercise-title')");
     assert.equal(await evaluate("document.querySelector('#exercise-title').value"), original.title);
     await button("Salva esercizio");
     await wait("!document.querySelector('.exercise-builder')");
@@ -1375,6 +1427,24 @@ try {
     assert.deepEqual(state.exercises.find(item => item.id === id), original);
   }
   console.log("PASS Modelli storici: modalità e titolo vengono riletti e il salvataggio a vuoto conserva i valori originali.");
+  await button("Trova la parola");
+  await button("Categorie selezionate");
+  await button("Animali");
+  await button("Avanti");
+  await button("Stessa categoria del bersaglio");
+  await wait("document.querySelector('#exercise-title')");
+  await evaluate("document.querySelector('#exercise-title').focus(); document.querySelector('#exercise-title').select()");
+  await send("Input.insertText", { text: "Categorie wizard demo" });
+  await button("Salva esercizio");
+  for (let i=0; i<80 && !state.exercises.some(item => item.title === "Categorie wizard demo"); i++) await delay(100);
+  const guidedModel = state.exercises.find(item => !item.sequenceId && item.title === "Categorie wizard demo");
+  assert.ok(guidedModel);
+  assert.deepEqual([guidedModel.recognitionMode, guidedModel.promptId, guidedModel.recognitionCategories, guidedModel.distractorSource],
+    ["random", "", ["Animali"], "same-category"]);
+  await button("Modifica Categorie wizard demo");
+  await wait("document.querySelector('.recognition-modes [aria-pressed=true]')?.textContent === 'Categorie selezionate'");
+  assert.equal(await evaluate("document.querySelector('.filter-chips [aria-pressed=true]').textContent"), "Animali");
+  console.log("PASS Procedura guidata: salvataggio e riapertura delle categorie con lo stesso gruppo di distrattori.");
 } finally {
   socket.close();
 }
