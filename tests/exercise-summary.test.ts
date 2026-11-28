@@ -7,18 +7,25 @@ const words: Record<string, string> = { gatto: "gatto", cane: "cane", mela: "mel
 const wordFor = (id: string) => words[id];
 const base = { id: "e", title: "T", promptId: "", optionIds: [] } as unknown as Exercise;
 
-test("Trova la parola casuale riporta bersagli, turni, distrattori e filtri", () => {
+test("Trova la parola casuale descrive bersagli, distrattori, presentazione e pronuncia", () => {
   assert.equal(exerciseSummary({ ...base, recognitionMode: "random", rounds: 4, distractorCount: 2, distractorSource: "same-category", recognitionCategories: ["Animali"] }, wordFor),
-    "Parole casuali da Animali · 4 turni · 2 distrattori stessa categoria · foto + parole");
+    "bersagli a caso dalle categorie: Animali · 4 turni · 2 distrattori per turno, della stessa categoria del bersaglio · foto + parole · senza pronuncia");
   assert.equal(exerciseSummary({ ...base, recognitionMode: "random", promptId: "gatto", recognitionTargetIds: ["gatto", "cane", "mela", "pera", "uva"], presentation: "words", recognitionSyllables: "2" }, wordFor),
-    "Trova: gatto, cane, mela e altre 2 · 6 turni · 3 distrattori da tutte le parole · solo parole · 2 sillabe");
+    "bersagli: gatto, cane, mela e altre 2 · 6 turni · 3 distrattori per turno, a caso · solo parole · pronuncia automatica · 2 sillabe");
+});
+
+test("con bersagli casuali le parole scelte sono il gruppo di bersagli e distrattori", () => {
+  assert.equal(exerciseSummary({ ...base, recognitionMode: "random", rounds: 12, distractorCount: 2, autoPronounce: false, recognitionItemIds: ["gatto", "cane", "mela"] }, wordFor),
+    "bersagli a caso tra: gatto, cane, mela · 12 turni · 2 distrattori per turno, scelti tra le stesse parole · foto + parole · senza pronuncia");
+  assert.equal(exerciseSummary({ ...base, recognitionMode: "random", promptId: "gatto", distractorCount: 1, recognitionItemIds: ["cane"] }, wordFor),
+    "bersagli: gatto · 6 turni · 1 distrattore per turno, a caso · distrattori preferiti: cane · foto + parole · senza pronuncia");
 });
 
 test("Trova la parola manuale elenca bersaglio e alternative in un turno", () => {
-  assert.equal(exerciseSummary({ ...base, recognitionMode: "fixed", promptId: "gatto", optionIds: ["gatto", "cane", "mela"] }, wordFor),
-    "Trova: gatto · 1 turno · alternative: cane, mela · foto + parole");
+  assert.equal(exerciseSummary({ ...base, recognitionMode: "fixed", promptId: "gatto", optionIds: ["gatto", "cane", "mela"], autoPronounce: true }, wordFor),
+    "bersaglio: gatto · 1 turno · alternative: cane, mela · foto + parole · pronuncia automatica");
   assert.equal(exerciseSummary({ ...base, recognitionMode: "fixed", promptId: "sparito", optionIds: ["sparito"] }, wordFor),
-    "Trova: parola non disponibile · 1 turno · foto + parole");
+    "bersaglio: parola non disponibile · 1 turno · foto + parole · senza pronuncia");
 });
 
 test("le altre tipologie usano i valori predefiniti del compilatore", () => {
