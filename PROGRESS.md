@@ -8,7 +8,7 @@
 
 ## Completato
 
-- [x] Ordine della sequenza: ogni passo mostra il riepilogo della configurazione (stessa funzione del catalogo, `app/domain/exercise-summary.ts`, con test) e l’etichetta «Personalizzato» per le copie della sequenza. Verificato a 390 e 1280 px nei tre stili.
+- [x] Ordine della sequenza: l’occhio accanto a ogni passo apre la configurazione in sola lettura (stessa funzione del catalogo, `app/domain/exercise-summary.ts`, con test), indica se il passo è personalizzato e porta alla modifica. Su telefono la matita è nella finestra, per lasciare spazio al titolo. Verificato a 390 e 1280 px nei tre stili.
 - [x] Trova la parola: procedura guidata mobile per bersagli, distrattori e opzioni. Avanti esplicito, convalida e filtri al passo Distrattori; in modifica si può aprire direttamente il passo Opzioni. Stesso editor nel catalogo e nelle sequenze, configurazioni manuali e casuali compatibili con i dati esistenti.
 
 - [x] Sessione: le sequenze preparate usano la card di Avvio rapido (icona, titolo, esercizi e autore allineati, freccia) al posto delle nuvolette. Nel Giocoso le icone ruotano sui colori della navigazione. Singolare «1 esercizio». Verificato a 390 e 1280 px nei tre stili.

@@ -55,7 +55,7 @@ export function ExercisesView({ exercises, sequences, activeSequence, canEditAct
     if (!exercise) return [];
     const occurrence = (occurrences.get(id) ?? 0) + 1;
     occurrences.set(id, occurrence);
-    return [{ id: JSON.stringify([id, occurrence]), title: exercise.title, detail: exerciseSummary(exercise, wordFor), custom: Boolean(exercise.sequenceId), exercise, slot }];
+    return [{ id: JSON.stringify([id, occurrence]), title: exercise.title, details: exerciseSummary(exercise, wordFor).split(" · "), custom: Boolean(exercise.sequenceId), exercise, slot }];
   });
   const slotsByModel = new Map<string, number[]>();
   for (const { exercise, slot } of sequenceRows) {
