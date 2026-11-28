@@ -510,6 +510,11 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .sequence-position-field select { width: 100%; min-height: 44px; padding-left: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); }
 .sequence-order-list .sequence-drag-handle:disabled { opacity: .45; cursor: default; }
 .sequence-order-list article > strong { min-width: 0; overflow-wrap: anywhere; }
+.sequence-step-origin { margin: 0 0 8px; color: var(--muted); font-weight: 700; }
+.sequence-step-config { display: grid; gap: 0; margin: 0 0 4px; padding: 0; list-style: none; }
+.sequence-step-config li { padding: 10px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.sequence-step-config li:first-child { font-weight: 700; }
+.sequence-step-config li:last-child { border-bottom: 0; }
 
 .sequence-order-fieldset { border: 0; min-inline-size: 0; padding: 0; margin: 0; }
 .sequence-order-fieldset:disabled button, .sequence-actions button:disabled { opacity: .55; cursor: not-allowed; }
@@ -519,4 +524,7 @@ html select:not([multiple]):hover{border-color:#c9c3ee}
 .builder-inline-fields{margin-top:15px}.builder-inline-fields label{display:grid;gap:7px;align-content:start;font-size:12px;font-weight:800}
 
 .sequence-order-list article .sequence-step-actions{display:flex;align-items:center;gap:4px}
-.sequence-order-list .sequence-step-edit{width:44px;min-height:44px}
+.sequence-order-list :is(.sequence-step-edit,.sequence-step-view){width:44px;min-height:44px}
+.sequence-step-config li::first-letter { text-transform: uppercase; }
+/* On phones the eye leads to the editor too, so the row keeps room for the title. */
+@media (max-width: 600px) { .sequence-order-list .sequence-step-view + .sequence-step-edit { display: none; } }

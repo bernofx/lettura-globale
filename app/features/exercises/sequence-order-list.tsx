@@ -1,9 +1,9 @@
-import { GripVertical, Pencil, X } from "lucide-react";
+import { Eye, GripVertical, Pencil, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { dropIndex } from "../../domain/reorder";
 import { Modal, ModalActions, ModalTitle } from "../../shared/ui/modal";
 
-type OrderItem = { id: string; title: string };
+type OrderItem = { id: string; title: string; details?: string[]; custom?: boolean };
 type Drag = {
   ids: string[];
   from: number;
@@ -23,6 +23,8 @@ export function SequenceOrderList({ items, onMove, onEdit, onRemove }: { items: 
   const [announcement, setAnnouncement] = useState("");
   const [positionDialog, setPositionDialog] = useState<{ itemId: string; order: string; to: number } | null>(null);
   const titleId = useId();
+  const detailsTitleId = useId();
+  const [viewing, setViewing] = useState<{ item: OrderItem; position: number } | null>(null);
   const focusAfterMove = useRef<number | null>(null);
   useEffect(() => {
     const position = focusAfterMove.current;
@@ -112,6 +114,7 @@ export function SequenceOrderList({ items, onMove, onEdit, onRemove }: { items: 
         <span>{String(index + 1).padStart(2, "0")}</span>
         <strong>{item.title}</strong>
         <div className="sequence-step-actions">
+          {item.details && <button type="button" className="sequence-step-view" aria-haspopup="dialog" onClick={() => setViewing({ item, position: index + 1 })} aria-label={`Configurazione del passo ${index + 1}: ${item.title}`} title="Vedi la configurazione"><Eye aria-hidden="true" /></button>}
           {onEdit && <button type="button" className="sequence-step-edit" onClick={() => onEdit(item.id)} aria-label={`Modifica il passo ${index + 1}: ${item.title}`}><Pencil aria-hidden="true" /></button>}
           <button type="button" className="sequence-remove" onClick={() => onRemove(item.id)} aria-label={`Rimuovi ${item.title} dalla sequenza`}><X aria-hidden="true" /></button>
         </div>
@@ -130,6 +133,14 @@ export function SequenceOrderList({ items, onMove, onEdit, onRemove }: { items: 
         </select>
       </label>
       <ModalActions onCancel={() => setPositionDialog(null)}><button className="primary-button" disabled={positionDialog.to === selectedIndex || positionDialog.to >= items.length}>Sposta</button></ModalActions>
+    </Modal>}
+    {viewing && <Modal labelledBy={detailsTitleId} onClose={() => setViewing(null)} closeButton trapFocus>
+      <ModalTitle id={detailsTitleId} eyebrow={`PASSO ${viewing.position}`}>{viewing.item.title}</ModalTitle>
+      <p className="sequence-step-origin">{viewing.item.custom ? "Personalizzato per questa sequenza" : "Usa il modello del catalogo"}</p>
+      <ul className="sequence-step-config">{viewing.item.details?.map(line => <li key={line}>{line}</li>)}</ul>
+      <ModalActions onCancel={() => setViewing(null)} cancelLabel="Chiudi">
+        {onEdit && <button type="button" className="primary-button" onClick={() => { const id = viewing.item.id; setViewing(null); onEdit(id); }}><Pencil aria-hidden="true" />Modifica il passo</button>}
+      </ModalActions>
     </Modal>}
   </>;
 }
