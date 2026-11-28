@@ -32,5 +32,6 @@ Ogni decisione su autenticazione, privacy, retention, provider, licenze o deploy
 | [0025](0025-giochi-colorare.md) | Colorare nella sezione Giochi | Implementato, in attesa di approvazione su privacy e licenze |
 | [0026](0026-generazione-programmata.md) | Coda per le immagini del catalogo condiviso | Proposto, in attesa di attivazione |
 | [0028](0028-copie-esercizi-per-sequenza.md) | Copie degli esercizi nelle sequenze | Approvato |
+| [0029](0029-grande-e-piccolo.md) | Esercizio Grande e Piccolo | Proposto, in attesa di approvazione |
 
 “—” indica un ADR privo di una sezione `## Stato` esplicita: lo stato va desunto dal testo e da `PROGRESS.md`.
