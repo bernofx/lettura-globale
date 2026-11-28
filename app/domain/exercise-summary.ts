@@ -7,11 +7,11 @@ const syllableLabel = (filter?: SyllableFilter) =>
 
 const turns = (count: number) => `${count} ${count === 1 ? "turno" : "turni"}`;
 
-/** Up to three names, then "e altre N"; unknown IDs are skipped. */
-function names(ids: readonly string[], wordFor: (id: string) => string | undefined) {
+/** Up to `max` names, then "e altre N"; unknown IDs are skipped. */
+function names(ids: readonly string[], wordFor: (id: string) => string | undefined, max = 3) {
   const found = ids.flatMap(id => wordFor(id) ?? []);
   if (!found.length) return "";
-  return found.slice(0, 3).join(", ") + (found.length > 3 ? ` e altre ${found.length - 3}` : "");
+  return found.slice(0, max).join(", ") + (found.length > max ? ` e altre ${found.length - max}` : "");
 }
 
 /**
@@ -44,17 +44,34 @@ export function exerciseSummary(exercise: Exercise, wordFor: (id: string) => str
     const outcome = exercise.quantityErrorless ? "senza errori" : exercise.quantityAutoComplete ? `auto dopo ${exercise.quantityIdleSeconds ?? 3} s` : "conferma adulta";
     return `Numero quantità · ${turns(rounds)} · da ${exercise.quantityMin ?? 1} a ${exercise.quantityMax ?? 10} · ${objects} · ${outcome}`;
   }
+  const pronunciation = exercise.autoPronounce ?? exercise.presentation === "words" ? "pronuncia automatica" : "senza pronuncia";
   if (exercise.recognitionMode !== "random") {
     const alternatives = names(exercise.optionIds.filter(id => id !== exercise.promptId), wordFor);
-    return [`Trova: ${(exercise.promptId && wordFor(exercise.promptId)) || "parola non disponibile"}`, "1 turno",
-      alternatives && `alternative: ${alternatives}`, display].filter(Boolean).join(" · ");
+    return [`bersaglio: ${(exercise.promptId && wordFor(exercise.promptId)) || "parola non disponibile"}`, "1 turno",
+      alternatives && `alternative: ${alternatives}`, display, pronunciation].filter(Boolean).join(" · ");
   }
+  // Mirrors createRandomRecognitionRounds: with chosen targets the listed words are
+  // preferred distractors; with random targets they are the pool for both roles.
   const targetIds = exercise.recognitionTargetIds?.length ? exercise.recognitionTargetIds : exercise.promptId ? [exercise.promptId] : [];
   const categories = exercise.recognitionCategories ?? [];
-  const targets = targetIds.length ? `Trova: ${names(targetIds, wordFor) || "parole non disponibili"}`
-    : categories.length ? `Parole casuali da ${categories.join(", ")}` : "Parole casuali";
+  const listed = names(exercise.recognitionItemIds ?? [], wordFor, 6);
+  const sameCategory = exercise.distractorSource === "same-category";
   const count = exercise.distractorCount ?? 3;
-  const source = exercise.distractorSource === "same-category" ? "stessa categoria" : "da tutte le parole";
-  return [targets, turns(rounds), `${count} ${count === 1 ? "distrattore" : "distrattori"} ${source}`, display,
+  const perTurn = `${count} ${count === 1 ? "distrattore" : "distrattori"} per turno`;
+  let targets: string;
+  let distractors: string;
+  let preferred = "";
+  if (targetIds.length) {
+    targets = `bersagli: ${names(targetIds, wordFor) || "parole non disponibili"}`;
+    distractors = `${perTurn}, ${sameCategory ? "della stessa categoria del bersaglio" : "a caso"}${categories.length ? ` dalle categorie ${categories.join(", ")}` : ""}`;
+    preferred = listed && `distrattori preferiti: ${listed}`;
+  } else if (listed) {
+    targets = `bersagli a caso tra: ${listed}`;
+    distractors = `${perTurn}, scelti tra le stesse parole${sameCategory ? " e della stessa categoria" : ""}`;
+  } else {
+    targets = categories.length ? `bersagli a caso dalle categorie: ${categories.join(", ")}` : "bersagli a caso da tutta la libreria";
+    distractors = `${perTurn}, ${sameCategory ? "della stessa categoria del bersaglio" : categories.length ? "dalle stesse categorie" : "a caso dalla libreria"}`;
+  }
+  return [targets, turns(rounds), distractors, preferred, display, pronunciation,
     syllableLabel(exercise.recognitionSyllables)].filter(Boolean).join(" · ");
 }

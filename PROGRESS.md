@@ -8,6 +8,7 @@
 
 ## Completato
 
+- [x] Riepilogo di Trova la parola: indica se le parole scelte sono il gruppo di bersagli e distrattori (bersagli casuali) o distrattori preferiti (bersagli scelti), il numero di distrattori per turno e la pronuncia.
 - [x] Ordine della sequenza: l’occhio accanto a ogni passo apre la configurazione in sola lettura (stessa funzione del catalogo, `app/domain/exercise-summary.ts`, con test), indica se il passo è personalizzato e porta alla modifica. Su telefono la matita è nella finestra, per lasciare spazio al titolo. Verificato a 390 e 1280 px nei tre stili.
 - [x] Trova la parola: procedura guidata mobile per bersagli, distrattori e opzioni. Avanti esplicito, convalida e filtri al passo Distrattori; in modifica si può aprire direttamente il passo Opzioni. Stesso editor nel catalogo e nelle sequenze, configurazioni manuali e casuali compatibili con i dati esistenti.
 
