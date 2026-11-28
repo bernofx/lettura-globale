@@ -158,7 +158,7 @@ export function RecognitionWizard({ exercise, library, editNotice, onClose, onSa
         {problem && <div>
           <p className="wizard-error" role="alert">{problem}</p>
           {presentation === "images" && !configurationProblem(selectedOrigin, "words") &&
-            <button type="button" className="secondary-button" onClick={() => setPresentation("words")}>Usa risposte in parole</button>}
+            <button type="button" className="ghost-button" onClick={() => setPresentation("words")}>Usa risposte in parole</button>}
         </div>}
         {!manual && <details className="builder-advanced" key={targetSource}>
           <summary>Filtri facoltativi <small>{syllables === "all" ? "Parole e sillabe" : `Sillabe: ${syllables}`}</small></summary>
