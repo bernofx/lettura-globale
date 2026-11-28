@@ -319,8 +319,6 @@ html[data-style="playful"] .progress-matrix .word-status { color: var(--muted); 
 /* Studio: square-ish corners everywhere (12px surfaces, 8px controls); sequences are plain cards. */
 html[data-style="studio"] :is(.whats-new, .quick-item, .session-big-icon, .wizard-paths button, .sequence-banner, .sequence-editor, .catalog-actions, .prototype-alert, .therapist-assignment-list article, .child-editor, .profile-section, .modal, .builder-mode button, .check-line.pronunciation-option, .caa-guidance, .library-expansion, .category-library-card) { border-radius: 12px; }
 html[data-style="studio"] :is(.hero-sequence li, .wizard-child-list button, .filter-chip, .filter-chips button, .selection-tabs button, .settings-tabs, .settings-tabs button, .sequence-symbol span, .profile-avatar, .modal-close, .modal input, .modal select, .modal textarea, .search-box) { border-radius: 8px; }
-html[data-style="studio"] .sequence-cloud { min-height: 112px; align-items: flex-start; text-align: left; border-radius: 12px; background: #ffffff; border-color: var(--line); }
-html[data-style="studio"] .sequence-cloud:hover { transform: none; border-color: var(--violet); box-shadow: 0 1px 3px rgba(21, 27, 43, 0.12); }
 
 /* Giocoso: no thin borders; fields have a soft 2px outline, surfaces and pills sit on a bottom shadow. */
 html[data-style="playful"] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]):not(.search-box input), textarea, select:not([multiple]), .search-box) { border: 2px solid var(--line); border-radius: 16px; background-color: #ffffff; box-shadow: none; }
@@ -334,7 +332,6 @@ html[data-style="playful"] :is(.filter-chip, .filter-chips button, .selection-ta
 html[data-style="playful"] :is(.filter-chip, .filter-chips button, .selection-tabs button, .sound-toggle.setup) { border-radius: 999px; font-weight: 800; }
 html[data-style="playful"] :is(.wizard-child-list button, .builder-mode button) { border-radius: 20px; }
 html[data-style="playful"] .sequence-symbol span { border: 0; box-shadow: 0 3px 0 #d8d3f6; }
-html[data-style="playful"] .sequence-cloud { border-width: 2px; }
 html[data-style="playful"] .modal { border-radius: 32px; }
 html[data-style="playful"] .modal-close { border-radius: 50%; }
 

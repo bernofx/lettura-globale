@@ -2,6 +2,7 @@
 export const RELEASE_NOTES = {
   title: "Configurazione degli esercizi",
   items: [
+    "In Sessione le sequenze preparate hanno lo stesso aspetto di Avvio rapido: icona, titolo e numero di esercizi allineati a sinistra.",
     "In Trova la parola scegli Parole scelte, A caso o Tutto a mano. Nei sei moduli trovi le impostazioni aggiuntive in Opzioni avanzate e il riepilogo accanto a Salva.",
     "Dove è attiva la gestione delle copie, la matita accanto a un passo modifica solo quella sequenza. Le copie mantengono le impostazioni anche quando il modello viene aggiornato.",
     "Nel catalogo puoi filtrare i modelli per autore. Se un esercizio compare due volte nella sequenza, puoi spostare o rimuovere la singola riga.",
